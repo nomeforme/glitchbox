@@ -1,0 +1,6 @@
+export HF_HOME="/media/monsterdrive/models"
+uv run server/main.py --reload --pipeline img2img 
+
+GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key_2 -o IdentitiesOnly=yes" git add .
+GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key_2 -o IdentitiesOnly=yes" git commit -m commit
+GIT_SSH_COMMAND="ssh -i ~/.ssh/deploy_key_2 -o IdentitiesOnly=yes" git push fork
