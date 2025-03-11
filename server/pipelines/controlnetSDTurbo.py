@@ -236,7 +236,7 @@ class Pipeline:
         prompt_embeds = None
         if hasattr(self.pipe, "compel_proc"):
             prompt_embeds = self.pipe.compel_proc(
-                [params.prompt, params.negative_prompt]
+                [params.prompt, "human, humanoid, figurine, face"]
             )
             prompt = None
         control_image = self.canny_torch(
