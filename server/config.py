@@ -349,7 +349,7 @@ parser.add_argument(
     "--use-backround-removal",
     dest="use_background_removal",
     action="store_true",
-    default=True,
+    default=False,
     help="Remove the background from the image feed"
 )
 
