@@ -170,10 +170,11 @@ class Pipeline:
         self.pipe.load_lora_weights(
             hf_hub_download("ByteDance/Hyper-SD", "Hyper-SD15-1step-lora.safetensors")
         )
+        self.pipe.load_lora_weights("/home/plantoidz/Downloads/WaterMod.safetensors")
 
         self.pipe.scheduler = TCDScheduler.from_config(self.pipe.scheduler.config)
-
-        self.pipe.fuse_lora()
+        
+        #self.pipe.fuse_lora()
         self.canny_torch = SobelOperator(device=device)
 
         if args.sfast:

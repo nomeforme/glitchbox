@@ -116,10 +116,13 @@ class Pipeline:
             image_encoder_folder=None,
         )
 
+        #self.pipe.load_lora_weights(
+        #    hf_hub_download("ByteDance/Hyper-SD", "Hyper-SD15-1step-lora.safetensors")
+        #)
         self.pipe.load_lora_weights(
-            hf_hub_download("ByteDance/Hyper-SD", "Hyper-SD15-1step-lora.safetensors")
+            "/home/plantoidz/Downloads/WaterMod.safetensors"
         )
-        self.pipe.fuse_lora()
+        #self.pipe.fuse_lora()
 
         self.pipe.scheduler = TCDScheduler.from_config(self.pipe.scheduler.config)
         self.pipe.set_ip_adapter_scale([0.8])

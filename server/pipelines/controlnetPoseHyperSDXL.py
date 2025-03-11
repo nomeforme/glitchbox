@@ -1,35 +1,40 @@
 from diffusers import (
-    StableDiffusionControlNetImg2ImgPipeline,
+    StableDiffusionXLControlNetImg2ImgPipeline,
     ControlNetModel,
+    AutoencoderKL,
     AutoencoderTiny,
-    LCMScheduler,
+    TCDScheduler,
 )
 from compel import Compel, ReturnedEmbeddingsType
 import torch
-from pipelines.utils.canny_gpu import SobelOperator
+from huggingface_hub import hf_hub_download
+from controlnet_aux import OpenposeDetector
+
+from transformers import pipeline
 
 try:
     import intel_extension_for_pytorch as ipex  # type: ignore
 except:
     pass
 
+import psutil
 from config import Args
 from pydantic import BaseModel, Field
 from PIL import Image
 import math
 
-controlnet_model = "lllyasviel/control_v11p_sd15_canny"
-model_id = "runwayml/stable-diffusion-v1-5"
-taesd_model = "madebyollin/taesd"
+controlnet_model = "thibaud/controlnet-openpose-sdxl-1.0"
+model_id = "stabilityai/stable-diffusion-xl-base-1.0"
+taesd_model = "madebyollin/taesdxl"
 
 default_prompt = "Portrait of The Terminator with , glare pose, detailed, intricate, full of colour, cinematic lighting, trending on artstation, 8k, hyperrealistic, focused, extreme details, unreal engine 5 cinematic, masterpiece"
 default_negative_prompt = "blurry, low quality, render, 3D, oversaturated"
 page_content = """
-<h1 class="text-3xl font-bold">Flash-SD</h1>
+<h1 class="text-3xl font-bold">Hyper-SDXL Unified</h1>
 <h3 class="text-xl font-bold">Image-to-Image ControlNet</h3>
 
 """
-
+openpose = OpenposeDetector.from_pretrained("lllyasviel/ControlNet")
 
 class Pipeline:
     class Info(BaseModel):
@@ -60,10 +65,20 @@ class Pipeline:
             2, min=1, max=15, title="Steps", field="range", hide=True, id="steps"
         )
         width: int = Field(
-            512, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
+            1024, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
         )
         height: int = Field(
-            512, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
+            1024, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
+        )
+        guidance_scale: float = Field(
+            0.0,
+            min=0,
+            max=10,
+            step=0.001,
+            title="Guidance Scale",
+            field="range",
+            hide=True,
+            id="guidance_scale",
         )
         strength: float = Field(
             0.5,
@@ -74,6 +89,16 @@ class Pipeline:
             field="range",
             hide=True,
             id="strength",
+        )
+        eta: float = Field(
+            1.0,
+            min=0,
+            max=1.0,
+            step=0.001,
+            title="Eta",
+            field="range",
+            hide=True,
+            id="eta",
         )
         controlnet_scale: float = Field(
             0.5,
@@ -105,61 +130,41 @@ class Pipeline:
             hide=True,
             id="controlnet_end",
         )
-        canny_low_threshold: float = Field(
-            0.31,
-            min=0,
-            max=1.0,
-            step=0.001,
-            title="Canny Low Threshold",
-            field="range",
-            hide=True,
-            id="canny_low_threshold",
-        )
-        canny_high_threshold: float = Field(
-            0.125,
-            min=0,
-            max=1.0,
-            step=0.001,
-            title="Canny High Threshold",
-            field="range",
-            hide=True,
-            id="canny_high_threshold",
-        )
-        debug_canny: bool = Field(
+        debug_depth: bool = Field(
             False,
-            title="Debug Canny",
+            title="Debug Depth",
             field="checkbox",
             hide=True,
-            id="debug_canny",
+            id="debug_depth",
         )
 
     def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype):
-        controlnet_canny = ControlNetModel.from_pretrained(
+        controlnet_depth = ControlNetModel.from_pretrained(
             controlnet_model, torch_dtype=torch_dtype
         )
 
-        self.pipe = StableDiffusionControlNetImg2ImgPipeline.from_pretrained(
+        vae = AutoencoderTiny.from_pretrained(
+            "madebyollin/taesdxl", torch_dtype=torch_dtype
+        )
+
+        self.pipe = StableDiffusionXLControlNetImg2ImgPipeline.from_pretrained(
             model_id,
             safety_checker=None,
-            controlnet=controlnet_canny,
+            controlnet=controlnet_depth,
+            vae=vae,
             torch_dtype=torch_dtype,
         )
 
-        self.pipe.scheduler = LCMScheduler.from_pretrained(
-            model_id,
-            subfolder="scheduler",
-            timestep_spacing="trailing",
+        self.pipe.load_lora_weights(
+            hf_hub_download("ByteDance/Hyper-SD", "Hyper-SDXL-1step-lora.safetensors")
         )
 
-        if args.taesd:
-            self.pipe.vae = AutoencoderTiny.from_pretrained(
-                taesd_model, torch_dtype=torch_dtype, use_safetensors=True
-            )
-        self.pipe.load_lora_weights("jasperai/flash-sd")
-        self.pipe.load_lora_weights("/home/plantoidz/Downloads/WaterMod.safetensors")
-        #self.pipe.fuse_lora()
+        # self.pipe.enable_model_cpu_offload()
 
-        self.canny_torch = SobelOperator(device=device)
+        self.pipe.scheduler = TCDScheduler.from_config(self.pipe.scheduler.config)
+
+        self.pipe.fuse_lora()
+        self.pipe.unload_lora_weights()
 
         if args.sfast:
             from sfast.compilers.stable_diffusion_pipeline_compiler import (
@@ -168,13 +173,15 @@ class Pipeline:
             )
 
             config = CompilationConfig.Default()
-            # config.enable_xformers = True
+            config.enable_xformers = True
             config.enable_triton = True
             config.enable_cuda_graph = True
             self.pipe = compile(self.pipe, config=config)
 
         self.pipe.set_progress_bar_config(disable=True)
+        print("test")
         self.pipe.to(device=device)
+        print("bork")
         if device.type != "mps":
             self.pipe.unet.to(memory_format=torch.channels_last)
 
@@ -193,6 +200,7 @@ class Pipeline:
             self.pipe.vae = torch.compile(
                 self.pipe.vae, mode="reduce-overhead", fullgraph=True
             )
+            print("warmup")
             self.pipe(
                 prompt="warmup",
                 image=[Image.new("RGB", (768, 768))],
@@ -219,9 +227,8 @@ class Pipeline:
             negative_prompt_embeds = _prompt_embeds[1:2]
             negative_pooled_prompt_embeds = pooled_prompt_embeds[1:2]
 
-        control_image = self.canny_torch(
-            params.image, params.canny_low_threshold, params.canny_high_threshold
-        )
+        #control_image = self.depth_estimator(params.image)["depth"]
+        control_image = openpose(params.image)
         steps = params.steps
         strength = params.strength
         if int(steps * strength) < 1:
@@ -238,8 +245,9 @@ class Pipeline:
             negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
             generator=generator,
             strength=strength,
+            eta=params.eta,
             num_inference_steps=steps,
-            guidance_scale=0,
+            guidance_scale=params.guidance_scale,
             width=params.width,
             height=params.height,
             output_type="pil",
@@ -249,7 +257,7 @@ class Pipeline:
         )
 
         result_image = results.images[0]
-        if params.debug_canny:
+        if params.debug_depth:
             # paste control_image on top of result_image
             w0, h0 = (200, 200)
             control_image = control_image.resize((w0, h0))
