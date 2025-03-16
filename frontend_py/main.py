@@ -94,8 +94,16 @@ class MainWindow(QMainWindow):
         self.status_bar.update_processing_status(status)
         if status == "connected":
             self.status_bar.update_connection_status(True)
+            # Start the MJPEG stream when connected
+            self.processed_display.start_stream(self.ws_client.user_id)
         elif status == "disconnected":
             self.status_bar.update_connection_status(False)
+            # Stop the stream when disconnected
+            self.processed_display.stop_stream()
+        elif status == "ready":
+            # Reset UI state when camera is stopped
+            self.start_button.setText("Start Camera")
+            self.status_bar.update_processing_status("Ready")
 
     def handle_camera_frame(self, frame):
         """Handle new frame from camera"""
@@ -123,19 +131,30 @@ class MainWindow(QMainWindow):
 
     def stop_camera(self):
         """Stop camera and processing"""
+        print("[UI] Stopping camera")
+        # Stop frame timer first
         self.frame_timer.stop()
+        self.processing_frame = False
+        
+        # Stop camera thread
         self.camera_thread.stop()
+        
+        # Stop WebSocket processing and wait for ready status
         self.ws_client.stop_camera()
-        self.start_button.setText("Start Camera")
+        
+        # Clear displays immediately
         self.camera_display.clear_display()
         self.processed_display.clear_display()
-        self.status_bar.update_processing_status("Stopped")
+        self.status_bar.update_processing_status("Stopping...")
 
     def process_frame(self):
         """Process current frame through WebSocket"""
         if self.current_frame is not None and not self.processing_frame:
             self.processing_frame = True
-            asyncio.run(self.ws_client.send_frame(self.current_frame))
+            # Store the current frame in the websocket client
+            self.ws_client.current_frame = self.current_frame
+            # Reset flag after setting the frame
+            self.processing_frame = False
 
     def handle_connection_error(self, error_msg: str):
         """Handle connection errors"""
@@ -148,11 +167,28 @@ class MainWindow(QMainWindow):
         try:
             # First stop all active processes
             self.frame_timer.stop()
-            self.camera_thread.stop()
-            self.ws_client.stop_camera()
             
-            # Then stop and cleanup threads
-            self.ws_client.stop()
+            # Stop the stream immediately to prevent further network activity
+            self.processed_display.stop_stream()
+            
+            # Force flag changes to prevent new operations
+            if self.ws_client is not None:
+                self.ws_client.running = False
+                self.ws_client.processing = False
+            
+            # Stop camera thread with short timeout
+            if self.camera_thread is not None:
+                self.camera_thread.stop()
+                if not self.camera_thread.wait(1000):  # 1 second timeout
+                    print("[UI] Force terminating camera thread")
+                    self.camera_thread.terminate()
+            
+            # Stop WebSocket client with short timeout to avoid blocking
+            if self.ws_client is not None:
+                self.ws_client.stop()
+                if not self.ws_client.wait(1000):  # 1 second timeout
+                    print("[UI] Force terminating WebSocket thread")
+                    self.ws_client.terminate()
             
             # Clear displays
             self.camera_display.clear_display()
