@@ -23,13 +23,13 @@ class CameraThread(QThread):
             self.running = True
             while self.running:
                 ret, frame = self.camera.read()
-                if ret:
-                    # Convert BGR to RGB for display
-                    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                    self.frame_ready.emit(rgb_frame)
-                else:
+                if not ret:
                     print("[Camera] Failed to read frame")
                     break
+                    
+                # Convert BGR to RGB for display
+                rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                self.frame_ready.emit(rgb_frame)
                     
                 # Small delay to prevent tight loop
                 time.sleep(0.01)
@@ -43,14 +43,22 @@ class CameraThread(QThread):
         """Stop the camera thread"""
         print("[Camera] Stopping camera thread")
         self.running = False
-        if self.camera is not None:
-            self.camera.release()
-        self.wait()  # Wait for thread to finish
+        
+        # First set running to false to break out of the loop
+        self.running = False
+        
+        # Add a timeout for waiting to prevent hanging
+        if not self.wait(2000):  # Wait max 2 seconds for thread to finish
+            print("[Camera] Thread wait timed out, forcing termination")
+            self.terminate()  # Force terminate if it doesn't finish in time
+            
+        # Only after the thread is done (or timeout), release the camera
+        self.cleanup()
 
     def cleanup(self):
         """Clean up camera resources"""
         print("[Camera] Cleaning up camera resources")
-        if self.camera is not None:
+        if self.camera is not None and self.camera.isOpened():
             self.camera.release()
             self.camera = None
         self.running = False

@@ -21,16 +21,8 @@ class WebSocketClient(QThread):
         self.user_id = str(uuid.uuid4())
         self.settings = None
         self.current_frame = None
-        self.params = {
-            "prompt": "",
-            "acid_settings": {
-                "acid_strength": 0.4,
-                "zoom_factor": 1.0,
-                "do_acid_tracers": False,
-                "do_acid_wobblers": False,
-                "do_human_seg": True
-            }
-        }
+        # Initialize with empty parameters - will be populated from settings
+        self.params = {}
 
     async def fetch_settings(self):
         """Fetch pipeline settings"""
@@ -40,6 +32,8 @@ class WebSocketClient(QThread):
                 async with session.get(f"{self.uri}/api/settings") as response:
                     if response.status == 200:
                         self.settings = await response.json()
+                        # Initialize parameters with default values from settings
+                        self.initialize_parameters()
                         self.settings_received.emit(self.settings)
                         return True
                     else:
@@ -48,10 +42,46 @@ class WebSocketClient(QThread):
             self.connection_error.emit(f"Settings error: {e}")
             return False
 
+    def initialize_parameters(self):
+        """Initialize parameters with default values from settings"""
+        if not self.settings:
+            return
+
+        params = self.settings.get('input_params', {}).get('properties', {})
+        self.params = {
+            param_id: param.get('default', 0)
+            for param_id, param in params.items()
+        }
+        # Add acid_settings if they exist in defaults
+        if any(key.startswith('acid_') for key in self.params):
+            acid_params = {
+                key: value 
+                for key, value in self.params.items() 
+                if key.startswith('acid_')
+            }
+            # Remove acid_ parameters from main params and put them in acid_settings
+            for key in acid_params:
+                del self.params[key]
+            self.params['acid_settings'] = acid_params
+
+        print("[WebSocket] Initialized parameters:", self.params)
+
     def update_settings(self, settings):
         """Update processing parameters"""
         if isinstance(settings, dict):
-            self.params["acid_settings"].update(settings)
+            param_id = next(iter(settings))  # Get the parameter ID
+            value = settings[param_id]
+            
+            # Check if this is an acid parameter
+            if param_id.startswith('acid_'):
+                if 'acid_settings' not in self.params:
+                    self.params['acid_settings'] = {}
+                self.params['acid_settings'][param_id] = value
+            else:
+                self.params[param_id] = value
+
+            print(f"[WebSocket] Updated parameter {param_id}: {value}")
+            print("[WebSocket] Current parameters:", self.params)
 
     async def _connect(self):
         """Establish WebSocket connection"""
@@ -78,6 +108,10 @@ class WebSocketClient(QThread):
             return False
 
         try:
+            if not self.processing:
+                print("[WebSocket] Processing stopped, not sending frame")
+                return False
+
             # Convert frame to JPEG
             success, buffer = cv2.imencode('.jpg', frame)
             if not success:
@@ -98,7 +132,6 @@ class WebSocketClient(QThread):
 
         except Exception as e:
             self.connection_error.emit(str(e))
-            self.websocket = None
             return False
 
     async def receive_processed_frame(self):
@@ -184,23 +217,62 @@ class WebSocketClient(QThread):
     def start_camera(self):
         """Start processing frames"""
         self.processing = True
+        self.processing_frame = False
 
     def stop_camera(self):
-        """Stop processing frames"""
+        """Stop camera and frame processing"""
+        print("[WebSocket] Stopping camera")
         self.processing = False
+        self.processing_frame = False
+        self.current_frame = None
+        
+        # Use a timeout to prevent hanging if the server doesn't respond
+        # Create event loop for stop signal with a timeout
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            # Send stop signal to server with timeout
+            loop.run_until_complete(
+                asyncio.wait_for(self._send_stop_signal(), timeout=2.0)
+            )
+        except asyncio.TimeoutError:
+            print("[WebSocket] Stop signal timed out")
+        except Exception as e:
+            print(f"[WebSocket] Error sending stop signal: {e}")
+        finally:
+            loop.close()
+            # Emit status change to update UI
+            self.status_changed.emit("ready")
+
+    async def _send_stop_signal(self):
+        """Send stop signal to server"""
+        if self.websocket and self.websocket.open:
+            try:
+                await self.websocket.send(json.dumps({"status": "stop"}))
+            except websockets.exceptions.ConnectionClosed:
+                print("[WebSocket] Connection already closed")
+            except Exception as e:
+                print(f"[WebSocket] Error sending stop signal: {e}")
 
     def stop(self):
         """Stop the WebSocket client and cleanup resources"""
         print("[WebSocket] Stopping WebSocket client")
+        if not self.running:
+            print("[WebSocket] Already stopped")
+            return
+            
         self.running = False
         self.processing = False
         
-        # Create event loop in this thread for cleanup
+        # Create event loop in this thread for cleanup with a timeout
         try:
             # Signal the main loop to stop
             self.running = False
-            # Wait for the thread to finish its current work
-            self.wait()
+            
+            # Wait with timeout for the thread to finish
+            if not self.wait(3000):  # 3 second timeout
+                print("[WebSocket] Thread wait timed out, forcing termination")
+                self.terminate()
             
             # Now we can safely close the websocket
             if self.websocket:
@@ -208,14 +280,27 @@ class WebSocketClient(QThread):
                 asyncio.set_event_loop(loop)
                 try:
                     # Set a timeout for the close operation
-                    loop.run_until_complete(asyncio.wait_for(self.websocket.close(), timeout=2.0))
+                    loop.run_until_complete(
+                        asyncio.wait_for(
+                            self._close_websocket(), 
+                            timeout=2.0
+                        )
+                    )
                 except asyncio.TimeoutError:
                     print("[WebSocket] Close operation timed out")
                 except Exception as e:
                     print(f"[WebSocket] Error during close: {e}")
                 finally:
-                    loop.stop()
                     loop.close()
                     self.websocket = None
         except Exception as e:
             print(f"[WebSocket] Error during cleanup: {e}")
+            
+    async def _close_websocket(self):
+        """Safely close the websocket connection"""
+        if self.websocket and self.websocket.open:
+            try:
+                await self.websocket.close()
+            except Exception as e:
+                print(f"[WebSocket] Error closing websocket: {e}")
+        self.websocket = None
