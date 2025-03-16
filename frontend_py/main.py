@@ -11,6 +11,8 @@ from components.control_panel import ControlPanel
 from components.status_bar import StatusBar
 from websocket_client import WebSocketClient
 from camera_thread import CameraThread
+# Import the Stream_Analyzer for audio processing
+from modules.fft.stream_analyzer import Stream_Analyzer
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -70,11 +72,32 @@ class MainWindow(QMainWindow):
         self.frame_timer = QTimer()
         self.frame_timer.timeout.connect(self.process_frame)
         self.frame_timer.setInterval(33)  # ~30 FPS
+
+        self.audio_device_index = 3
+        
+        # Initialize the FFT analyzer
+        self.fft_analyzer = Stream_Analyzer(
+            device = self.audio_device_index, # Pyaudio (portaudio) device index, defaults to first mic input
+            rate   = 44100,               # Audio samplerate, None uses the default source settings
+            FFT_window_size_ms  = 60,     # Window size used for the FFT transform
+            updates_per_second  = 500,    # How often to read the audio stream for new data
+            smoothing_length_ms = 50,     # Apply some temporal smoothing to reduce noisy features
+            n_frequency_bins = 3,         # The FFT features are grouped in bins
+            visualize = 0,                # Visualize the FFT features with PyGame
+            verbose   = 0,                # Print running statistics (latency, fps, ...)
+            height    = 480,              # Height, in pixels, of the visualizer window,
+            window_ratio = 1              # Float ratio of the visualizer window. e.g. 24/9
+        )
+        
+        # Audio processing timer
+        self.audio_timer = QTimer()
+        self.audio_timer.timeout.connect(self.process_audio)
+        self.audio_timer.setInterval(20)  # 50Hz update rate for audio
         
         # State variables
         self.current_frame = None
         self.processing_frame = False
-        
+
         # Get initial settings
         self.get_initial_settings()
 
@@ -114,6 +137,24 @@ class MainWindow(QMainWindow):
         """Update parameter in WebSocket client"""
         self.ws_client.update_settings({param_id: value})
 
+    def process_audio(self):
+        """Process audio data and send to WebSocket client"""
+        try:
+            # Get audio features from FFT analyzer
+            raw_fftx, raw_fft, binned_fftx, binned_fft = self.fft_analyzer.get_audio_features()
+            
+            # Send FFT data to WebSocket client as acid_settings
+            acid_settings = {
+                "binned_fft": binned_fft.tolist() if isinstance(binned_fft, np.ndarray) else binned_fft,
+                # "raw_fft": raw_fft.tolist() if isinstance(raw_fft, np.ndarray) else raw_fft
+            }
+            
+            # Update WebSocket client with FFT data
+            self.ws_client.update_settings({"acid_settings": acid_settings})
+            
+        except Exception as e:
+            print(f"[Audio] Error processing audio: {e}")
+
     def toggle_camera(self):
         """Start/Stop camera and processing"""
         if self.start_button.text() == "Start Camera":
@@ -126,6 +167,7 @@ class MainWindow(QMainWindow):
         self.camera_thread.start()
         self.ws_client.start_camera()
         self.frame_timer.start()
+        self.audio_timer.start()  # Start audio processing
         self.start_button.setText("Stop Camera")
         self.status_bar.update_processing_status("Processing frames...")
 
@@ -134,6 +176,7 @@ class MainWindow(QMainWindow):
         print("[UI] Stopping camera")
         # Stop frame timer first
         self.frame_timer.stop()
+        self.audio_timer.stop()  # Stop audio processing
         self.processing_frame = False
         
         # Stop camera thread
@@ -167,6 +210,7 @@ class MainWindow(QMainWindow):
         try:
             # First stop all active processes
             self.frame_timer.stop()
+            self.audio_timer.stop()  # Stop the audio timer
             
             # Stop the stream immediately to prevent further network activity
             self.processed_display.stop_stream()
@@ -189,6 +233,13 @@ class MainWindow(QMainWindow):
                 if not self.ws_client.wait(1000):  # 1 second timeout
                     print("[UI] Force terminating WebSocket thread")
                     self.ws_client.terminate()
+            
+            # Clean up FFT analyzer resources if needed
+            if hasattr(self, 'fft_analyzer') and self.fft_analyzer is not None:
+                try:
+                    self.fft_analyzer.stop()
+                except:
+                    pass
             
             # Clear displays
             self.camera_display.clear_display()

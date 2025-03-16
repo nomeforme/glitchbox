@@ -72,14 +72,17 @@ class WebSocketClient(QThread):
             param_id = next(iter(settings))  # Get the parameter ID
             value = settings[param_id]
             
+            # Special handling for the acid_settings dictionary
+            if param_id == 'acid_settings':
+                # Directly assign the acid_settings dictionary, don't nest it again
+                self.params['acid_settings'] = value
             # Check if this is an acid parameter
-            if param_id.startswith('acid_'):
+            elif param_id.startswith('acid_'):
                 if 'acid_settings' not in self.params:
                     self.params['acid_settings'] = {}
                 self.params['acid_settings'][param_id] = value
             else:
                 self.params[param_id] = value
-
             print(f"[WebSocket] Updated parameter {param_id}: {value}")
             print("[WebSocket] Current parameters:", self.params)
 
