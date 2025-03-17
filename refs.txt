@@ -1,0 +1,15 @@
+# Ubuntu packages
+sudo apt-get update && sudo apt-get install -y portaudio19-dev libasound2-dev libportaudio2 libportaudiocpp0 libsndfile1-dev libpulse-dev ffmpeg
+
+# UV instructions
+uv init --python 3.11
+uv sync
+uv add -r server/requirements.txt
+
+uv add stable-fast --no-build-isolation
+
+# For realtimesst
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.0-1_all.deb 
+sudo dpkg -i cuda-keyring_1.0-1_all.deb 
+sudo apt update && sudo apt upgrade
+sudo apt install libcudnn8 libcudnn8-dev
