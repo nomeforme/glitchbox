@@ -2,6 +2,7 @@ import sys
 import cv2
 import numpy as np
 import asyncio
+import argparse
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton
 from PySide6.QtCore import Qt, QTimer
 
@@ -12,10 +13,20 @@ from components import StatusBar
 from clients import WebSocketClient
 from threads import CameraThread, SpeechToTextThread, FFTAnalyzerThread
 
+# Default server configuration
+DEFAULT_SERVER_HOST = "100.85.63.124"
+DEFAULT_SERVER_PORT = 7860
+
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, server_host, server_port):
         super().__init__()
         self.setWindowTitle("Glitch Machine Engine")
+        
+        # Store server configuration
+        self.server_host = server_host
+        self.server_port = server_port
+        self.server_ws_uri = f"ws://{server_host}:{server_port}"
+        self.server_http_uri = f"http://{server_host}:{server_port}"
         
         # Create central widget and layout
         central_widget = QWidget()
@@ -66,12 +77,12 @@ class MainWindow(QMainWindow):
         layout.addLayout(controls_layout)
         
         # Initialize threads
-        self.ws_client = WebSocketClient()
+        self.ws_client = WebSocketClient(uri=self.server_ws_uri)
         self.camera_thread = CameraThread()
         
         # Initialize the audio device index for both STT and FFT
-        self.audio_device_index_stt = 7
-        self.audio_device_index_fft = 3
+        self.audio_device_index_stt = 16
+        self.audio_device_index_fft = 16
 
         # Initialize the STT thread with the audio device index
         self.stt_thread = SpeechToTextThread(input_device_index=self.audio_device_index_stt)
@@ -119,7 +130,7 @@ class MainWindow(QMainWindow):
         if status == "connected":
             self.status_bar.update_connection_status(True)
             # Start the MJPEG stream when connected
-            self.processed_display.start_stream(self.ws_client.user_id)
+            self.processed_display.start_stream(self.ws_client.user_id, self.server_http_uri)
         elif status == "disconnected":
             self.status_bar.update_connection_status(False)
             # Stop the stream when disconnected
@@ -284,8 +295,17 @@ class MainWindow(QMainWindow):
             event.accept()
 
 def main():
+    # Parse command line arguments
+    parser = argparse.ArgumentParser(description='Glitch Machine Engine Client')
+    parser.add_argument('--host', default=DEFAULT_SERVER_HOST, help=f'Server hostname (default: {DEFAULT_SERVER_HOST})')
+    parser.add_argument('--port', type=int, default=DEFAULT_SERVER_PORT, help=f'Server port (default: {DEFAULT_SERVER_PORT})')
+    args = parser.parse_args()
+    
+    # Print server configuration
+    print(f"Connecting to server at {args.host}:{args.port}")
+    
     app = QApplication(sys.argv)
-    window = MainWindow()
+    window = MainWindow(server_host=args.host, server_port=args.port)
     window.setGeometry(100, 100, 1280, 720)
     window.show()
     sys.exit(app.exec())
