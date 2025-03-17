@@ -73,13 +73,19 @@ class ProcessedDisplay(QWidget):
         # Stream handling
         self.stream_thread = None
 
-    def start_stream(self, user_id: str):
-        """Start receiving the MJPEG stream"""
+    def start_stream(self, user_id: str, server_uri: str = "http://localhost:7860"):
+        """Start receiving the MJPEG stream
+        
+        Args:
+            user_id: The user ID for the stream
+            server_uri: The server URI (default: http://localhost:7860)
+        """
         if self.stream_thread and self.stream_thread.running:
             self.stop_stream()
             
         # Create and start stream thread
-        stream_url = f"http://localhost:7860/api/stream/{user_id}"
+        stream_url = f"{server_uri}/api/stream/{user_id}"
+        print(f"[Stream] Starting stream from: {stream_url}")
         self.stream_thread = StreamThread(stream_url)
         self.stream_thread.frame_received.connect(self.update_frame)
         self.stream_thread.start()
