@@ -5,16 +5,12 @@ import asyncio
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton
 from PySide6.QtCore import Qt, QTimer
 
-from components.camera_display import CameraDisplay
-from components.processed_display import ProcessedDisplay
-from components.control_panel import ControlPanel
-from components.status_bar import StatusBar
-from websocket_client import WebSocketClient
-from camera_thread import CameraThread
-# Import the SpeechToTextThread for real-time speech-to-text processing
-from modules.stt.stt_thread import SpeechToTextThread
-# Import the FFTAnalyzerThread for real-time audio FFT analysis
-from modules.fft.fft_thread import FFTAnalyzerThread
+from components import CameraDisplay
+from components import ProcessedDisplay
+from components import ControlPanel
+from components import StatusBar
+from clients import WebSocketClient
+from threads import CameraThread, SpeechToTextThread, FFTAnalyzerThread
 
 class MainWindow(QMainWindow):
     def __init__(self):
