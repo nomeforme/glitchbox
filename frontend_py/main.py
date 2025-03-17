@@ -11,10 +11,10 @@ from components.control_panel import ControlPanel
 from components.status_bar import StatusBar
 from websocket_client import WebSocketClient
 from camera_thread import CameraThread
-# Import the Stream_Analyzer for audio processing
-from modules.fft.stream_analyzer import Stream_Analyzer
 # Import the SpeechToTextThread for real-time speech-to-text processing
 from modules.stt.stt_thread import SpeechToTextThread
+# Import the FFTAnalyzerThread for real-time audio FFT analysis
+from modules.fft.fft_thread import FFTAnalyzerThread
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -57,6 +57,11 @@ class MainWindow(QMainWindow):
         self.stt_button.clicked.connect(self.toggle_stt)
         controls_layout.addWidget(self.stt_button)
         
+        # FFT Toggle button
+        self.fft_button = QPushButton("Start Audio FFT")
+        self.fft_button.clicked.connect(self.toggle_fft)
+        controls_layout.addWidget(self.fft_button)
+        
         # Pipeline controls
         self.control_panel = ControlPanel()
         self.control_panel.parameter_changed.connect(self.update_parameter)
@@ -68,12 +73,19 @@ class MainWindow(QMainWindow):
         self.ws_client = WebSocketClient()
         self.camera_thread = CameraThread()
         
+        # Initialize the audio device index for both STT and FFT
+        self.audio_device_index_stt = 7
+        self.audio_device_index_fft = 3
+
         # Initialize the STT thread with the audio device index
-        self.audio_device_index = 3
-        device_index = 7
-        self.stt_thread = SpeechToTextThread(input_device_index=device_index)
+        self.stt_thread = SpeechToTextThread(input_device_index=self.audio_device_index_stt)
         self.stt_thread.transcription_updated.connect(self.handle_transcription)
         self.stt_active = False
+        
+        # Initialize the FFT thread with the audio device index
+        self.fft_thread = FFTAnalyzerThread(input_device_index=self.audio_device_index_fft)
+        self.fft_thread.fft_data_updated.connect(self.handle_fft_data)
+        self.fft_active = False
         
         # Connect signals
         self.ws_client.frame_received.connect(self.processed_display.update_frame)
@@ -86,25 +98,6 @@ class MainWindow(QMainWindow):
         self.frame_timer = QTimer()
         self.frame_timer.timeout.connect(self.process_frame)
         self.frame_timer.setInterval(33)  # ~30 FPS
-        
-        # Initialize the FFT analyzer
-        self.fft_analyzer = Stream_Analyzer(
-            device = self.audio_device_index, # Pyaudio (portaudio) device index, defaults to first mic input
-            rate   = 44100,               # Audio samplerate, None uses the default source settings
-            FFT_window_size_ms  = 60,     # Window size used for the FFT transform
-            updates_per_second  = 500,    # How often to read the audio stream for new data
-            smoothing_length_ms = 50,     # Apply some temporal smoothing to reduce noisy features
-            n_frequency_bins = 3,         # The FFT features are grouped in bins
-            visualize = 0,                # Visualize the FFT features with PyGame
-            verbose   = 0,                # Print running statistics (latency, fps, ...)
-            height    = 480,              # Height, in pixels, of the visualizer window,
-            window_ratio = 1              # Float ratio of the visualizer window. e.g. 24/9
-        )
-        
-        # Audio processing timer
-        self.audio_timer = QTimer()
-        self.audio_timer.timeout.connect(self.process_audio)
-        self.audio_timer.setInterval(20)  # 50Hz update rate for audio
         
         # State variables
         self.current_frame = None
@@ -149,23 +142,17 @@ class MainWindow(QMainWindow):
         """Update parameter in WebSocket client"""
         self.ws_client.update_settings({param_id: value})
 
-    def process_audio(self):
-        """Process audio data and send to WebSocket client"""
-        try:
-            # Get audio features from FFT analyzer
-            raw_fftx, raw_fft, binned_fftx, binned_fft = self.fft_analyzer.get_audio_features()
-            
-            # Send FFT data to WebSocket client as acid_settings
-            acid_settings = {
-                "binned_fft": binned_fft.tolist() if isinstance(binned_fft, np.ndarray) else binned_fft,
-                # "raw_fft": raw_fft.tolist() if isinstance(raw_fft, np.ndarray) else raw_fft
-            }
-            
-            # Update WebSocket client with FFT data
-            self.ws_client.update_settings({"acid_settings": acid_settings})
-            
-        except Exception as e:
-            print(f"[Audio] Error processing audio: {e}")
+    def handle_fft_data(self, fft_data):
+        """Handle FFT data from the FFT analyzer thread"""
+        if fft_data and isinstance(fft_data, dict):
+            # Update the acid_settings in the WebSocket client
+            self.ws_client.update_settings({"acid_settings": fft_data})
+            # Update the UI to show FFT is active
+            if "binned_fft" in fft_data:
+                bins = fft_data["binned_fft"]
+                if isinstance(bins, list) and len(bins) > 0:
+                    avg_energy = sum(bins) / len(bins)
+                    self.status_bar.update_processing_status(f"FFT Audio Energy: {avg_energy:.2f}")
 
     def toggle_camera(self):
         """Start/Stop camera and processing"""
@@ -179,7 +166,6 @@ class MainWindow(QMainWindow):
         self.camera_thread.start()
         self.ws_client.start_camera()
         self.frame_timer.start()
-        self.audio_timer.start()  # Start audio processing
         self.start_button.setText("Stop Camera")
         self.status_bar.update_processing_status("Processing frames...")
 
@@ -188,7 +174,6 @@ class MainWindow(QMainWindow):
         print("[UI] Stopping camera")
         # Stop frame timer first
         self.frame_timer.stop()
-        self.audio_timer.stop()  # Stop audio processing
         self.processing_frame = False
         
         # Stop camera thread
@@ -239,17 +224,35 @@ class MainWindow(QMainWindow):
             self.stt_button.setText("Start Speech Recognition")
             self.status_bar.update_processing_status("Speech recognition stopped")
 
+    def toggle_fft(self):
+        """Toggle FFT audio analysis"""
+        if not self.fft_active:
+            # Start FFT
+            self.fft_thread.start()
+            self.fft_active = True
+            self.fft_button.setText("Stop Audio FFT")
+            self.status_bar.update_processing_status("FFT audio analysis active")
+        else:
+            # Stop FFT
+            self.fft_thread.stop()
+            self.fft_active = False
+            self.fft_button.setText("Start Audio FFT")
+            self.status_bar.update_processing_status("FFT audio analysis stopped")
+
     def closeEvent(self, event):
         """Handle window close event - cleanup all threads in proper order"""
         print("[UI] Closing window - cleaning up...")
         try:
             # First stop all active processes
             self.frame_timer.stop()
-            self.audio_timer.stop()  # Stop the audio timer
             
             # Stop the STT thread if it's running
             if hasattr(self, 'stt_thread') and self.stt_thread is not None:
                 self.stt_thread.stop()
+            
+            # Stop the FFT thread if it's running
+            if hasattr(self, 'fft_thread') and self.fft_thread is not None:
+                self.fft_thread.stop()
             
             # Stop the stream immediately to prevent further network activity
             self.processed_display.stop_stream()
@@ -272,13 +275,6 @@ class MainWindow(QMainWindow):
                 if not self.ws_client.wait(1000):  # 1 second timeout
                     print("[UI] Force terminating WebSocket thread")
                     self.ws_client.terminate()
-            
-            # Clean up FFT analyzer resources if needed
-            if hasattr(self, 'fft_analyzer') and self.fft_analyzer is not None:
-                try:
-                    self.fft_analyzer.stop()
-                except:
-                    pass
             
             # Clear displays
             self.camera_display.clear_display()
