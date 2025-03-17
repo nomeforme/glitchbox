@@ -824,3 +824,298 @@ Traceback (most recent call last):
   File "/home/karana/.local/share/uv/python/cpython-3.11.11-linux-x86_64-gnu/lib/python3.11/multiprocessing/connection.py", line 137, in _check_closed
     raise OSError("handle is closed")
 OSError: handle is closed
+2025-03-17 14:29:55.069 - RealTimeSTT: root - INFO - Starting RealTimeSTT
+2025-03-17 14:29:55.098 - RealTimeSTT: root - INFO - Initializing faster_whisper main transcription model tiny
+2025-03-17 14:29:55.099 - RealTimeSTT: root - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2025-03-17 14:29:55.101 - RealTimeSTT: root - INFO - Initializing WebRTC voice with Sensitivity 3
+2025-03-17 14:29:55.102 - RealTimeSTT: root - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2025-03-17 14:29:55.263 - RealTimeSTT: urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): huggingface.co:443
+2025-03-17 14:29:55.279 - RealTimeSTT: root - INFO - Microphone connected and validated (input_device_index: 20)
+2025-03-17 14:29:55.279 - RealTimeSTT: root - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2025-03-17 14:29:55.280 - RealTimeSTT: torio._extension.utils - DEBUG - Loading FFmpeg6
+2025-03-17 14:29:55.370 - RealTimeSTT: torio._extension.utils - DEBUG - Successfully loaded FFmpeg6
+2025-03-17 14:29:55.478 - RealTimeSTT: root - DEBUG - Silero VAD voice activity detection engine initialized successfully
+2025-03-17 14:29:55.479 - RealTimeSTT: root - DEBUG - Starting realtime worker
+2025-03-17 14:29:55.480 - RealTimeSTT: root - DEBUG - Waiting for main transcription model to start
+2025-03-17 14:29:55.493 - RealTimeSTT: urllib3.connectionpool - DEBUG - https://huggingface.co:443 "GET /api/models/Systran/faster-whisper-tiny/revision/main HTTP/1.1" 200 1871
+2025-03-17 14:29:55.701 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.620
+2025-03-17 14:29:55.719 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.000 of audio
+2025-03-17 14:29:55.978 - RealTimeSTT: root - DEBUG - Faster_whisper main speech to text transcription model initialized successfully
+2025-03-17 14:29:55.978 - RealTimeSTT: root - DEBUG - Main transcription model ready
+2025-03-17 14:29:55.978 - RealTimeSTT: root - DEBUG - RealtimeSTT initialization completed successfully
+2025-03-17 14:29:55.978 - RealTimeSTT: root - INFO - Setting listen time
+2025-03-17 14:29:55.978 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'listening'
+2025-03-17 14:29:55.979 - RealTimeSTT: root - DEBUG - Waiting for recording start
+2025-03-17 14:29:56.402 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:29:57.426 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:29:58.450 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:29:58.515 - RealTimeSTT: root - INFO - voice activity detected
+2025-03-17 14:29:58.515 - RealTimeSTT: root - INFO - recording started
+2025-03-17 14:29:58.515 - RealTimeSTT: root - INFO - State changed from 'listening' to 'recording'
+2025-03-17 14:29:58.515 - RealTimeSTT: root - DEBUG - Waiting for recording stop
+2025-03-17 14:29:58.721 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 19968
+2025-03-17 14:29:58.741 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:29:58.741 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.248
+2025-03-17 14:29:58.751 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.464 of audio
+2025-03-17 14:29:58.777 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.44
+2025-03-17 14:29:58.829 - RealTimeSTT: root - DEBUG - Final text detected with main model: Pikachu
+2025-03-17 14:29:58.829 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-03-17 14:29:58.829 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Pikachu
+2025-03-17 14:29:59.029 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 25088
+2025-03-17 14:29:59.044 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:29:59.044 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.568
+2025-03-17 14:29:59.052 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.464 of audio
+2025-03-17 14:29:59.077 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.80
+2025-03-17 14:29:59.123 - RealTimeSTT: root - DEBUG - Final text detected with main model: Pikachu
+2025-03-17 14:29:59.123 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-03-17 14:29:59.124 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Pikachu
+2025-03-17 14:29:59.325 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 29184
+2025-03-17 14:29:59.326 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:29:59.326 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.824
+2025-03-17 14:29:59.338 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.464 of audio
+2025-03-17 14:29:59.357 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.84
+2025-03-17 14:29:59.416 - RealTimeSTT: root - DEBUG - Final text detected with main model: Pikachu!
+2025-03-17 14:29:59.416 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-03-17 14:29:59.416 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Pikachu!
+2025-03-17 14:29:59.474 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:29:59.617 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 34304
+2025-03-17 14:29:59.632 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:29:59.634 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:02.144
+2025-03-17 14:29:59.655 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.480 of audio
+2025-03-17 14:29:59.675 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.84
+2025-03-17 14:29:59.709 - RealTimeSTT: root - DEBUG - Final text detected with main model: Pikachu!
+2025-03-17 14:29:59.710 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-03-17 14:29:59.711 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Pikachu!
+2025-03-17 14:29:59.795 - RealTimeSTT: root - INFO - recording stopped
+2025-03-17 14:29:59.796 - RealTimeSTT: root - DEBUG - No samples removed, final audio length: 36864
+2025-03-17 14:29:59.796 - RealTimeSTT: root - INFO - State changed from 'recording' to 'inactive'
+2025-03-17 14:29:59.836 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'transcribing'
+2025-03-17 14:29:59.837 - RealTimeSTT: root - DEBUG - Adding transcription request, no early transcription started
+2025-03-17 14:29:59.838 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-03-17 14:29:59.846 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:29:59.846 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:02.304
+2025-03-17 14:29:59.867 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.640 of audio
+2025-03-17 14:29:59.890 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.84
+2025-03-17 14:29:59.912 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 0
+2025-03-17 14:29:59.941 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-03-17 14:29:59.946 - RealTimeSTT: root - DEBUG - Final text detected with main model: Pikachu!
+2025-03-17 14:29:59.947 - RealTimeSTT: root - INFO - State changed from 'transcribing' to 'inactive'
+2025-03-17 14:29:59.984 - RealTimeSTT: root - INFO - Setting listen time
+2025-03-17 14:29:59.985 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'listening'
+2025-03-17 14:29:59.986 - RealTimeSTT: root - DEBUG - Waiting for recording start
+2025-03-17 14:30:00.003 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:30:00.003 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:00.000
+2025-03-17 14:30:00.004 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.000 of audio
+2025-03-17 14:30:00.019 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.28
+2025-03-17 14:30:00.022 - RealTimeSTT: root - DEBUG - Final text detected with main model: 
+2025-03-17 14:30:00.022 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-03-17 14:30:00.023 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: 
+2025-03-17 14:30:00.151 - RealTimeSTT: websockets.client - DEBUG - % sending keepalive ping
+2025-03-17 14:30:00.305 - RealTimeSTT: websockets.client - DEBUG - % received keepalive pong
+2025-03-17 14:30:00.504 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:01.536 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:02.560 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:02.884 - RealTimeSTT: root - INFO - voice activity detected
+2025-03-17 14:30:02.885 - RealTimeSTT: root - INFO - recording started
+2025-03-17 14:30:02.885 - RealTimeSTT: root - INFO - State changed from 'listening' to 'recording'
+2025-03-17 14:30:02.885 - RealTimeSTT: root - DEBUG - Waiting for recording stop
+2025-03-17 14:30:03.099 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 19968
+2025-03-17 14:30:03.111 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:30:03.111 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.248
+2025-03-17 14:30:03.123 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.496 of audio
+2025-03-17 14:30:03.145 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.56
+2025-03-17 14:30:03.181 - RealTimeSTT: root - DEBUG - Final text detected with main model: Pikachu!
+2025-03-17 14:30:03.183 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-03-17 14:30:03.184 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Pikachu!
+2025-03-17 14:30:03.390 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 24064
+2025-03-17 14:30:03.391 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:30:03.391 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.504
+2025-03-17 14:30:03.400 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.496 of audio
+2025-03-17 14:30:03.420 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.67
+2025-03-17 14:30:03.462 - RealTimeSTT: root - DEBUG - Final text detected with main model: Pikachu
+2025-03-17 14:30:03.462 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-03-17 14:30:03.463 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Pikachu
+2025-03-17 14:30:03.587 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:03.664 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 29184
+2025-03-17 14:30:03.665 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:30:03.665 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.824
+2025-03-17 14:30:03.676 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.496 of audio
+2025-03-17 14:30:03.698 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.77
+2025-03-17 14:30:03.733 - RealTimeSTT: root - DEBUG - Final text detected with main model: Pikachu spy
+2025-03-17 14:30:03.738 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-03-17 14:30:03.741 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Pikachu spy
+2025-03-17 14:30:03.941 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 33280
+2025-03-17 14:30:03.942 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:30:03.943 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:02.080
+2025-03-17 14:30:03.969 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.496 of audio
+2025-03-17 14:30:04.013 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.89
+2025-03-17 14:30:04.058 - RealTimeSTT: root - DEBUG - Final text detected with main model: Pikachu spider
+2025-03-17 14:30:04.058 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-03-17 14:30:04.058 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Pikachu spider
+2025-03-17 14:30:04.260 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 38400
+2025-03-17 14:30:04.266 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:30:04.267 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:02.400
+2025-03-17 14:30:04.316 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.496 of audio
+2025-03-17 14:30:04.364 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.96
+2025-03-17 14:30:04.408 - RealTimeSTT: root - DEBUG - Final text detected with main model: Pikachu Spider-Man
+2025-03-17 14:30:04.408 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-03-17 14:30:04.408 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Pikachu Spider-Man
+2025-03-17 14:30:04.609 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 43520
+2025-03-17 14:30:04.612 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:30:04.612 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:02.720
+2025-03-17 14:30:04.614 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:04.635 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.496 of audio
+2025-03-17 14:30:04.677 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.98
+2025-03-17 14:30:04.736 - RealTimeSTT: root - DEBUG - Final text detected with main model: Pikachu Spider-Man
+2025-03-17 14:30:04.736 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-03-17 14:30:04.736 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Pikachu Spider-Man
+2025-03-17 14:30:04.938 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 49152
+2025-03-17 14:30:04.958 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:30:04.958 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:03.072
+2025-03-17 14:30:05.002 - RealTimeSTT: root - INFO - recording stopped
+2025-03-17 14:30:05.007 - RealTimeSTT: root - DEBUG - No samples removed, final audio length: 50176
+2025-03-17 14:30:05.008 - RealTimeSTT: root - INFO - State changed from 'recording' to 'inactive'
+2025-03-17 14:30:05.036 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.640 of audio
+2025-03-17 14:30:05.084 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.96
+2025-03-17 14:30:05.109 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'transcribing'
+2025-03-17 14:30:05.126 - RealTimeSTT: root - DEBUG - Final text detected with main model: Pikachu Spider-Man
+2025-03-17 14:30:05.126 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-03-17 14:30:05.126 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Pikachu Spider-Man
+2025-03-17 14:30:05.127 - RealTimeSTT: root - DEBUG - Adding transcription request, no early transcription started
+2025-03-17 14:30:05.127 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-03-17 14:30:05.142 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:30:05.142 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:03.136
+2025-03-17 14:30:05.152 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.704 of audio
+2025-03-17 14:30:05.167 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.96
+2025-03-17 14:30:05.193 - RealTimeSTT: root - DEBUG - Final text detected with main model: Pikachu Spider-Man
+2025-03-17 14:30:05.193 - RealTimeSTT: root - INFO - State changed from 'transcribing' to 'inactive'
+2025-03-17 14:30:05.243 - RealTimeSTT: root - INFO - Setting listen time
+2025-03-17 14:30:05.243 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'listening'
+2025-03-17 14:30:05.243 - RealTimeSTT: root - DEBUG - Waiting for recording start
+2025-03-17 14:30:05.640 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:06.667 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:07.691 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:08.715 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:09.739 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:10.763 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:11.787 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:12.811 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:13.836 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:14.675 - RealTimeSTT: root - INFO - voice activity detected
+2025-03-17 14:30:14.675 - RealTimeSTT: root - INFO - recording started
+2025-03-17 14:30:14.675 - RealTimeSTT: root - INFO - State changed from 'listening' to 'recording'
+2025-03-17 14:30:14.676 - RealTimeSTT: root - DEBUG - Waiting for recording stop
+2025-03-17 14:30:14.862 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:14.884 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 19456
+2025-03-17 14:30:14.884 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:30:14.884 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.216
+2025-03-17 14:30:14.889 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.336 of audio
+2025-03-17 14:30:14.906 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.21
+2025-03-17 14:30:14.947 - RealTimeSTT: root - DEBUG - Final text detected with main model: Venom.
+2025-03-17 14:30:14.948 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-03-17 14:30:14.948 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Venom.
+2025-03-17 14:30:15.149 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 23552
+2025-03-17 14:30:15.160 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:30:15.160 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.472
+2025-03-17 14:30:15.200 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.336 of audio
+2025-03-17 14:30:15.240 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.36
+2025-03-17 14:30:15.285 - RealTimeSTT: root - DEBUG - Final text detected with main model: Venom
+2025-03-17 14:30:15.285 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-03-17 14:30:15.286 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Venom
+2025-03-17 14:30:15.486 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 28672
+2025-03-17 14:30:15.498 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:30:15.498 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.792
+2025-03-17 14:30:15.511 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.336 of audio
+2025-03-17 14:30:15.535 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.33
+2025-03-17 14:30:15.590 - RealTimeSTT: root - DEBUG - Final text detected with main model: Venom.
+2025-03-17 14:30:15.590 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-03-17 14:30:15.590 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Venom.
+2025-03-17 14:30:15.791 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 33792
+2025-03-17 14:30:15.803 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:30:15.803 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:02.112
+2025-03-17 14:30:15.823 - RealTimeSTT: root - INFO - recording stopped
+2025-03-17 14:30:15.824 - RealTimeSTT: root - DEBUG - No samples removed, final audio length: 34304
+2025-03-17 14:30:15.824 - RealTimeSTT: root - INFO - State changed from 'recording' to 'inactive'
+2025-03-17 14:30:15.833 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.544 of audio
+2025-03-17 14:30:15.862 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.35
+2025-03-17 14:30:15.874 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'transcribing'
+2025-03-17 14:30:15.887 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:15.920 - RealTimeSTT: root - DEBUG - Final text detected with main model: Venom.
+2025-03-17 14:30:15.921 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-03-17 14:30:15.921 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Venom.
+2025-03-17 14:30:15.921 - RealTimeSTT: root - DEBUG - Adding transcription request, no early transcription started
+2025-03-17 14:30:15.921 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-03-17 14:30:15.933 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-03-17 14:30:15.933 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:02.144
+2025-03-17 14:30:15.941 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.576 of audio
+2025-03-17 14:30:15.956 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.35
+2025-03-17 14:30:15.983 - RealTimeSTT: root - DEBUG - Final text detected with main model: Venom.
+2025-03-17 14:30:15.984 - RealTimeSTT: root - INFO - State changed from 'transcribing' to 'inactive'
+2025-03-17 14:30:16.013 - RealTimeSTT: root - INFO - Setting listen time
+2025-03-17 14:30:16.013 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'listening'
+2025-03-17 14:30:16.016 - RealTimeSTT: root - DEBUG - Waiting for recording start
+2025-03-17 14:30:16.911 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:17.935 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:18.959 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:19.983 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:20.238 - RealTimeSTT: websockets.client - DEBUG - % sending keepalive ping
+2025-03-17 14:30:20.298 - RealTimeSTT: websockets.client - DEBUG - % received keepalive pong
+2025-03-17 14:30:21.007 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:22.031 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:23.055 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:24.079 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:25.103 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:26.127 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:27.151 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:28.175 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:29.199 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:30.224 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:31.248 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:32.272 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:33.296 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:34.320 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:35.344 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:36.368 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:37.392 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:38.416 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:39.440 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:40.268 - RealTimeSTT: websockets.client - DEBUG - % sending keepalive ping
+2025-03-17 14:30:40.410 - RealTimeSTT: websockets.client - DEBUG - % received keepalive pong
+2025-03-17 14:30:40.464 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:41.488 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:42.512 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:43.537 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:44.561 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:45.585 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:46.609 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:47.635 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:48.659 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:49.684 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:50.708 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:51.732 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:52.756 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:53.780 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:54.804 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:55.828 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:56.852 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:57.876 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:58.900 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:30:59.927 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:31:00.293 - RealTimeSTT: websockets.client - DEBUG - % sending keepalive ping
+2025-03-17 14:31:00.406 - RealTimeSTT: websockets.client - DEBUG - % received keepalive pong
+2025-03-17 14:31:00.548 - RealTimeSTT: asyncio - DEBUG - Using selector: EpollSelector
+2025-03-17 14:31:00.954 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-03-17 14:31:01.077 - RealTimeSTT: root - DEBUG - Debug: Caught exception in main try block
+2025-03-17 14:31:01.077 - RealTimeSTT: root - ERROR - Unhandled exeption in _recording_worker: handle is closed
+Traceback (most recent call last):
+  File "/home/karana/Desktop/AI/Glitch/glitch-machine-engine/.venv/lib/python3.11/site-packages/RealtimeSTT/audio_recorder.py", line 1797, in _recording_worker
+    data = self.audio_queue.get(timeout=0.01)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/karana/.local/share/uv/python/cpython-3.11.11-linux-x86_64-gnu/lib/python3.11/multiprocessing/queues.py", line 117, in get
+    res = self._recv_bytes()
+          ^^^^^^^^^^^^^^^^^^
+  File "/home/karana/.local/share/uv/python/cpython-3.11.11-linux-x86_64-gnu/lib/python3.11/multiprocessing/connection.py", line 212, in recv_bytes
+    self._check_closed()
+  File "/home/karana/.local/share/uv/python/cpython-3.11.11-linux-x86_64-gnu/lib/python3.11/multiprocessing/connection.py", line 137, in _check_closed
+    raise OSError("handle is closed")
+OSError: handle is closed
