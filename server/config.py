@@ -148,7 +148,7 @@ parser.add_argument(
     "--use-acid-processor",
     dest="use_acid_processor",
     action="store_true",
-    default=False,
+    default=True,
     help="Enable Acid Processor",
 )
 # Add acid processor arguments
@@ -264,7 +264,7 @@ parser.add_argument(
     "--use-frequency-zoom",
     dest="use_frequency_zoom",
     action="store_true",
-    default=False,
+    default=True,
     help="Enable frequency zoom control",
 )
 parser.add_argument(
@@ -293,14 +293,14 @@ parser.add_argument(
     "--test-min-zoom",
     dest="test_min_zoom",
     type=float,
-    default=0.5,
+    default=1.0,
     help="Minimum zoom value for test oscillation",
 )
 parser.add_argument(
     "--test-max-zoom",
     dest="test_max_zoom",
     type=float,
-    default=1.5,
+    default=2.0,
     help="Maximum zoom value for test oscillation",
 )
 parser.add_argument(

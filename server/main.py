@@ -79,19 +79,19 @@ class App:
             self.acid_processor.set_do_acid_wobblers(getattr(self.args, 'acid_wobblers', False))
             self.acid_processor.set_color_matching(getattr(self.args, 'acid_color_matching', 0.5))
 
-            # Initialize the FFT analyzer
-            self.fft_analyzer = Stream_Analyzer(
-                device = 0, # (self.args, 'mic_index', 0),        # Pyaudio (portaudio) device index, defaults to first mic input
-                rate   = 44100,               # Audio samplerate, None uses the default source settings
-                FFT_window_size_ms  = 60,    # Window size used for the FFT transform
-                updates_per_second  = 500,   # How often to read the audio stream for new data
-                smoothing_length_ms = 50,    # Apply some temporal smoothing to reduce noisy features
-                n_frequency_bins = 3, # The FFT features are grouped in bins
-                visualize = 0,               # Visualize the FFT features with PyGame
-                verbose   = 0,    # Print running statistics (latency, fps, ...)
-                height    = 480,     # Height, in pixels, of the visualizer window,
-                window_ratio = 1  # Float ratio of the visualizer window. e.g. 24/9
-            )
+            # # Initialize the FFT analyzer
+            # self.fft_analyzer = Stream_Analyzer(
+            #     device = 0, # (self.args, 'mic_index', 0),        # Pyaudio (portaudio) device index, defaults to first mic input
+            #     rate   = 44100,               # Audio samplerate, None uses the default source settings
+            #     FFT_window_size_ms  = 60,    # Window size used for the FFT transform
+            #     updates_per_second  = 500,   # How often to read the audio stream for new data
+            #     smoothing_length_ms = 50,    # Apply some temporal smoothing to reduce noisy features
+            #     n_frequency_bins = 3, # The FFT features are grouped in bins
+            #     visualize = 0,               # Visualize the FFT features with PyGame
+            #     verbose   = 0,    # Print running statistics (latency, fps, ...)
+            #     height    = 480,     # Height, in pixels, of the visualizer window,
+            #     window_ratio = 1  # Float ratio of the visualizer window. e.g. 24/9
+            # )
 
             print("[main.py] Using device index: ", self.args.mic_index)
 
@@ -198,24 +198,25 @@ class App:
                             self.acid_processor.set_x_shift(x_shift)
                             self.acid_processor.set_y_shift(y_shift)
 
-                        if self.frequency_zoom_controller.enabled:
+                        # if self.frequency_zoom_controller.enabled:
                             
-                            # Get FFT data from analyzer
-                            raw_fftx, raw_fft, binned_fftx, binned_fft = self.fft_analyzer.get_audio_features()
+                        #     # Get FFT data from analyzer
+                        #     raw_fftx, raw_fft, binned_fftx, binned_fft = self.fft_analyzer.get_audio_features()
 
-                            use_binned_fft = self.frequency_zoom_controller.amplifying_factor * binned_fft
+                        #     use_binned_fft = self.frequency_zoom_controller.amplifying_factor * binned_fft
 
-                            # print(f"[main.py] Handle websocket data - raw_fft: {raw_fft}")
-                            print(f"[main.py] Handle websocket data - binned_fft: {use_binned_fft}")
+                        #     # print(f"[main.py] Handle websocket data - raw_fft: {raw_fft}")
+                        #     print(f"[main.py] Handle websocket data - binned_fft: {use_binned_fft}")
 
-                            # Process frequency bins and update zoom factor
-                            zoom_value = self.frequency_zoom_controller.process_frequency_bins(use_binned_fft.tolist())
+                        #     # Process frequency bins and update zoom factor
+                        #     zoom_value = self.frequency_zoom_controller.process_frequency_bins(use_binned_fft.tolist())
 
-                            # Apply the updated zoom factor to the acid processor
-                            self.acid_processor.set_zoom_factor(zoom_value)
+                        #     # Apply the updated zoom factor to the acid processor
+                        #     self.acid_processor.set_zoom_factor(zoom_value)
 
                     
                     data = await self.conn_manager.receive_json(user_id)
+
                     if data["status"] == "next_frame":
                         info = pipeline.Info()
                         params = await self.conn_manager.receive_json(user_id)
@@ -226,12 +227,14 @@ class App:
                         # print(f"[main.py] Use acid settings in params: {params}")
                         if self.use_acid_processor and "acid_settings" in params:
                             acid_settings = params.pop("acid_settings", {})
+                            # print(f"[main.py] Handle websocket data - acid_settings: {acid_settings}")
                             self._update_acid_settings(acid_settings)
                             
                             # Process frequency bins if included in settings
                             if "binned_fft" in acid_settings and self.use_acid_processor and not self.zoom_oscillator.enabled:
                                 # Only process FFT data if test oscillation is disabled
                                 binned_fft = acid_settings.get("binned_fft")
+                                print(f"[main.py] Handle websocket data - binned_fft: {binned_fft}")
                                 if binned_fft is not None:
                                     # Process the frequency bins and get updated zoom factor
                                     new_zoom = self.frequency_zoom_controller.process_frequency_bins(binned_fft)
@@ -244,6 +247,7 @@ class App:
                         params = SimpleNamespace(**params.dict())
                         if info.input_mode == "image":
                             image_data = await self.conn_manager.receive_bytes(user_id)
+
                             if len(image_data) == 0:
                                 await self.conn_manager.send_json(
                                     user_id, {"status": "send_frame"}
@@ -258,6 +262,7 @@ class App:
                                 # print(f"[main.py] After acid processing, image type: {type(params.image)}")
                             if self.use_background_removal and params.image:
                                 params.image = self._apply_background_removal(params.image)
+
                         await self.conn_manager.update_data(user_id, params)
                         await self.conn_manager.send_json(user_id, {"status": "wait"})
 
@@ -286,7 +291,10 @@ class App:
                             await asyncio.sleep(THROTTLE)
                             continue
                         last_params: SimpleNamespace = params
+                        last_img_time = time.time()
                         image = pipeline.predict(params)
+                        if self.args.debug:
+                            print(f"Img gen time taken: {time.time() - last_img_time}")
 
                         if self.args.safety_checker:
                             image, has_nsfw_concept = self.safety_checker(image)
@@ -310,7 +318,7 @@ class App:
                         if not is_firefox(request.headers["user-agent"]):
                             yield frame
                         if self.args.debug:
-                            print(f"Time taken: {time.time() - last_time}")
+                            print(f"Websocket Time taken: {time.time() - last_time}")
 
                 return StreamingResponse(
                     generate(),
