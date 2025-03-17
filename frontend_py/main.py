@@ -13,6 +13,8 @@ from websocket_client import WebSocketClient
 from camera_thread import CameraThread
 # Import the Stream_Analyzer for audio processing
 from modules.fft.stream_analyzer import Stream_Analyzer
+# Import the SpeechToTextThread for real-time speech-to-text processing
+from modules.stt.stt_thread import SpeechToTextThread
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -50,6 +52,11 @@ class MainWindow(QMainWindow):
         self.start_button.setEnabled(False)  # Disabled until settings are loaded
         controls_layout.addWidget(self.start_button)
         
+        # STT Toggle button
+        self.stt_button = QPushButton("Start Speech Recognition")
+        self.stt_button.clicked.connect(self.toggle_stt)
+        controls_layout.addWidget(self.stt_button)
+        
         # Pipeline controls
         self.control_panel = ControlPanel()
         self.control_panel.parameter_changed.connect(self.update_parameter)
@@ -60,6 +67,13 @@ class MainWindow(QMainWindow):
         # Initialize threads
         self.ws_client = WebSocketClient()
         self.camera_thread = CameraThread()
+        
+        # Initialize the STT thread with the audio device index
+        self.audio_device_index = 3
+        device_index = 7
+        self.stt_thread = SpeechToTextThread(input_device_index=device_index)
+        self.stt_thread.transcription_updated.connect(self.handle_transcription)
+        self.stt_active = False
         
         # Connect signals
         self.ws_client.frame_received.connect(self.processed_display.update_frame)
@@ -72,8 +86,6 @@ class MainWindow(QMainWindow):
         self.frame_timer = QTimer()
         self.frame_timer.timeout.connect(self.process_frame)
         self.frame_timer.setInterval(33)  # ~30 FPS
-
-        self.audio_device_index = 3
         
         # Initialize the FFT analyzer
         self.fft_analyzer = Stream_Analyzer(
@@ -204,6 +216,29 @@ class MainWindow(QMainWindow):
         self.status_bar.update_processing_status(f"Error: {error_msg}")
         self.status_bar.update_connection_status(False)
 
+    def handle_transcription(self, text):
+        """Handle transcribed text from STT and update the prompt"""
+        if text and len(text.strip()) > 0:
+            # Update the prompt in the WebSocket client
+            self.ws_client.update_prompt(text)
+            # Update the UI to show the current prompt
+            self.status_bar.update_processing_status(f"Prompt: {text}")
+
+    def toggle_stt(self):
+        """Toggle speech-to-text processing"""
+        if not self.stt_active:
+            # Start STT
+            self.stt_thread.start()
+            self.stt_active = True
+            self.stt_button.setText("Stop Speech Recognition")
+            self.status_bar.update_processing_status("Speech recognition active")
+        else:
+            # Stop STT
+            self.stt_thread.stop()
+            self.stt_active = False
+            self.stt_button.setText("Start Speech Recognition")
+            self.status_bar.update_processing_status("Speech recognition stopped")
+
     def closeEvent(self, event):
         """Handle window close event - cleanup all threads in proper order"""
         print("[UI] Closing window - cleaning up...")
@@ -211,6 +246,10 @@ class MainWindow(QMainWindow):
             # First stop all active processes
             self.frame_timer.stop()
             self.audio_timer.stop()  # Stop the audio timer
+            
+            # Stop the STT thread if it's running
+            if hasattr(self, 'stt_thread') and self.stt_thread is not None:
+                self.stt_thread.stop()
             
             # Stop the stream immediately to prevent further network activity
             self.processed_display.stop_stream()
