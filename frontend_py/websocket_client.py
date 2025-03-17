@@ -86,6 +86,14 @@ class WebSocketClient(QThread):
             print(f"[WebSocket] Updated parameter {param_id}: {value}")
             print("[WebSocket] Current parameters:", self.params)
 
+    def update_prompt(self, text):
+        """Specifically update the prompt parameter with text from STT"""
+        if 'prompt' in self.params:
+            self.params['prompt'] = text
+            print(f"[WebSocket] Updated prompt: {text}")
+        else:
+            print("[WebSocket] Warning: 'prompt' parameter not found in initialized parameters")
+
     async def _connect(self):
         """Establish WebSocket connection"""
         try:
