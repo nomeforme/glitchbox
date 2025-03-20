@@ -7,3 +7,18 @@ uv sync
 uv add -r server/requirements.txt
 
 uv add stable-fast --no-build-isolation
+
+
+mkdir -p ~/.gnupg
+echo "pinentry-program /usr/bin/pinentry-curses
+allow-loopback-pinentry" > ~/.gnupg/gpg-agent.conf
+chmod 600 ~/.gnupg/gpg-agent.conf
+
+gpg-connect-agent reloadagent /bye
+
+export GPG_TTY=$(tty)
+
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.0-1_all.deb 
+sudo dpkg -i cuda-keyring_1.0-1_all.deb 
+sudo apt update && sudo apt upgrade
+sudo apt install libcudnn8 libcudnn8-dev
