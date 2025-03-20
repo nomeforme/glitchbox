@@ -21,7 +21,7 @@ import torch
 # Import the acid processor
 from modules.acid_processor import AcidProcessor, InputImageProcessor
 # Import the frequency zoom controller
-from modules.acid_audio_controller import FrequencyZoomController
+from modules.simple_beat_zoom_controller import BeatZoomController
 # Import fft analyzer
 from modules.fft.stream_analyzer import Stream_Analyzer
 # Import test oscillators
@@ -93,18 +93,32 @@ class App:
             #     window_ratio = 1  # Float ratio of the visualizer window. e.g. 24/9
             # )
 
-            print("[main.py] Using device index: ", self.args.mic_index)
+            # print("[main.py] Using device index: ", self.args.mic_index)
 
-            # Initialize the frequency zoom controller
-            self.frequency_zoom_controller = FrequencyZoomController(
+            # # Initialize the frequency zoom controller
+            # self.frequency_zoom_controller = FrequencyZoomController(
+            #     baseline_window_size=10,  # match the client's window size
+            #     low_bin_sensitivity=1, #getattr(self.args, 'acid_low_bin_sensitivity', 0.1),
+            #     high_bin_sensitivity=1, #getattr(self.args, 'acid_high_bin_sensitivity', 0.1),
+            #     min_zoom=0.5,
+            #     max_zoom=2,
+            #     rebalance_rate=0.1,
+            #     activity_threshold=0.25,
+            #     amplifying_factor=1000,
+            #     enabled=getattr(self.args, 'use_frequency_zoom', False),
+            #     debug=True #getattr(self.args, 'debug', False)
+            # )
+
+            self.frequency_zoom_controller = BeatZoomController(
                 baseline_window_size=30,  # match the client's window size
-                low_bin_sensitivity=1, #getattr(self.args, 'acid_low_bin_sensitivity', 0.1),
-                high_bin_sensitivity=1, #getattr(self.args, 'acid_high_bin_sensitivity', 0.1),
+                baseline_avg_pct=0.3,
                 min_zoom=1,
                 max_zoom=2,
-                rebalance_rate=0.005,
-                activity_threshold=0.01,
-                amplifying_factor=100000,
+                smoothing_factor=0.01,
+                amplifying_factor=1000,
+                energy_amplifier=0.40,
+                use_baseline=False,
+                max_bin_decay_rate=0.995,
                 enabled=getattr(self.args, 'use_frequency_zoom', False),
                 debug=True #getattr(self.args, 'debug', False)
             )
