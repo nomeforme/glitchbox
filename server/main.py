@@ -27,8 +27,8 @@ from modules.fft.stream_analyzer import Stream_Analyzer
 # Import test oscillators
 from utils.test_oscillators import ZoomOscillator, ShiftOscillator
 
-# Import background removal
-from rembg import remove
+# # Import background removal
+# from rembg import remove
 
 import numpy as np
 
@@ -451,7 +451,8 @@ class App:
         return Image.fromarray(acid_img) #pil_image #Image.fromarray(acid_img)
 
     def _apply_background_removal(self, pil_image):
-        return remove(pil_image)
+        return pil_image
+        # return remove(pil_image)
 
 print(f"Device: {device}")
 print(f"torch_dtype: {torch_dtype}")
