@@ -5,6 +5,7 @@ import json
 import numpy as np
 import cv2
 import uuid
+import uvloop
 
 class WebSocketClient(QThread):
     frame_received = Signal(np.ndarray)
@@ -223,7 +224,8 @@ class WebSocketClient(QThread):
     def run(self):
         """Start the WebSocket client thread"""
         self.running = True
-        asyncio.run(self.main_loop())
+        uvloop.install()
+        uvloop.run(self.main_loop())
 
     def start_camera(self):
         """Start processing frames"""
@@ -239,7 +241,8 @@ class WebSocketClient(QThread):
         
         # Use a timeout to prevent hanging if the server doesn't respond
         # Create event loop for stop signal with a timeout
-        loop = asyncio.new_event_loop()
+        loop = uvloop.new_event_loop()
+
         asyncio.set_event_loop(loop)
         try:
             # Send stop signal to server with timeout

@@ -25,5 +25,6 @@ dependencies = [
     "scipy==1.15.1",
     "sounddevice>=0.5.1",
     "uvicorn==0.24.0",
+    "uvloop>=0.21.0",
     "websockets==14.2",
 ]
