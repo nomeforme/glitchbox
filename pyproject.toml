@@ -1,35 +1,33 @@
 [project]
-name = "glitch-machine-engine"
+name = "real-time-latent-consistency-model"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
-    "accelerate==0.30.1",
-    "compel==2.0.2",
-    "controlnet-aux==0.0.9",
-    "diffusers==0.28.2",
-    "fastapi==0.111.0",
-    "huggingface-hub==0.24.0",
-    "lunar-tools",
+    "accelerate>=1.5.2",
+    "colored>=2.3.0",
+    "compel>=2.0.3",
+    "controlnet-aux>=0.0.9",
+    "cuda-python>=12.8.0",
+    "diffusers>=0.32.2",
+    "fastapi[standard]>=0.115.11",
+    "huggingface-hub>=0.29.3",
+    "lunar-tools>=0.0.11",
     "markdown2>=2.5.3",
-    "mpmath==1.3.0",
-    "numpy==1.*",
-    "onediff ; platform_machine != 'arm64' or sys_platform != 'darwin'",
-    "oneflow ; platform_machine != 'arm64' or sys_platform != 'darwin'",
+    "ninja>=1.11.1.3",
+    "onnx-graphsurgeon>=0.3.27",
     "onnxruntime>=1.21.0",
     "optimum>=1.24.0",
-    "peft==0.11.1",
-    "pillow==10.3.0",
+    "peft>=0.15.0",
+    "polygraphy>=0.49.20",
     "pyaudio>=0.2.14",
-    "rembg>=2.0.64",
-    "safetensors>=0.5.3",
-    "setuptools>=76.0.0",
-    "stable-fast>=1.0.5",
-    "torch==2.2.2",
-    "transformers==4.41.1",
-    "uvicorn[standard]==0.30.0",
-    "xformers>=0.0.25.post1 ; platform_machine != 'arm64' or sys_platform != 'darwin'",
+    "setuptools>=77.0.3",
+    "tensorrt>=10.9.0.34",
+    "torch>=2.6.0",
+    "torchvision>=0.21.0",
+    "transformers>=4.49.0",
+    "uvicorn[standard]>=0.34.0",
 ]
 
 [tool.uv.sources]
