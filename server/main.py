@@ -28,6 +28,8 @@ from modules.fft.stream_analyzer import Stream_Analyzer
 from utils.test_oscillators import ZoomOscillator, ShiftOscillator
 # Import the embeddings service
 from modules.prompt_travel.embeddings_service import router as embeddings_router, embeddings_service, start_background_tasks
+# Import the prompt travel scheduler
+from modules.prompt_travel_scheduler import PromptTravelScheduler
 
 # # Import background removal
 # from rembg import remove
@@ -52,6 +54,17 @@ class App:
         if self.use_prompt_travel:
             print("[main.py] Prompt travel service will be initialized on startup")
             # The actual initialization happens in the startup event
+            
+            # Initialize prompt travel scheduler
+            self.prompt_travel_scheduler = PromptTravelScheduler(
+                min_factor=getattr(self.args, 'prompt_travel_min_factor', 0.0),
+                max_factor=getattr(self.args, 'prompt_travel_max_factor', 1.0),
+                factor_increment=getattr(self.args, 'prompt_travel_factor_increment', 0.025),
+                stabilize_duration=getattr(self.args, 'prompt_travel_stabilize_duration', 3),
+                oscillate=getattr(self.args, 'prompt_travel_oscillate', True),
+                enabled=getattr(self.args, 'use_prompt_travel_scheduler', False),
+                debug=getattr(self.args, 'debug', False)
+            )
         
         # Initialize acid processors
         self.use_acid_processor = getattr(self.args, 'use_acid_processor', False)
@@ -249,6 +262,15 @@ class App:
                             try:
                                 # Set user_id on params for the pipeline to use
                                 user_id_str = str(user_id)
+                                
+                                # Update prompt travel factor with scheduler if enabled
+                                if hasattr(self, 'prompt_travel_scheduler') and self.prompt_travel_scheduler.enabled:
+                                    # Get the next factor value from the scheduler
+                                    scheduler_factor = self.prompt_travel_scheduler.update()
+                                    # Use the scheduled factor for prompt travel
+                                    setattr(params, 'prompt_travel_factor', scheduler_factor)
+                                    if self.args.debug:
+                                        print(f"[main.py] Using scheduled prompt travel factor: {scheduler_factor:.2f}")
                                 
                                 # Queue the prompt travel request
                                 await embeddings_service.process_prompt_travel(
@@ -497,6 +519,23 @@ class App:
             self.shift_oscillator.set_increments(x_increment=settings["test_x_shift_increment"])
         if "test_y_shift_increment" in settings:
             self.shift_oscillator.set_increments(y_increment=settings["test_y_shift_increment"])
+            
+        # Update prompt travel scheduler if enabled
+        if self.use_prompt_travel and hasattr(self, 'prompt_travel_scheduler'):
+            # Enable/disable the scheduler
+            if "use_prompt_travel_scheduler" in settings:
+                self.prompt_travel_scheduler.set_enabled(settings["use_prompt_travel_scheduler"])
+            # Set increment value
+            if "prompt_travel_factor_increment" in settings:
+                self.prompt_travel_scheduler.set_factor_increment(settings["prompt_travel_factor_increment"])
+            # Set oscillation mode
+            if "prompt_travel_oscillate" in settings:
+                self.prompt_travel_scheduler.set_oscillation(settings["prompt_travel_oscillate"])
+            # Set boundaries
+            min_factor = settings.get("prompt_travel_min_factor")
+            max_factor = settings.get("prompt_travel_max_factor")
+            if min_factor is not None or max_factor is not None:
+                self.prompt_travel_scheduler.set_boundaries(min_factor, max_factor)
     
     def _apply_acid_processing(self, pil_image):
         """Process image with acid processor and return processed PIL image"""
