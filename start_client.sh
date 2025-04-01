@@ -1,1 +1,1 @@
-cd frontend && npm run dev
+cd frontend_py && uv run main.py

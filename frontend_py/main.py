@@ -14,7 +14,7 @@ from clients import WebSocketClient
 from threads import CameraThread, SpeechToTextThread, FFTAnalyzerThread
 
 # Default server configuration
-DEFAULT_SERVER_HOST = "100.85.63.124"
+DEFAULT_SERVER_HOST = "localhost"
 DEFAULT_SERVER_PORT = 7860
 
 class MainWindow(QMainWindow):
