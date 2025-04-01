@@ -22,3 +22,21 @@ wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/
 sudo dpkg -i cuda-keyring_1.0-1_all.deb 
 sudo apt update && sudo apt upgrade
 sudo apt install libcudnn8 libcudnn8-dev
+
+User ↔ FastAPI App (Main WebSocket)
+         ↓
+    Process Request → Check Prompt Travel Enabled?
+         ↓                    ↓
+[Regular Processing]   [Prompt Travel Enabled]
+                             ↓
+                     Submit to Embeddings Service
+                             ↓
+                     Add to Pending Queue
+                             ↓
+                  Process in Background Task
+                             ↓
+                      Store in Cache
+                             ↓
+                   Retrieve for Pipeline
+                             ↓
+                   Generate Final Image

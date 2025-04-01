@@ -21,11 +21,13 @@ import torch
 # Import the acid processor
 from modules.acid_processor import AcidProcessor, InputImageProcessor
 # Import the frequency zoom controller
-from modules.simple_beat_zoom_controller import BeatZoomController
+from modules.audio_controller import BeatZoomController
 # Import fft analyzer
 from modules.fft.stream_analyzer import Stream_Analyzer
 # Import test oscillators
 from utils.test_oscillators import ZoomOscillator, ShiftOscillator
+# Import the embeddings service
+from modules.prompt_travel.embeddings_service import router as embeddings_router, embeddings_service, start_background_tasks
 
 # # Import background removal
 # from rembg import remove
@@ -44,6 +46,12 @@ class App:
         self.conn_manager = ConnectionManager()
         if self.args.safety_checker:
             self.safety_checker = SafetyChecker(device=device.type)
+        
+        # Initialize prompt travel service
+        self.use_prompt_travel = getattr(self.args, 'use_prompt_travel', False)
+        if self.use_prompt_travel:
+            print("[main.py] Prompt travel service will be initialized on startup")
+            # The actual initialization happens in the startup event
         
         # Initialize acid processors
         self.use_acid_processor = getattr(self.args, 'use_acid_processor', False)
@@ -154,7 +162,46 @@ class App:
             allow_methods=["*"],
             allow_headers=["*"],
         )
-
+        
+        # Include the embeddings router if prompt travel is enabled
+        if self.use_prompt_travel:
+            self.app.include_router(embeddings_router)
+        
+        # Use on_event decorators for startup/shutdown
+        @self.app.on_event("startup")
+        async def startup_event():
+            # Startup
+            print("Application startup")
+            
+            # Initialize embeddings service if prompt travel is enabled
+            if self.use_prompt_travel and hasattr(self.pipeline, 'pipe'):
+                try:
+                    print("[main.py] Initializing prompt travel service")
+                    # Get the models from the pipeline
+                    text_encoder = self.pipeline.pipe.text_encoder
+                    tokenizer = self.pipeline.pipe.tokenizer
+                    
+                    # Initialize the embeddings service
+                    await embeddings_service.initialize(
+                        text_encoder=text_encoder,
+                        tokenizer=tokenizer,
+                        device=device.type
+                    )
+                    
+                    # Start background tasks for the embeddings service
+                    await start_background_tasks()
+                    print("[main.py] Prompt travel service initialized and background tasks started")
+                except Exception as e:
+                    print(f"[main.py] Error initializing embeddings service: {e}")
+                    print("[main.py] Running without prompt travel")
+                    self.use_prompt_travel = False
+        
+        @self.app.on_event("shutdown")
+        async def shutdown_event():
+            # Shutdown
+            print("Application shutdown")
+            # No explicit cleanup needed for the async embeddings service
+        
         @self.app.websocket("/api/ws/{user_id}")
         async def websocket_endpoint(user_id: uuid.UUID, websocket: WebSocket):
             try:
@@ -193,11 +240,41 @@ class App:
                     ######## BACKEND BASED PREPROCESSING AND ACID PROCESSING ########33
                     ###############################################################
 
-                    # _, _, a, b = self.fft_analyzer.get_audio_features()
+                    print(f"using prompt travel: {self.use_prompt_travel}")
+                    # Process prompt travel requests if enabled
+                    if self.use_prompt_travel:
+                        print("[main.py] Processing prompt travel requests")
+                        # NOTE: TEMP- always true. Check if this is a prompt travel request
+                        if True: # getattr(params, 'use_prompt_travel', False):
+                            try:
+                                # Set user_id on params for the pipeline to use
+                                user_id_str = str(user_id)
+                                
+                                # Queue the prompt travel request
+                                await embeddings_service.process_prompt_travel(
+                                    user_id=user_id_str,
+                                    prompt=getattr(params, 'prompt', ''),
+                                    target_prompt=getattr(params, 'target_prompt', ''),
+                                    factor=getattr(params, 'prompt_travel_factor', 0.0)
+                                )
 
-                    # # print(f"[main.py] Handle websocket data - raw_fft: {raw_fft}")
-                    # print(f"[main.py] Handle websocket data - A: {a.tolist()}")
-                    # print(f"[main.py] Handle websocket data - B: {(1000 * b).tolist()}")
+                                print(f"[main.py] Prompt factor: {getattr(params, 'prompt_travel_factor')}")
+                                
+                                # Get any available embeddings and attach them to the params
+                                embeddings = await embeddings_service.get_embeddings(user_id_str)
+                                if embeddings:
+                                    prompt_embeds, negative_prompt_embeds = embeddings
+                                    print(f"[main.py] Got embeddings - prompt shape: {prompt_embeds.shape}")
+                                    
+                                    # Attach embeddings to params - using setattr for SimpleNamespace compatibility
+                                    setattr(params, 'prompt_embeds', prompt_embeds)
+                                    setattr(params, 'negative_prompt_embeds', negative_prompt_embeds)
+                                    # print(f"[main.py] Attached embeddings to params: {hasattr(params, 'prompt_embeds')}")
+                                else:
+                                    print(f"[main.py] No embeddings available for user {user_id_str}")
+                            except Exception as e:
+                                print(f"Error during prompt travel: {e}")
+                                # Continue without prompt travel embeddings
                         
                     # Apply test oscillations if enabled
                     if self.use_acid_processor:
@@ -212,23 +289,6 @@ class App:
                             self.acid_processor.set_x_shift(x_shift)
                             self.acid_processor.set_y_shift(y_shift)
 
-                        # if self.frequency_zoom_controller.enabled:
-                            
-                        #     # Get FFT data from analyzer
-                        #     raw_fftx, raw_fft, binned_fftx, binned_fft = self.fft_analyzer.get_audio_features()
-
-                        #     use_binned_fft = self.frequency_zoom_controller.amplifying_factor * binned_fft
-
-                        #     # print(f"[main.py] Handle websocket data - raw_fft: {raw_fft}")
-                        #     print(f"[main.py] Handle websocket data - binned_fft: {use_binned_fft}")
-
-                        #     # Process frequency bins and update zoom factor
-                        #     zoom_value = self.frequency_zoom_controller.process_frequency_bins(use_binned_fft.tolist())
-
-                        #     # Apply the updated zoom factor to the acid processor
-                        #     self.acid_processor.set_zoom_factor(zoom_value)
-
-                    
                     data = await self.conn_manager.receive_json(user_id)
 
                     if data["status"] == "next_frame":
@@ -301,9 +361,21 @@ class App:
                             user_id, {"status": "send_frame"}
                         )
                         params = await self.conn_manager.get_latest_data(user_id)
-                        if params.__dict__ == last_params.__dict__ or params is None:
+                        
+                        # Compare params while excluding tensor attributes to avoid comparison error
+                        params_equal = False
+                        if params is not None and hasattr(params, '__dict__') and hasattr(last_params, '__dict__'):
+                            # Create filtered dictionaries excluding tensor attributes
+                            params_dict = {k: v for k, v in params.__dict__.items() 
+                                          if not isinstance(v, torch.Tensor)}
+                            last_params_dict = {k: v for k, v in last_params.__dict__.items() 
+                                               if not isinstance(v, torch.Tensor)}
+                            params_equal = params_dict == last_params_dict
+                            
+                        if params_equal or params is None:
                             await asyncio.sleep(THROTTLE)
                             continue
+                            
                         last_params: SimpleNamespace = params
                         last_img_time = time.time()
                         image = pipeline.predict(params)
@@ -462,12 +534,22 @@ app = App(config, pipeline).app
 
 if __name__ == "__main__":
     import uvicorn
-
-    uvicorn.run(
-        "main:app",
-        host=config.host,
-        port=config.port,
-        reload=config.reload,
-        ssl_certfile=config.ssl_certfile,
-        ssl_keyfile=config.ssl_keyfile,
-    )
+    
+    try:
+        print(f"Starting server on {config.host}:{config.port}")
+        uvicorn.run(
+            "main:app",
+            host=config.host,
+            port=config.port,
+            reload=config.reload,
+            ssl_certfile=config.ssl_certfile,
+            ssl_keyfile=config.ssl_keyfile,
+        )
+    except KeyboardInterrupt:
+        print("Server stopped by user")
+    except Exception as e:
+        print(f"Error starting server: {e}")
+    finally:
+        # Ensure we clean up any global resources
+        print("Cleaning up resources...")
+        # No additional cleanup needed for the async service
