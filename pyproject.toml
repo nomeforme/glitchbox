@@ -6,12 +6,13 @@ readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "accelerate>=1.5.2",
+    "aiohttp>=3.11.15",
     "colored>=2.3.0",
     "compel>=2.0.3",
     "controlnet-aux>=0.0.9",
     "cuda-python>=12.8.0",
     "diffusers>=0.32.2",
-    "fastapi[standard]>=0.115.11",
+    "fastapi[standard]>=0.110.3",
     "huggingface-hub>=0.29.3",
     "lunar-tools>=0.0.11",
     "markdown2>=2.5.3",

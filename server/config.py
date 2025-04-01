@@ -23,6 +23,13 @@ class Args(NamedTuple):
     use_acid_processor: bool = False
     # Enable prompt travel
     use_prompt_travel: bool = False
+    # Prompt travel scheduler settings
+    use_prompt_travel_scheduler: bool = False
+    prompt_travel_min_factor: float = 0.0
+    prompt_travel_max_factor: float = 1.0
+    prompt_travel_factor_increment: float = 0.025
+    prompt_travel_stabilize_duration: int = 3
+    prompt_travel_oscillate: bool = True
     # Default acid processor settings
     acid_strength: float = 0.4
     acid_coef_noise: float = 0.15
@@ -367,7 +374,51 @@ parser.add_argument(
     dest="use_prompt_travel",
     action="store_true",
     default=True,
-    help="Enable Prompt Travel for smooth prompt transitions",
+    help="Enable Prompt Travel",
+)
+
+# Add prompt travel scheduler arguments
+parser.add_argument(
+    "--use-prompt-travel-scheduler",
+    dest="use_prompt_travel_scheduler",
+    action="store_true",
+    default=True,
+    help="Enable Prompt Travel Scheduler",
+)
+parser.add_argument(
+    "--prompt-travel-min-factor",
+    dest="prompt_travel_min_factor",
+    type=float,
+    default=0.0,
+    help="Minimum prompt travel factor",
+)
+parser.add_argument(
+    "--prompt-travel-max-factor",
+    dest="prompt_travel_max_factor",
+    type=float,
+    default=1.0,
+    help="Maximum prompt travel factor",
+)
+parser.add_argument(
+    "--prompt-travel-factor-increment",
+    dest="prompt_travel_factor_increment",
+    type=float,
+    default=0.025,
+    help="Increment amount for prompt travel factor",
+)
+parser.add_argument(
+    "--prompt-travel-stabilize-duration",
+    dest="prompt_travel_stabilize_duration",
+    type=int,
+    default=3,
+    help="Number of frames to stabilize at min/max factor",
+)
+parser.add_argument(
+    "--prompt-travel-oscillate",
+    dest="prompt_travel_oscillate",
+    action="store_true",
+    default=True,
+    help="Whether to oscillate between min/max or go one-way",
 )
 
 parser.set_defaults(taesd=USE_TAESD)
