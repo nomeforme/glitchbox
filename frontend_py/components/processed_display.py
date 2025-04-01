@@ -106,6 +106,11 @@ class ProcessedDisplay(QWidget):
         q_image = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
         self.image_label.setPixmap(QPixmap.fromImage(q_image).scaled(
             640, 480, Qt.KeepAspectRatio))
+        
+        # Update FPS counter in status bar
+        main_window = self.window()
+        if main_window:
+            main_window.status_bar.update_fps()
 
     def clear_display(self):
         """Clear the display and stop stream"""
