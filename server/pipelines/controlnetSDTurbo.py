@@ -24,6 +24,7 @@ controlnet_model = "thibaud/controlnet-sd21-canny-diffusers"
 base_model = "stabilityai/sd-turbo"
 
 default_prompt = "Portrait of The Joker halloween costume, face painting, with , glare pose, detailed, intricate, full of colour, cinematic lighting, trending on artstation, 8k, hyperrealistic, focused, extreme details, unreal engine 5 cinematic, masterpiece"
+default_target_prompt = "a blue dog"
 page_content = """
 <h1 class="text-3xl font-bold">Real-Time SDv2.1 Turbo</h1>
 <h3 class="text-xl font-bold">Image-to-Image ControlNet</h3>
@@ -64,6 +65,30 @@ class Pipeline:
             title="Prompt",
             field="textarea",
             id="prompt",
+        )
+        target_prompt: str = Field(
+            default_target_prompt,
+            title="Target Prompt",
+            field="textarea",
+            id="target_prompt",
+            hide=True,
+        )
+        use_prompt_travel: bool = Field(
+            True,
+            title="Use Prompt Travel",
+            field="checkbox",
+            id="use_prompt_travel",
+            # hide=True,
+        )
+        prompt_travel_factor: float = Field(
+            0.5,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Prompt Travel Factor",
+            field="range",
+            id="prompt_travel_factor",
+            hide=True,
         )
         seed: int = Field(
             4402026899276587, min=0, title="Seed", field="seed", hide=True, id="seed"
@@ -234,11 +259,34 @@ class Pipeline:
         generator = torch.manual_seed(params.seed)
         prompt = params.prompt
         prompt_embeds = None
-        if hasattr(self.pipe, "compel_proc"):
+        negative_prompt_embeds = None
+
+        # Use provided prompt embeddings if available - with safer attribute check
+        has_prompt_embeds = hasattr(params, "prompt_embeds") and params.prompt_embeds is not None
+
+        if has_prompt_embeds:
+            prompt_embeds = params.prompt_embeds
+            # print(f"[controlnetSDTurbo.py] predict - prompt embeds shape: {prompt_embeds.shape}")
+            # Move embeddings to device if needed
+            if hasattr(prompt_embeds, 'device') and prompt_embeds.device != self.pipe.device:
+                prompt_embeds = prompt_embeds.to(self.pipe.device)
+            # When using pre-computed embeddings, set prompt to None
+            prompt = None
+            
+            # Use provided negative prompt embeddings if available
+            if hasattr(params, "negative_prompt_embeds") and params.negative_prompt_embeds is not None:
+                negative_prompt_embeds = params.negative_prompt_embeds
+                # Move embeddings to device if needed
+                if hasattr(negative_prompt_embeds, 'device') and negative_prompt_embeds.device != self.pipe.device:
+                    negative_prompt_embeds = negative_prompt_embeds.to(self.pipe.device)
+        
+        # Otherwise use compel if available
+        elif hasattr(self.pipe, "compel_proc"):
             prompt_embeds = self.pipe.compel_proc(
                 [params.prompt, "human, humanoid, figurine, face"]
             )
             prompt = None
+        
         control_image = self.canny_torch(
             params.image, params.canny_low_threshold, params.canny_high_threshold
         )
@@ -251,6 +299,7 @@ class Pipeline:
             control_image=control_image,
             prompt=prompt,
             prompt_embeds=prompt_embeds,
+            negative_prompt_embeds=negative_prompt_embeds,
             generator=generator,
             strength=strength,
             num_inference_steps=steps,
