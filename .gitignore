@@ -4,3 +4,7 @@ public/
 *.pem
 *.safetensors
 *.whl   
+
+engines/
+
+IGNORE

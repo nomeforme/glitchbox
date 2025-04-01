@@ -16,6 +16,7 @@ class Args(NamedTuple):
     ssl_certfile: str
     ssl_keyfile: str
     sfast: bool
+    tensorrt: bool = False
     onediff: bool = False
     compel: bool = False
     debug: bool = False
@@ -137,6 +138,12 @@ parser.add_argument(
     action="store_true",
     default=False,
     help="Enable Stable Fast",
+)
+parser.add_argument(
+    "--tensorrt",
+    action="store_true",
+    default=False,
+    help="Enable TensorRT acceleration",
 )
 parser.add_argument(
     "--onediff",
