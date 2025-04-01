@@ -21,6 +21,8 @@ class Args(NamedTuple):
     compel: bool = False
     debug: bool = False
     use_acid_processor: bool = False
+    # Enable prompt travel
+    use_prompt_travel: bool = False
     # Default acid processor settings
     acid_strength: float = 0.4
     acid_coef_noise: float = 0.15
@@ -358,6 +360,14 @@ parser.add_argument(
     action="store_true",
     default=False,
     help="Remove the background from the image feed"
+)
+# Add prompt travel argument
+parser.add_argument(
+    "--use-prompt-travel",
+    dest="use_prompt_travel",
+    action="store_true",
+    default=True,
+    help="Enable Prompt Travel for smooth prompt transitions",
 )
 
 parser.set_defaults(taesd=USE_TAESD)
