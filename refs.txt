@@ -40,3 +40,5 @@ User ↔ FastAPI App (Main WebSocket)
                    Retrieve for Pipeline
                              ↓
                    Generate Final Image
+
+GIT_SSH_COMMAND="ssh -i ~/.ssh/id_GT2" git add .

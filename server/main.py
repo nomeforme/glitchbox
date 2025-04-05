@@ -32,7 +32,7 @@ from modules.prompt_travel.embeddings_service import router as embeddings_router
 from modules.prompt_travel_scheduler import PromptTravelScheduler
 
 # # Import background removal
-# from rembg import remove
+from rembg import remove
 
 import numpy as np
 
@@ -562,8 +562,8 @@ class App:
         return Image.fromarray(acid_img) #pil_image #Image.fromarray(acid_img)
 
     def _apply_background_removal(self, pil_image):
-        return pil_image
-        # return remove(pil_image)
+        #return pil_image
+        return remove(pil_image)
 
 print(f"Device: {device}")
 print(f"torch_dtype: {torch_dtype}")
