@@ -3,6 +3,7 @@ Prompt Travel Scheduler for managed transitions between prompts.
 This module provides scheduling functionality for the prompt travel feature,
 automatically interpolating between source and target prompts.
 """
+import random
 
 class PromptTravelScheduler:
     """
@@ -16,7 +17,8 @@ class PromptTravelScheduler:
                 stabilize_duration=3,
                 oscillate=True,
                 enabled=False,
-                debug=False):
+                debug=False,
+                use_seed_travel=False):
         """
         Initialize the prompt travel scheduler.
         
@@ -28,6 +30,7 @@ class PromptTravelScheduler:
             oscillate (bool): Whether to oscillate between min/max or one-way (default: True)
             enabled (bool): Whether the scheduler is active (default: False)
             debug (bool): Whether to print debug messages (default: False)
+            use_seed_travel (bool): Whether to generate new random seeds (default: False)
         """
         self.min_factor = min_factor
         self.max_factor = max_factor
@@ -36,15 +39,29 @@ class PromptTravelScheduler:
         self.oscillate = oscillate
         self.enabled = enabled
         self.debug = debug
+        self.use_seed_travel = use_seed_travel
         
         # Internal state
         self.factor_value = min_factor
         self.direction = 1  # 1 for increasing, -1 for decreasing
         self.stabilize_counter = 0  # Counter for stabilization pause
+        self.current_seed = random.randint(0, 2**32 - 1)  # Initialize with a random seed
     
     def update(self):
         """
-        Update the factor value for the next iteration.
+        Update both the interpolation factor and seed values.
+        
+        Returns:
+            tuple: (factor_value, seed_value) where factor_value is the current prompt travel factor
+                  and seed_value is the current seed (or None if seed travel is disabled)
+        """
+        factor = self.update_interpolation_factor()
+        seed = self.update_seed()
+        return factor, seed
+    
+    def update_interpolation_factor(self):
+        """
+        Update the interpolation factor value for the next iteration.
         
         Returns:
             float: The current prompt travel factor value
@@ -88,6 +105,22 @@ class PromptTravelScheduler:
             print(f"[PromptTravelScheduler] Factor value: {self.factor_value:.2f}")
             
         return self.factor_value
+    
+    def update_seed(self):
+        """
+        Generate a new random seed if seed travel is enabled.
+        
+        Returns:
+            int or None: A new random seed if seed travel is enabled, None otherwise
+        """
+        if not self.enabled or not self.use_seed_travel:
+            return None
+            
+        # Generate a new random seed
+        self.current_seed = random.randint(0, 2**32 - 1)
+        if self.debug:
+            print(f"[PromptTravelScheduler] New seed: {self.current_seed}")
+        return self.current_seed
         
     def set_enabled(self, enabled):
         """Enable or disable the scheduler"""
@@ -121,10 +154,18 @@ class PromptTravelScheduler:
         if self.debug:
             print(f"[PromptTravelScheduler] Boundaries set to: min={self.min_factor}, max={self.max_factor}")
             
+    def set_seed_travel(self, use_seed_travel):
+        """Enable or disable seed travel"""
+        self.use_seed_travel = use_seed_travel
+        if self.debug:
+            print(f"[PromptTravelScheduler] Seed travel set to: {use_seed_travel}")
+            
     def reset(self):
         """Reset the scheduler to initial state"""
         self.factor_value = self.min_factor
         self.direction = 1
         self.stabilize_counter = 0
+        if self.use_seed_travel:
+            self.current_seed = random.randint(0, 2**32 - 1)
         if self.debug:
             print(f"[PromptTravelScheduler] Reset to initial state: factor={self.factor_value}") 
