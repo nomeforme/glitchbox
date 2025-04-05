@@ -30,6 +30,7 @@ class Args(NamedTuple):
     prompt_travel_factor_increment: float = 0.025
     prompt_travel_stabilize_duration: int = 3
     prompt_travel_oscillate: bool = True
+    use_seed_travel: bool = False
     # Default acid processor settings
     acid_strength: float = 0.4
     acid_coef_noise: float = 0.15
@@ -419,6 +420,15 @@ parser.add_argument(
     action="store_true",
     default=True,
     help="Whether to oscillate between min/max or go one-way",
+)
+
+# Add seed travel argument
+parser.add_argument(
+    "--use-seed-travel",
+    dest="use_seed_travel",
+    action="store_true",
+    default=True,
+    help="Enable Seed Travel with Prompt Travel Scheduler",
 )
 
 parser.set_defaults(taesd=USE_TAESD)

@@ -63,7 +63,8 @@ class App:
                 stabilize_duration=getattr(self.args, 'prompt_travel_stabilize_duration', 3),
                 oscillate=getattr(self.args, 'prompt_travel_oscillate', True),
                 enabled=getattr(self.args, 'use_prompt_travel_scheduler', False),
-                debug=getattr(self.args, 'debug', False)
+                debug=getattr(self.args, 'debug', False),
+                use_seed_travel=getattr(self.args, 'use_seed_travel', False)
             )
         
         # Initialize acid processors
@@ -257,60 +258,8 @@ class App:
                     # Process prompt travel requests if enabled
                     if self.use_prompt_travel:
                         print("[main.py] Processing prompt travel requests")
-                        # NOTE: TEMP- always true. Check if this is a prompt travel request
-                        if True: # getattr(params, 'use_prompt_travel', False):
-                            try:
-                                # Set user_id on params for the pipeline to use
-                                user_id_str = str(user_id)
-                                
-                                # Update prompt travel factor with scheduler if enabled
-                                if hasattr(self, 'prompt_travel_scheduler') and self.prompt_travel_scheduler.enabled:
-                                    # Get the next factor value from the scheduler
-                                    scheduler_factor = self.prompt_travel_scheduler.update()
-                                    # Use the scheduled factor for prompt travel
-                                    setattr(params, 'prompt_travel_factor', scheduler_factor)
-                                    if self.args.debug:
-                                        print(f"[main.py] Using scheduled prompt travel factor: {scheduler_factor:.2f}")
-                                
-                                # Queue the prompt travel request
-                                await embeddings_service.process_prompt_travel(
-                                    user_id=user_id_str,
-                                    prompt=getattr(params, 'prompt', ''),
-                                    target_prompt=getattr(params, 'target_prompt', ''),
-                                    factor=getattr(params, 'prompt_travel_factor', 0.0)
-                                )
-
-                                print(f"[main.py] Prompt factor: {getattr(params, 'prompt_travel_factor')}")
-                                
-                                # Get any available embeddings and attach them to the params
-                                embeddings = await embeddings_service.get_embeddings(user_id_str)
-                                if embeddings:
-                                    prompt_embeds, negative_prompt_embeds = embeddings
-                                    print(f"[main.py] Got embeddings - prompt shape: {prompt_embeds.shape}")
-                                    
-                                    # Attach embeddings to params - using setattr for SimpleNamespace compatibility
-                                    setattr(params, 'prompt_embeds', prompt_embeds)
-                                    setattr(params, 'negative_prompt_embeds', negative_prompt_embeds)
-                                    # print(f"[main.py] Attached embeddings to params: {hasattr(params, 'prompt_embeds')}")
-                                else:
-                                    print(f"[main.py] No embeddings available for user {user_id_str}")
-                            except Exception as e:
-                                print(f"Error during prompt travel: {e}")
-                                # Continue without prompt travel embeddings
-                        
-                    # Apply test oscillations if enabled
-                    if self.use_acid_processor:
-                        # Update zoom with oscillator if enabled
-                        if self.zoom_oscillator.enabled:
-                            zoom_value = self.zoom_oscillator.update()
-                            self.acid_processor.set_zoom_factor(zoom_value)
-                        
-                        # Update shift with oscillator if enabled
-                        if self.shift_oscillator.enabled:
-                            x_shift, y_shift = self.shift_oscillator.update()
-                            self.acid_processor.set_x_shift(x_shift)
-                            self.acid_processor.set_y_shift(y_shift)
-
+                        # We'll process prompt travel after params is defined in the next_frame section
+                    
                     data = await self.conn_manager.receive_json(user_id)
 
                     if data["status"] == "next_frame":
@@ -341,6 +290,55 @@ class App:
                         
                         params = pipeline.InputParams(**params)
                         params = SimpleNamespace(**params.dict())
+                        
+                        # Process prompt travel requests if enabled
+                        if self.use_prompt_travel and getattr(params, 'use_prompt_travel', False):
+                            try:
+                                # Set user_id on params for the pipeline to use
+                                user_id_str = str(user_id)
+                                
+                                # Update prompt travel factor with scheduler if enabled
+                                if hasattr(self, 'prompt_travel_scheduler') and self.prompt_travel_scheduler.enabled:
+                                    # Get the next factor value and seed from the scheduler
+                                    scheduler_factor, scheduler_seed = self.prompt_travel_scheduler.update()
+                                    # Use the scheduled factor for prompt travel
+                                    setattr(params, 'prompt_travel_factor', scheduler_factor)
+                                    
+                                    # Use the scheduled seed if available
+                                    if scheduler_seed is not None:
+                                        setattr(params, 'seed', scheduler_seed)
+                                        if self.args.debug:
+                                            print(f"[main.py] Using scheduled seed: {scheduler_seed}")
+                                    
+                                    if self.args.debug:
+                                        print(f"[main.py] Using scheduled prompt travel factor: {scheduler_factor:.2f}")
+                                
+                                # Queue the prompt travel request
+                                await embeddings_service.process_prompt_travel(
+                                    user_id=user_id_str,
+                                    prompt=getattr(params, 'prompt', ''),
+                                    target_prompt=getattr(params, 'target_prompt', ''),
+                                    factor=getattr(params, 'prompt_travel_factor', 0.0)
+                                )
+
+                                print(f"[main.py] Prompt factor: {getattr(params, 'prompt_travel_factor')}")
+                                
+                                # Get any available embeddings and attach them to the params
+                                embeddings = await embeddings_service.get_embeddings(user_id_str)
+                                if embeddings:
+                                    prompt_embeds, negative_prompt_embeds = embeddings
+                                    print(f"[main.py] Got embeddings - prompt shape: {prompt_embeds.shape}")
+                                    
+                                    # Attach embeddings to params - using setattr for SimpleNamespace compatibility
+                                    setattr(params, 'prompt_embeds', prompt_embeds)
+                                    setattr(params, 'negative_prompt_embeds', negative_prompt_embeds)
+                                    # print(f"[main.py] Attached embeddings to params: {hasattr(params, 'prompt_embeds')}")
+                                else:
+                                    print(f"[main.py] No embeddings available for user {user_id_str}")
+                            except Exception as e:
+                                print(f"Error during prompt travel: {e}")
+                                # Continue without prompt travel embeddings
+                        
                         if info.input_mode == "image":
                             image_data = await self.conn_manager.receive_bytes(user_id)
 
@@ -536,6 +534,9 @@ class App:
             max_factor = settings.get("prompt_travel_max_factor")
             if min_factor is not None or max_factor is not None:
                 self.prompt_travel_scheduler.set_boundaries(min_factor, max_factor)
+            # Enable/disable seed travel
+            if "use_seed_travel" in settings:
+                self.prompt_travel_scheduler.set_seed_travel(settings["use_seed_travel"])
     
     def _apply_acid_processing(self, pil_image):
         """Process image with acid processor and return processed PIL image"""
