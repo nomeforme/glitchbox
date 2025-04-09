@@ -63,8 +63,7 @@ class App:
                 stabilize_duration=getattr(self.args, 'prompt_travel_stabilize_duration', 3),
                 oscillate=getattr(self.args, 'prompt_travel_oscillate', True),
                 enabled=getattr(self.args, 'use_prompt_travel_scheduler', False),
-                debug=getattr(self.args, 'debug', False),
-                use_seed_travel=getattr(self.args, 'use_seed_travel', False)
+                debug=getattr(self.args, 'debug', False)
             )
         
         # Initialize acid processors
@@ -534,9 +533,6 @@ class App:
             max_factor = settings.get("prompt_travel_max_factor")
             if min_factor is not None or max_factor is not None:
                 self.prompt_travel_scheduler.set_boundaries(min_factor, max_factor)
-            # Enable/disable seed travel
-            if "use_seed_travel" in settings:
-                self.prompt_travel_scheduler.set_seed_travel(settings["use_seed_travel"])
     
     def _apply_acid_processing(self, pil_image):
         """Process image with acid processor and return processed PIL image"""

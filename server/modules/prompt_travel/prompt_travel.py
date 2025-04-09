@@ -315,4 +315,78 @@ class PromptTravel:
             
             result.append((interpolated_embeds, neg_embeds))
             
-        return result 
+        return result
+
+    def slerp(self, x0: torch.Tensor, x1: torch.Tensor, factor: float) -> torch.Tensor:
+        """
+        Perform spherical linear interpolation (SLERP) between two latent vectors.
+        
+        Args:
+            x0: Source latent tensor
+            x1: Target latent tensor
+            factor: Interpolation factor (0.0 = source, 1.0 = target)
+            
+        Returns:
+            Interpolated latent tensor
+        """
+        # Ensure factor is within [0, 1]
+        factor = max(0.0, min(1.0, factor))
+        
+        # If tensors are identical or factor is at extremes, return early
+        if torch.allclose(x0, x1) or factor == 0.0:
+            return x0
+        if factor == 1.0:
+            return x1
+        
+        # Normalize the vectors
+        x0_norm = x0 / torch.norm(x0, dim=-1, keepdim=True)
+        x1_norm = x1 / torch.norm(x1, dim=-1, keepdim=True)
+        
+        # Compute the cosine of the angle between the vectors
+        dot_product = torch.sum(x0_norm * x1_norm, dim=-1, keepdim=True).clamp(-1, 1)
+        omega = torch.acos(dot_product)
+        
+        # Handle edge cases where vectors are nearly parallel
+        if torch.allclose(omega, torch.zeros_like(omega)):
+            return x0 * (1.0 - factor) + x1 * factor
+        
+        # Perform SLERP
+        sin_omega = torch.sin(omega)
+        x0_factor = torch.sin((1.0 - factor) * omega) / sin_omega
+        x1_factor = torch.sin(factor * omega) / sin_omega
+        
+        return x0 * x0_factor + x1 * x1_factor
+
+    def interpolate_latents(
+        self,
+        latents_from: torch.Tensor,
+        latents_to: torch.Tensor,
+        factor: float,
+        interpolation_method: str = "slerp"
+    ) -> torch.Tensor:
+        """
+        Interpolate between two latent vectors.
+        
+        Args:
+            latents_from: Source latent tensor
+            latents_to: Target latent tensor
+            factor: Interpolation factor (0.0 = source, 1.0 = target)
+            interpolation_method: Method of interpolation ('linear' or 'slerp')
+            
+        Returns:
+            Interpolated latent tensor
+        """
+        if interpolation_method == "slerp":
+            # Reshape latents to 2D for SLERP
+            original_shape = latents_from.shape
+            latents_from_2d = latents_from.reshape(latents_from.shape[0], -1)
+            latents_to_2d = latents_to.reshape(latents_to.shape[0], -1)
+            
+            # Apply SLERP
+            interpolated = self.slerp(latents_from_2d, latents_to_2d, factor)
+            
+            # Restore original shape
+            return interpolated.reshape(original_shape)
+        else:
+            # Linear interpolation
+            return self.interpolate_embeddings(latents_from, latents_to, factor) 
