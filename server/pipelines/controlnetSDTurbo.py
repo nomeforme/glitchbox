@@ -78,7 +78,6 @@ class Pipeline:
             title="Use Prompt Travel",
             field="checkbox",
             id="use_prompt_travel",
-            # hide=True,
         )
         prompt_travel_factor: float = Field(
             0.5,
@@ -88,6 +87,31 @@ class Pipeline:
             title="Prompt Travel Factor",
             field="range",
             id="prompt_travel_factor",
+            hide=True,
+        )
+        use_latent_travel: bool = Field(
+            True,
+            title="Use Latent Travel",
+            field="checkbox",
+            id="use_latent_travel",
+            hide=True,
+        )
+        latent_travel_method: str = Field(
+            "slerp",
+            title="Latent Travel Method",
+            field="select",
+            id="latent_travel_method",
+            options=["slerp", "linear"],
+            hide=True,
+        )
+        latent_travel_factor: float = Field(
+            0.5,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Latent Travel Factor",
+            field="range",
+            id="latent_travel_factor",
             hide=True,
         )
         seed: int = Field(
@@ -255,6 +279,13 @@ class Pipeline:
                 control_image=[Image.new("RGB", (768, 768))],
             )
 
+        # Initialize PromptTravel for both text and latent interpolation
+        from modules.prompt_travel.prompt_travel import PromptTravel
+        self.pipe.prompt_travel = PromptTravel(
+            text_encoder=self.pipe.text_encoder,
+            tokenizer=self.pipe.tokenizer,
+        )
+
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
         generator = torch.manual_seed(params.seed)
         prompt = params.prompt
@@ -266,21 +297,15 @@ class Pipeline:
 
         if has_prompt_embeds:
             prompt_embeds = params.prompt_embeds
-            # print(f"[controlnetSDTurbo.py] predict - prompt embeds shape: {prompt_embeds.shape}")
-            # Move embeddings to device if needed
             if hasattr(prompt_embeds, 'device') and prompt_embeds.device != self.pipe.device:
                 prompt_embeds = prompt_embeds.to(self.pipe.device)
-            # When using pre-computed embeddings, set prompt to None
             prompt = None
             
-            # Use provided negative prompt embeddings if available
             if hasattr(params, "negative_prompt_embeds") and params.negative_prompt_embeds is not None:
                 negative_prompt_embeds = params.negative_prompt_embeds
-                # Move embeddings to device if needed
                 if hasattr(negative_prompt_embeds, 'device') and negative_prompt_embeds.device != self.pipe.device:
                     negative_prompt_embeds = negative_prompt_embeds.to(self.pipe.device)
         
-        # Otherwise use compel if available
         elif hasattr(self.pipe, "compel_proc"):
             prompt_embeds = self.pipe.compel_proc(
                 [params.prompt, "human, humanoid, figurine, face"]
@@ -290,10 +315,47 @@ class Pipeline:
         control_image = self.canny_torch(
             params.image, params.canny_low_threshold, params.canny_high_threshold
         )
+
+        # Generate latents for source and target if latent travel is enabled
+        latents = None
+        if getattr(params, "use_latent_travel", False):
+            # Generate source latents
+            source_latents = self.pipe.prepare_latents(
+                params.image,
+                self.pipe.scheduler.timesteps[0],
+                1,
+                1,
+                prompt_embeds.dtype,
+                self.pipe.device,
+                generator,
+            )
+            
+            # Generate target latents with a different seed
+            target_generator = torch.Generator(device=self.pipe.device).manual_seed(params.seed + 1)
+            target_latents = self.pipe.prepare_latents(
+                params.image,
+                self.pipe.scheduler.timesteps[0],
+                1,
+                1,
+                prompt_embeds.dtype,
+                self.pipe.device,
+                target_generator,
+            )
+            
+            # Interpolate between latents using the specified method
+            if hasattr(self.pipe, "prompt_travel") and self.pipe.prompt_travel is not None:
+                latents = self.pipe.prompt_travel.interpolate_latents(
+                    source_latents,
+                    target_latents,
+                    getattr(params, "latent_travel_factor", 0.5),
+                    getattr(params, "latent_travel_method", "slerp")
+                )
+
         steps = params.steps
         strength = params.strength
         if int(steps * strength) < 1:
             steps = math.ceil(1 / max(0.10, strength))
+
         results = self.pipe(
             image=params.image,
             control_image=control_image,
@@ -310,6 +372,7 @@ class Pipeline:
             controlnet_conditioning_scale=params.controlnet_scale,
             control_guidance_start=params.controlnet_start,
             control_guidance_end=params.controlnet_end,
+            latents=latents,
         )
         result_image = results.images[0]
         if params.debug_canny:
