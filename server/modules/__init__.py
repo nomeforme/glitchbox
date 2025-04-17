@@ -1,6 +1,8 @@
 """
-Module initialization file
+Module initialization file.
+This file imports and exposes the main components of the modules package.
 """
 
-# Import the prompt travel scheduler
-from .prompt_travel_scheduler import PromptTravelScheduler 
+from .prompt_scheduler import PromptScheduler, PromptTravelScheduler
+
+__all__ = ['PromptScheduler', 'PromptTravelScheduler'] 

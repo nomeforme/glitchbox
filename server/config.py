@@ -32,6 +32,11 @@ class Args(NamedTuple):
     prompt_travel_stabilize_duration: int = 3
     prompt_travel_oscillate: bool = True
     use_seed_travel: bool = False
+    # Prompt scheduler settings
+    use_prompt_scheduler: bool = False
+    prompts_dir: str = "prompts"
+    prompt_file_pattern: str = "*.txt"
+    loop_prompts: bool = True
     # Default acid processor settings
     acid_strength: float = 0.4
     acid_coef_noise: float = 0.15
@@ -427,7 +432,7 @@ parser.add_argument(
     dest="prompt_travel_oscillate",
     action="store_true",
     default=True,
-    help="Whether to oscillate between min/max or go one-way",
+    help="Oscillate between min and max factor",
 )
 
 # Add seed travel argument
@@ -435,8 +440,44 @@ parser.add_argument(
     "--use-seed-travel",
     dest="use_seed_travel",
     action="store_true",
+    default=False,
+    help="Use seed travel",
+)
+
+# Prompt scheduler settings
+parser.add_argument(
+    "--use-prompt-scheduler",
+    dest="use_prompt_scheduler",
+    action="store_true",
     default=True,
-    help="Enable Seed Travel with Prompt Travel Scheduler",
+    help="Use prompt scheduler",
+)
+parser.add_argument(
+    "--prompts-dir",
+    dest="prompts_dir",
+    type=str,
+    default="prompts",
+    help="Directory containing prompt files",
+)
+parser.add_argument(
+    "--prompt-file-pattern",
+    dest="prompt_file_pattern",
+    type=str,
+    default="*.txt",
+    help="Pattern to match prompt files",
+)
+parser.add_argument(
+    "--loop-prompts",
+    dest="loop_prompts",
+    action="store_true",
+    default=True,
+    help="Loop back to the beginning when reaching the end of prompts",
+)
+parser.add_argument(
+    "--no-loop-prompts",
+    dest="loop_prompts",
+    action="store_false",
+    help="Don't loop back to the beginning when reaching the end of prompts",
 )
 
 parser.set_defaults(taesd=USE_TAESD)
