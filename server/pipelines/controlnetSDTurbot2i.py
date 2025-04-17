@@ -51,9 +51,12 @@ lora_models = {
     "FKATwigs_A1-000038": "server/loras/FKATwigs_A1-000038.safetensors"
 }
 
-# Default LoRA to use
-default_lora = "FKATwigs_A1-000038"
-# default_lora = "pbarbarant/sd-sonio"
+# Default LoRAs to use - can be a single LoRA or a list of LoRAs to fuse
+default_loras = ["FKATwigs_A1-000038"]
+# Default adapter weights for each LoRA (in the same order as default_loras)
+default_adapter_weights = [1.0]
+# default_loras = ["pbarbarant/sd-sonio"]
+# default_loras = ["FKATwigs_A1-000038", "pbarbarant/sd-sonio"]
 
 # Function to read prompt prefix from .txt files
 def get_prompt_prefix():
@@ -162,11 +165,18 @@ class Pipeline:
             hide=True,
         )
         lora_models: List[str] = Field(
-            [default_lora],
+            [default_loras[0]] if default_loras else [],
             title="LoRA Models",
             field="multiselect",
             id="lora_models",
             options=list(lora_models.keys()),
+        )
+        adapter_weights: List[float] = Field(
+            default_adapter_weights,
+            title="LoRA Adapter Weights",
+            field="multiselect",
+            id="adapter_weights",
+            hide=True,
         )
         fuse_loras: bool = Field(
             False,
@@ -362,15 +372,15 @@ class Pipeline:
         self.fuse_loras = False
         self.lora_scale = 1.0
         self.lora_weights_loaded = False
+        self.current_adapter_weights = []
         
-        # Load default LoRA during initialization
-        print(f"Loading default LoRA: {default_lora}")
-        self.pipe.load_lora_weights(lora_models[default_lora], adapter_name="default_lora")
-        self.pipe.set_adapters(adapter_names=["default_lora"])
-        self.current_lora_models = [default_lora]
-        self.lora_weights_loaded = True
+        # Load default LoRA(s) during initialization
+        print(f"Loading default LoRA(s): {default_loras}")
+        # If there's only one LoRA, don't fuse. If there are multiple, fuse them automatically
+        should_fuse = len(default_loras) > 1
+        self.load_loras(default_loras, fuse_loras=should_fuse, lora_scale=1.0, adapter_weights=default_adapter_weights)
 
-    def load_loras(self, lora_models_list: List[str], fuse_loras: bool = False, lora_scale: float = 1.0) -> None:
+    def load_loras(self, lora_models_list: List[str], fuse_loras: bool = False, lora_scale: float = 1.0, adapter_weights: Optional[List[float]] = None) -> None:
         """
         Load or update LoRA models for the pipeline.
         
@@ -378,6 +388,7 @@ class Pipeline:
             lora_models_list: List of LoRA model names to load
             fuse_loras: Whether to fuse multiple LoRAs
             lora_scale: Scale factor for LoRA weights
+            adapter_weights: Optional list of weights for each LoRA adapter
         """
         # Filter out "None" from the selected LoRAs
         selected_loras = [lora for lora in lora_models_list if lora != "None"]
@@ -390,10 +401,21 @@ class Pipeline:
             self.current_lora_models = []
             self.fuse_loras = False
             self.lora_scale = 1.0
+            self.current_adapter_weights = []
             return
         
+        # Ensure adapter_weights is a list of the same length as selected_loras
+        if adapter_weights is None:
+            adapter_weights = [1.0] * len(selected_loras)
+        elif len(adapter_weights) < len(selected_loras):
+            # Pad with 1.0 if not enough weights provided
+            adapter_weights = adapter_weights + [1.0] * (len(selected_loras) - len(adapter_weights))
+        elif len(adapter_weights) > len(selected_loras):
+            # Truncate if too many weights provided
+            adapter_weights = adapter_weights[:len(selected_loras)]
+        
         # Check if we need to reload LoRAs
-        if (selected_loras != self.current_lora_models) or (fuse_loras != self.fuse_loras) or (lora_scale != self.lora_scale):
+        if (selected_loras != self.current_lora_models) or (fuse_loras != self.fuse_loras) or (lora_scale != self.lora_scale) or (adapter_weights != self.current_adapter_weights):
             # Unload any previously loaded LoRAs
             if self.lora_weights_loaded:
                 self.pipe.unload_lora_weights()
@@ -409,19 +431,24 @@ class Pipeline:
                 # Fuse multiple LoRAs
                 print(f"Fusing LoRAs: {selected_loras} with scale {lora_scale}")
                 adapter_names = [f"lora_{i}" for i in range(len(selected_loras))]
+                # First set the adapters with their respective weights
+                self.pipe.set_adapters(adapter_names=adapter_names, adapter_weights=adapter_weights)
+                # Then fuse them with the global scale
                 self.pipe.fuse_lora(adapter_names=adapter_names, lora_scale=lora_scale)
                 # Unload the individual LoRAs after fusing
                 self.pipe.unload_lora_weights()
                 self.lora_weights_loaded = False
             else:
-                # Set the first LoRA as active
-                self.pipe.set_adapters(adapter_names=[f"lora_0"])
+                # Set the LoRAs as active with their respective weights
+                adapter_names = [f"lora_{i}" for i in range(len(selected_loras))]
+                self.pipe.set_adapters(adapter_names=adapter_names, adapter_weights=adapter_weights)
                 self.lora_weights_loaded = True
             
             # Update current LoRA state
             self.current_lora_models = selected_loras
             self.fuse_loras = fuse_loras
             self.lora_scale = lora_scale
+            self.current_adapter_weights = adapter_weights
 
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
         generator = torch.manual_seed(params.seed)
@@ -436,7 +463,7 @@ class Pipeline:
         prompt_embeds = None
 
         # Update LoRA models if needed
-        self.load_loras(params.lora_models, params.fuse_loras, params.lora_scale)
+        self.load_loras(params.lora_models, params.fuse_loras, params.lora_scale, params.adapter_weights)
 
         control_image = self.canny_torch(
             params.image, params.canny_low_threshold, params.canny_high_threshold

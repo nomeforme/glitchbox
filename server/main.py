@@ -29,7 +29,7 @@ from utils.test_oscillators import ZoomOscillator, ShiftOscillator
 # Import the embeddings service
 from modules.prompt_travel.embeddings_service import router as embeddings_router, embeddings_service, start_background_tasks
 # Import the prompt travel scheduler
-from modules.prompt_travel_scheduler import PromptTravelScheduler
+from modules.prompt_scheduler import PromptTravelScheduler
 # Import background removal processor
 from modules.bg_removal import get_processor
 
@@ -65,7 +65,11 @@ class App:
                 stabilize_duration=getattr(self.args, 'prompt_travel_stabilize_duration', 3),
                 oscillate=getattr(self.args, 'prompt_travel_oscillate', True),
                 enabled=getattr(self.args, 'use_prompt_travel_scheduler', False),
-                debug=getattr(self.args, 'debug', False)
+                debug=getattr(self.args, 'debug', False),
+                use_prompt_scheduler=getattr(self.args, 'use_prompt_scheduler', False),
+                prompts_dir=getattr(self.args, 'prompts_dir', "prompts"),
+                prompt_file_pattern=getattr(self.args, 'prompt_file_pattern', "*.txt"),
+                loop_prompts=getattr(self.args, 'loop_prompts', True)
             )
         
         # Initialize acid processors
@@ -323,6 +327,19 @@ class App:
                                         setattr(params, 'target_seed', next_seed)
                                         if self.args.debug:
                                             print(f"[main.py] Using scheduled seeds: current={current_seed}, next={next_seed}")
+
+                                    print(f"[main.py] Prompt scheduler enabled: {self.prompt_travel_scheduler.use_prompt_scheduler}")
+                                    
+                                    # Use scheduled prompts if prompt scheduler is enabled
+                                    if self.prompt_travel_scheduler.use_prompt_scheduler:
+                                        current_prompt, next_prompt = self.prompt_travel_scheduler.get_prompts()
+                                        if current_prompt is not None and next_prompt is not None:
+                                            setattr(params, 'prompt', current_prompt)
+                                            setattr(params, 'target_prompt', next_prompt)
+                                            if self.args.debug:
+                                                print(f"[main.py] Using scheduled prompts:")
+                                                print(f"source: {current_prompt}")
+                                                print(f"target: {next_prompt}")
                                     
                                     if self.args.debug:
                                         print(f"[main.py] Using scheduled prompt travel factor: {scheduler_factor:.2f}")
@@ -548,6 +565,16 @@ class App:
             max_factor = settings.get("prompt_travel_max_factor")
             if min_factor is not None or max_factor is not None:
                 self.prompt_travel_scheduler.set_boundaries(min_factor, max_factor)
+            # Enable/disable prompt scheduler
+            if "use_prompt_scheduler" in settings:
+                self.prompt_travel_scheduler.set_prompt_scheduler_enabled(settings["use_prompt_scheduler"])
+            # Set loop prompts
+            if "loop_prompts" in settings:
+                if hasattr(self.prompt_travel_scheduler, 'prompt_scheduler') and self.prompt_travel_scheduler.prompt_scheduler is not None:
+                    self.prompt_travel_scheduler.prompt_scheduler.set_loop_prompts(settings["loop_prompts"])
+            # Reload prompts
+            if "reload_prompts" in settings and settings["reload_prompts"]:
+                self.prompt_travel_scheduler.reload_prompts()
     
     def _apply_acid_processing(self, pil_image):
         """Process image with acid processor and return processed PIL image"""
