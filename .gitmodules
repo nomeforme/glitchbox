@@ -1,0 +1,4 @@
+[submodule "server/StreamDiffusion"]
+	path = server/StreamDiffusion
+	url = git@github.com:nova-florealis/StreamDiffusion.git
+	branch = test/controlnet

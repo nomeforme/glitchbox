@@ -30,9 +30,8 @@ from utils.test_oscillators import ZoomOscillator, ShiftOscillator
 from modules.prompt_travel.embeddings_service import router as embeddings_router, embeddings_service, start_background_tasks
 # Import the prompt travel scheduler
 from modules.prompt_travel_scheduler import PromptTravelScheduler
-
-# # Import background removal
-from rembg import remove
+# Import background removal processor
+from modules.bg_removal import get_processor
 
 import numpy as np
 
@@ -51,8 +50,11 @@ class App:
         
         # Initialize prompt travel service
         self.use_prompt_travel = getattr(self.args, 'use_prompt_travel', False)
-        if self.use_prompt_travel:
-            print("[main.py] Prompt travel service will be initialized on startup")
+        self.use_latent_travel = getattr(self.args, 'use_latent_travel', False)
+        if self.use_prompt_travel or self.use_latent_travel:
+            print("[main.py] Travel service will be initialized on startup")
+            print(f"[main.py] Use prompt travel: {self.use_prompt_travel}")
+            print(f"[main.py] Use latent travel: {self.use_latent_travel}")
             # The actual initialization happens in the startup event
             
             # Initialize prompt travel scheduler
@@ -165,6 +167,12 @@ class App:
                 debug=getattr(self.args, 'debug', False)
             )
         self.use_background_removal = getattr(self.args, 'use_background_removal', True)
+        
+        # Initialize background removal processor
+        if self.use_background_removal:
+            self.bg_removal_processor = get_processor(device=device.type)
+            print("[main.py] Background removal processor initialized")
+        
         self.init_app()
 
     def init_app(self):
@@ -300,14 +308,21 @@ class App:
                                 if hasattr(self, 'prompt_travel_scheduler') and self.prompt_travel_scheduler.enabled:
                                     # Get the next factor value and seed from the scheduler
                                     scheduler_factor, scheduler_seed = self.prompt_travel_scheduler.update()
+
+                                    print(f"[main.py] Using scheduled prompt travel factor: {scheduler_factor:.2f}")
+                                    print(f"[main.py] Using scheduled seed: {scheduler_seed}")
                                     # Use the scheduled factor for prompt travel
                                     setattr(params, 'prompt_travel_factor', scheduler_factor)
-                                    
-                                    # Use the scheduled seed if available
+                                    setattr(params, 'latent_travel_factor', scheduler_factor)
+
+                                    # Use the scheduled seeds if available
                                     if scheduler_seed is not None:
-                                        setattr(params, 'seed', scheduler_seed)
+                                        # Get both current and next seeds for smooth transition
+                                        current_seed, next_seed = self.prompt_travel_scheduler.get_seeds()
+                                        setattr(params, 'seed', current_seed)
+                                        setattr(params, 'target_seed', next_seed)
                                         if self.args.debug:
-                                            print(f"[main.py] Using scheduled seed: {scheduler_seed}")
+                                            print(f"[main.py] Using scheduled seeds: current={current_seed}, next={next_seed}")
                                     
                                     if self.args.debug:
                                         print(f"[main.py] Using scheduled prompt travel factor: {scheduler_factor:.2f}")
@@ -559,8 +574,19 @@ class App:
         return Image.fromarray(acid_img) #pil_image #Image.fromarray(acid_img)
 
     def _apply_background_removal(self, pil_image):
-        #return pil_image
-        return remove(pil_image)
+        """
+        Apply background removal to a PIL image using MODNet.
+        
+        Args:
+            pil_image (PIL.Image): Input image
+            
+        Returns:
+            PIL.Image: Image with background removed
+        """
+        if not self.use_background_removal:
+            return pil_image
+            
+        return self.bg_removal_processor.process_image(pil_image)
 
 print(f"Device: {device}")
 print(f"torch_dtype: {torch_dtype}")

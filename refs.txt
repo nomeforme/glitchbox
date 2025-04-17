@@ -42,3 +42,6 @@ User ↔ FastAPI App (Main WebSocket)
                    Generate Final Image
 
 GIT_SSH_COMMAND="ssh -i ~/.ssh/id_GT2" git add .
+
+echo "pinentry-program /usr/bin/pinentry-curses" > ~/.gnupg/gpg-agent.conf && gpgconf --kill gpg-agent
+export GPG_TTY=$(tty) && echo "export GPG_TTY=\$(tty)" >> ~/.bashrc
