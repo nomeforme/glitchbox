@@ -13,3 +13,6 @@ IGNORE
 server/prompts/*.txt
 server/loras/*
 server/modules/bg_removal/pretrained/*
+
+# Ignore log files
+*.log
