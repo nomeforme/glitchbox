@@ -2,6 +2,7 @@ import torch
 from typing import List, Optional, Tuple, Union, Dict, Any
 import numpy as np
 from transformers import CLIPTextModel, CLIPTokenizer
+from diffusers.utils.torch_utils import is_compiled_module, is_torch_version, randn_tensor
 
 
 class PromptTravel:
@@ -356,6 +357,44 @@ class PromptTravel:
         x1_factor = torch.sin(factor * omega) / sin_omega
         
         return x0 * x0_factor + x1 * x1_factor
+    
+    def prepare_latents(
+        self,
+        batch_size,
+        num_channels_latents,
+        vae_scale_factor,
+        scheduler,
+        height,
+        width,
+        dtype,
+        device,
+        generator,
+        latents=None,
+        latent_blend_factor=0.98,
+    ):
+        shape = (
+            batch_size,
+            num_channels_latents,
+            int(height) // vae_scale_factor,
+            int(width) // vae_scale_factor,
+        )
+        if isinstance(generator, list) and len(generator) != batch_size:
+            raise ValueError(
+                f"You have passed a list of generators of length {len(generator)}, but requested an effective batch"
+                f" size of {batch_size}. Make sure the batch size matches the length of the generators."
+            )
+
+        if latents is None:
+            latents = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
+        else:
+            # latents = latents.to(device)
+            noise = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
+            latents = latent_blend_factor * noise + (1 - latent_blend_factor) * latents
+
+
+        # scale the initial noise by the standard deviation required by the scheduler
+        latents = latents * scheduler.init_noise_sigma
+        return latents
 
     def interpolate_latents(
         self,

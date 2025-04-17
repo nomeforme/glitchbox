@@ -23,6 +23,7 @@ class Args(NamedTuple):
     use_acid_processor: bool = False
     # Enable prompt travel
     use_prompt_travel: bool = False
+    use_latent_travel: bool = False
     # Prompt travel scheduler settings
     use_prompt_travel_scheduler: bool = False
     prompt_travel_min_factor: float = 0.0
@@ -366,7 +367,7 @@ parser.add_argument(
     "--use-backround-removal",
     dest="use_background_removal",
     action="store_true",
-    default=False,
+    default=True,
     help="Remove the background from the image feed"
 )
 # Add prompt travel argument
@@ -377,7 +378,14 @@ parser.add_argument(
     default=True,
     help="Enable Prompt Travel",
 )
-
+# Add latent travel argument
+parser.add_argument(
+    "--use-latent-travel",
+    dest="use_latent_travel",
+    action="store_true",
+    default=True,
+    help="Enable Latent Travel",
+)
 # Add prompt travel scheduler arguments
 parser.add_argument(
     "--use-prompt-travel-scheduler",

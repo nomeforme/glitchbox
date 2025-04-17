@@ -8,3 +8,8 @@ public/
 engines/
 
 IGNORE
+
+# Ignore prompt prefix files
+server/prompts/*.txt
+server/loras/*
+server/modules/bg_removal/pretrained/*

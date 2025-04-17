@@ -14,6 +14,7 @@ from config import Args
 from pydantic import BaseModel, Field
 from PIL import Image
 import math
+import numpy as np
 
 
 base_model = "stabilityai/sd-turbo"
@@ -21,6 +22,8 @@ taesd_model = "madebyollin/taesd"
 
 default_prompt = "close-up photography of old man standing in the rain at night, in a street lit by lamps, leica 35mm summilux"
 default_negative_prompt = "blurry, low quality, render, 3D, oversaturated"
+default_target_prompt = "a blue dog"
+
 page_content = """
 <h1 class="text-3xl font-bold">Real-Time SD-Turbo</h1>
 <h3 class="text-xl font-bold">Image-to-Image</h3>
@@ -67,6 +70,54 @@ class Pipeline:
             title="Negative Prompt",
             field="textarea",
             id="negative_prompt",
+            hide=True,
+        )
+        target_prompt: str = Field(
+            default_target_prompt,
+            title="Target Prompt",
+            field="textarea",
+            id="target_prompt",
+            hide=True,
+        )
+        use_prompt_travel: bool = Field(
+            True,
+            title="Use Prompt Travel",
+            field="checkbox",
+            id="use_prompt_travel",
+        )
+        prompt_travel_factor: float = Field(
+            0.5,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Prompt Travel Factor",
+            field="range",
+            id="prompt_travel_factor",
+            hide=True,
+        )
+        use_latent_travel: bool = Field(
+            True,
+            title="Use Latent Travel",
+            field="checkbox",
+            id="use_latent_travel",
+            hide=True,
+        )
+        latent_travel_method: str = Field(
+            "slerp",
+            title="Latent Travel Method",
+            field="select",
+            id="latent_travel_method",
+            options=["slerp", "linear"],
+            hide=True,
+        )
+        latent_travel_factor: float = Field(
+            0.5,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Latent Travel Factor",
+            field="range",
+            id="latent_travel_factor",
             hide=True,
         )
         seed: int = Field(
@@ -155,8 +206,17 @@ class Pipeline:
                 truncate_long_prompts=True,
             )
 
+        # Initialize PromptTravel for both text and latent interpolation
+        from modules.prompt_travel.prompt_travel import PromptTravel
+        self.pipe.prompt_travel = PromptTravel(
+            text_encoder=self.pipe.text_encoder,
+            tokenizer=self.pipe.tokenizer,
+        )
+
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
-        generator = torch.manual_seed(params.seed)
+        generator = torch.Generator(device=self.pipe.device).manual_seed(params.seed)
+        target_generator = torch.Generator(device=self.pipe.device).manual_seed(params.seed + 1)
+
         steps = params.steps
         strength = params.strength
         if int(steps * strength) < 1:
@@ -164,11 +224,115 @@ class Pipeline:
 
         prompt = params.prompt
         prompt_embeds = None
-        if hasattr(self.pipe, "compel_proc"):
+        negative_prompt_embeds = None
+
+        # Use provided prompt embeddings if available - with safer attribute check
+        has_prompt_embeds = hasattr(params, "prompt_embeds") and params.prompt_embeds is not None
+
+        if has_prompt_embeds:
+            prompt_embeds = params.prompt_embeds
+            if hasattr(prompt_embeds, 'device') and prompt_embeds.device != self.pipe.device:
+                prompt_embeds = prompt_embeds.to(self.pipe.device)
+            prompt = None
+            
+            if hasattr(params, "negative_prompt_embeds") and params.negative_prompt_embeds is not None:
+                negative_prompt_embeds = params.negative_prompt_embeds
+                if hasattr(negative_prompt_embeds, 'device') and negative_prompt_embeds.device != self.pipe.device:
+                    negative_prompt_embeds = negative_prompt_embeds.to(self.pipe.device)
+        
+        elif hasattr(self.pipe, "compel_proc"):
             prompt_embeds = self.pipe.compel_proc(
-                [params.prompt, params.negative_prompt]
+                [params.prompt, "human, humanoid, figurine, face"]
             )
             prompt = None
+
+        # Generate latents for source and target if latent travel is enabled
+        latents = None
+        if getattr(params, "use_latent_travel", False):
+            # Convert PIL Image to tensor if needed
+            if isinstance(params.image, Image.Image):
+                # Convert PIL Image to tensor
+                image_tensor = torch.from_numpy(np.array(params.image)).permute(2, 0, 1).unsqueeze(0).to(
+                    device=self.pipe.device, 
+                    dtype=self.pipe.dtype
+                )
+            else:
+                image_tensor = params.image
+                
+            # Preprocess the image using the pipeline's image processor
+            processed_image = self.pipe.image_processor.preprocess(
+                image_tensor, 
+                height=params.height, 
+                width=params.width
+            ).to(dtype=self.pipe.dtype)
+                
+            # Generate source latents
+            source_latents = self.pipe.prompt_travel.prepare_latents(
+                # processed_image,
+                # self.pipe.scheduler.timesteps[:1],
+                batch_size=1,
+                # num_images_per_prompt=1,
+                num_channels_latents=self.pipe.unet.config.in_channels,
+                vae_scale_factor=self.pipe.vae_scale_factor,
+                scheduler=self.pipe.scheduler,
+                height=params.height,
+                width=params.width,
+                dtype=self.pipe.dtype,
+                device=self.pipe.device,
+                generator=generator,
+            )
+            
+            # Generate target latents with a different seed
+            target_latents = self.pipe.prompt_travel.prepare_latents(
+                # processed_image,
+                # self.pipe.scheduler.timesteps[:1],
+                batch_size=1,
+                # num_images_per_prompt=1,
+                num_channels_latents=self.pipe.unet.config.in_channels,
+                vae_scale_factor=self.pipe.vae_scale_factor,
+                scheduler=self.pipe.scheduler,
+                height=params.height,
+                width=params.width,
+                dtype=self.pipe.dtype,
+                device=self.pipe.device,
+                generator=target_generator,
+            )
+            
+            # # Interpolate between latents using the specified method
+            # if hasattr(self.pipe, "prompt_travel") and self.pipe.prompt_travel is not None:
+            #     latents = self.pipe.prompt_travel.interpolate_latents(
+            #         source_latents,
+            #         target_latents,
+            #         getattr(params, "prompt_travel_factor", 0.5),
+            #         getattr(params, "latent_travel_method", "slerp")
+            #     )
+
+        ######################################333
+
+        # source_latents = torch.randn(
+        #     (1, self.pipe.unet.config.in_channels, params.height // 8, params.width // 8),
+        #     generator=generator,
+        #     device=self.pipe.device,
+        #     dtype=self.pipe.dtype,
+        # )
+
+        # target_latents = torch.randn(
+        #     (1, self.pipe.unet.config.in_channels, params.height // 8, params.width // 8),
+        #     generator=target_generator,
+        #     device=self.pipe.device,
+        #     dtype=self.pipe.dtype,
+        # )
+
+
+            latents = self.pipe.prompt_travel.interpolate_latents(
+                source_latents,
+                target_latents,
+                getattr(params, "prompt_travel_factor", 0.5), # NOTE: should belatent travel factor latent_travel_factor
+                getattr(params, "latent_travel_method", "slerp")
+            )
+
+            print("prompt travel factor: ", getattr(params, "prompt_travel_factor", 0.5))
+            print("latent travel factor: ", getattr(params, "latent_travel_factor", 0.5))
 
         results = self.pipe(
             image=params.image,
@@ -182,6 +346,7 @@ class Pipeline:
             width=params.width,
             height=params.height,
             output_type="pil",
+            latents=source_latents,
         )
 
         return results.images[0]

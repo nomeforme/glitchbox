@@ -7,6 +7,7 @@ from diffusers import (
 from compel import Compel
 import torch
 from pipelines.utils.canny_gpu import SobelOperator
+import numpy as np
 
 try:
     import intel_extension_for_pytorch as ipex  # type: ignore
@@ -248,18 +249,18 @@ class Pipeline:
 
         self.pipe.scheduler = LCMScheduler.from_config(self.pipe.scheduler.config)
         self.pipe.set_progress_bar_config(disable=True)
+        
+        # Initialize compel processor for text embeddings
+        from compel import Compel
+        self.pipe.compel_proc = Compel(
+            tokenizer=self.pipe.tokenizer,
+            text_encoder=self.pipe.text_encoder,
+            truncate_long_prompts=True,
+        )
+
         self.pipe.to(device=device, dtype=torch_dtype)
         if device.type != "mps":
             self.pipe.unet.to(memory_format=torch.channels_last)
-
-        if args.compel:
-            from compel import Compel
-
-            self.pipe.compel_proc = Compel(
-                tokenizer=self.pipe.tokenizer,
-                text_encoder=self.pipe.text_encoder,
-                truncate_long_prompts=True,
-            )
 
         if args.taesd:
             self.pipe.vae = AutoencoderTiny.from_pretrained(
@@ -319,28 +320,50 @@ class Pipeline:
         # Generate latents for source and target if latent travel is enabled
         latents = None
         if getattr(params, "use_latent_travel", False):
+            # Convert PIL Image to tensor if needed
+            if isinstance(params.image, Image.Image):
+                # Convert PIL Image to tensor
+                image_tensor = torch.from_numpy(np.array(params.image)).permute(2, 0, 1).unsqueeze(0).to(
+                    device=self.pipe.device, 
+                    dtype=prompt_embeds.dtype
+                )
+            else:
+                image_tensor = params.image
+                
+            # Preprocess the image using the pipeline's image processor
+            processed_image = self.pipe.image_processor.preprocess(
+                image_tensor, 
+                height=params.height, 
+                width=params.width
+            ).to(dtype=prompt_embeds.dtype)
+                
             # Generate source latents
             source_latents = self.pipe.prepare_latents(
-                params.image,
+                processed_image,
                 self.pipe.scheduler.timesteps[0],
-                1,
-                1,
-                prompt_embeds.dtype,
-                self.pipe.device,
-                generator,
+                batch_size=1,
+                num_images_per_prompt=1,
+                dtype=prompt_embeds.dtype,
+                device=self.pipe.device,
+                generator=generator,
             )
             
             # Generate target latents with a different seed
             target_generator = torch.Generator(device=self.pipe.device).manual_seed(params.seed + 1)
             target_latents = self.pipe.prepare_latents(
-                params.image,
+                processed_image,
                 self.pipe.scheduler.timesteps[0],
-                1,
-                1,
-                prompt_embeds.dtype,
-                self.pipe.device,
-                target_generator,
+                batch_size=1,
+                num_images_per_prompt=1,
+                dtype=prompt_embeds.dtype,
+                device=self.pipe.device,
+                generator=target_generator,
             )
+            
+            # # If using classifier free guidance, properly batch the latents
+            # if params.guidance_scale > 1.0:
+            #     source_latents = torch.cat([source_latents] * 2)
+            #     target_latents = torch.cat([target_latents] * 2)
             
             # Interpolate between latents using the specified method
             if hasattr(self.pipe, "prompt_travel") and self.pipe.prompt_travel is not None:
@@ -350,6 +373,28 @@ class Pipeline:
                     getattr(params, "latent_travel_factor", 0.5),
                     getattr(params, "latent_travel_method", "slerp")
                 )
+
+        ######################################333
+
+        # latents = torch.randn(
+        #     (2, self.pipe.unet.config.in_channels, 512 // 8, 512 // 8),
+        #     generator=target_generator,
+        #     device=self.pipe.device,
+        #     dtype=prompt_embeds.dtype,
+        # )
+
+        # control_image = self.pipe.prepare_control_image(
+        #     image=control_image,
+        #     width=params.width,
+        #     height=params.height,
+        #     batch_size=1,
+        #     num_images_per_prompt=1,
+        #     device=self.pipe.device,
+        #     dtype=prompt_embeds.dtype,
+        # )
+
+        #print("latents", latents)   
+        print("latents shape", latents.shape)
 
         steps = params.steps
         strength = params.strength
@@ -372,7 +417,7 @@ class Pipeline:
             controlnet_conditioning_scale=params.controlnet_scale,
             control_guidance_start=params.controlnet_start,
             control_guidance_end=params.controlnet_end,
-            latents=latents,
+            latents=None,
         )
         result_image = results.images[0]
         if params.debug_canny:

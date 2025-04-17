@@ -28,6 +28,7 @@ dependencies = [
     "setuptools>=77.0.3",
     "tensorrt>=10.9.0.34",
     "torch>=2.6.0",
+    "torch-xla>=2.6.1",
     "torchvision>=0.21.0",
     "transformers>=4.49.0",
     "uvicorn[standard]>=0.34.0",
