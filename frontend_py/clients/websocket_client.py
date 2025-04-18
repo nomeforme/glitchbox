@@ -6,6 +6,7 @@ import numpy as np
 import cv2
 import uuid
 import uvloop
+import time
 
 class WebSocketClient(QThread):
     frame_received = Signal(np.ndarray)
@@ -13,7 +14,7 @@ class WebSocketClient(QThread):
     settings_received = Signal(dict)
     status_changed = Signal(str)
     
-    def __init__(self, uri="ws://localhost:7860"):
+    def __init__(self, uri="ws://localhost:7860", max_retries=10, initial_retry_delay=1.0):
         super().__init__()
         self.uri = uri
         self.websocket = None
@@ -24,6 +25,12 @@ class WebSocketClient(QThread):
         self.current_frame = None
         # Initialize with empty parameters - will be populated from settings
         self.params = {}
+        # Polling configuration
+        self.max_retries = max_retries
+        self.initial_retry_delay = initial_retry_delay
+        self.retry_count = 0
+        self.retry_delay = initial_retry_delay
+        self.connection_successful = False
 
     async def fetch_settings(self):
         """Fetch pipeline settings"""
@@ -99,6 +106,7 @@ class WebSocketClient(QThread):
         """Establish WebSocket connection"""
         try:
             full_uri = f"{self.uri}/api/ws/{self.user_id}"
+            print(f"[WebSocket] Attempting to connect to {full_uri}")
             self.websocket = await websockets.connect(full_uri)
             
             # Handle initial messages
@@ -106,13 +114,45 @@ class WebSocketClient(QThread):
             data = json.loads(msg)
             if data.get('status') == 'connected':
                 self.status_changed.emit('connected')
+                self.connection_successful = True
+                self.retry_count = 0  # Reset retry count on successful connection
+                self.retry_delay = self.initial_retry_delay  # Reset retry delay
+                print("[WebSocket] Successfully connected and received connected status")
                 return True
                 
+            print("[WebSocket] Connection attempt failed - did not receive connected status")
             return False
             
         except Exception as e:
             self.connection_error.emit(str(e))
+            print(f"[WebSocket] Connection attempt failed with error: {e}")
             return False
+
+    async def _poll_connection(self):
+        """Poll for connection with exponential backoff"""
+        while self.running and not self.connection_successful and self.retry_count < self.max_retries:
+            self.status_changed.emit(f"Retrying connection (attempt {self.retry_count + 1}/{self.max_retries})...")
+            print(f"[WebSocket] Retrying connection (attempt {self.retry_count + 1}/{self.max_retries})...")
+            
+            # Try to connect
+            if await self._connect():
+                print("[WebSocket] Connection successful")
+                return True
+                
+            # Increment retry count and calculate next delay with exponential backoff
+            self.retry_count += 1
+            self.retry_delay = min(self.initial_retry_delay * (2 ** (self.retry_count - 1)), 30)  # Cap at 30 seconds
+            
+            # Wait before next retry
+            print(f"[WebSocket] Waiting {self.retry_delay} seconds before next attempt...")
+            await asyncio.sleep(self.retry_delay)
+            
+        if not self.connection_successful:
+            self.status_changed.emit("Connection failed after maximum retries")
+            self.connection_error.emit("Connection failed after maximum retries")
+            return False
+            
+        return True
 
     async def send_frame(self, frame):
         """Send a frame for processing"""
@@ -183,14 +223,20 @@ class WebSocketClient(QThread):
     async def main_loop(self):
         """Main event loop"""
         try:
-            # Fetch settings first
-            if not await self.fetch_settings():
-                self.connection_error.emit("Failed to get pipeline settings")
+            # Fetch settings first with polling
+            settings_success = False
+            while self.running and not settings_success:
+                settings_success = await self.fetch_settings()
+                if not settings_success:
+                    self.status_changed.emit("Retrying to fetch settings...")
+                    await asyncio.sleep(self.initial_retry_delay)
+            
+            if not settings_success:
+                self.connection_error.emit("Failed to get pipeline settings after multiple attempts")
                 return
 
-            # Then establish WebSocket connection            
-            if not await self._connect():
-                self.connection_error.emit("Failed to connect to server")
+            # Then establish WebSocket connection with polling
+            if not await self._poll_connection():
                 return
                 
             while self.running:
@@ -207,14 +253,25 @@ class WebSocketClient(QThread):
                         break
                     self.status_changed.emit("disconnected")
                     self.websocket = None
-                    if not await self._connect():
-                        await asyncio.sleep(2)
+                    self.connection_successful = False
+                    # Reset retry count and delay for fresh polling attempt
+                    self.retry_count = 0
+                    self.retry_delay = self.initial_retry_delay
+                    # Try to reconnect with polling
+                    if not await self._poll_connection():
+                        break
                 except Exception as e:
                     if not self.running:  # If we're shutting down, don't report errors
                         break
                     self.connection_error.emit(str(e))
                     self.websocket = None
-                    await asyncio.sleep(1)
+                    self.connection_successful = False
+                    # Reset retry count and delay for fresh polling attempt
+                    self.retry_count = 0
+                    self.retry_delay = self.initial_retry_delay
+                    # Try to reconnect with polling
+                    if not await self._poll_connection():
+                        break
         finally:
             # Cleanup if the loop exits for any reason
             if self.websocket and self.websocket.open:

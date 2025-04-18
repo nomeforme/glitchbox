@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import asyncio
 import argparse
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFrame
 from PySide6.QtCore import Qt, QTimer
 
 from components import CameraDisplay
@@ -14,7 +14,7 @@ from clients import WebSocketClient
 from threads import CameraThread, SpeechToTextThread, FFTAnalyzerThread
 
 # Default server configuration
-DEFAULT_SERVER_HOST = "100.79.41.86"
+DEFAULT_SERVER_HOST = "100.85.63.124"
 DEFAULT_SERVER_PORT = 7860
 
 class MainWindow(QMainWindow):
@@ -38,46 +38,92 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.status_bar)
         
         # Video feeds container
-        feeds_layout = QHBoxLayout()
+        self.feeds_layout = QHBoxLayout()
+        
+        # Camera feed container
+        self.camera_container = QFrame()
+        camera_container_layout = QVBoxLayout(self.camera_container)
         
         # Camera feed
         self.camera_display = CameraDisplay()
-        feeds_layout.addWidget(self.camera_display)
+        camera_container_layout.addWidget(self.camera_display)
+        
+        # Camera label
+        self.camera_label = QLabel("Input Camera")
+        self.camera_label.setAlignment(Qt.AlignCenter)
+        camera_container_layout.addWidget(self.camera_label)
+        
+        self.feeds_layout.addWidget(self.camera_container)
+        
+        # Processed feed container
+        self.processed_container = QFrame()
+        processed_container_layout = QVBoxLayout(self.processed_container)
         
         # Processed feed
         self.processed_display = ProcessedDisplay()
-        feeds_layout.addWidget(self.processed_display)
+        processed_container_layout.addWidget(self.processed_display)
         
-        layout.addLayout(feeds_layout)
+        # Processed label
+        self.processed_label = QLabel("Output Stream")
+        self.processed_label.setAlignment(Qt.AlignCenter)
+        processed_container_layout.addWidget(self.processed_label)
+        
+        self.feeds_layout.addWidget(self.processed_container)
+        
+        layout.addLayout(self.feeds_layout)
         
         # Controls section
-        controls_layout = QVBoxLayout()
+        self.controls_container = QFrame()
+        controls_layout = QVBoxLayout(self.controls_container)
+        
+        # Create horizontal layout for buttons
+        buttons_layout = QHBoxLayout()
         
         # Start/Stop button
         self.start_button = QPushButton("Start Camera")
         self.start_button.clicked.connect(self.toggle_camera)
         self.start_button.setEnabled(False)  # Disabled until settings are loaded
-        controls_layout.addWidget(self.start_button)
+        buttons_layout.addWidget(self.start_button)
         
         # STT Toggle button
         self.stt_button = QPushButton("Start Speech Recognition")
         self.stt_button.clicked.connect(self.toggle_stt)
-        controls_layout.addWidget(self.stt_button)
+        buttons_layout.addWidget(self.stt_button)
         
         # FFT Toggle button
         self.fft_button = QPushButton("Start Audio FFT")
         self.fft_button.clicked.connect(self.toggle_fft)
-        controls_layout.addWidget(self.fft_button)
+        buttons_layout.addWidget(self.fft_button)
+        
+        # Add buttons layout to controls
+        controls_layout.addLayout(buttons_layout)
         
         # Pipeline controls
         self.control_panel = ControlPanel()
         self.control_panel.parameter_changed.connect(self.update_parameter)
         controls_layout.addWidget(self.control_panel)
         
-        layout.addLayout(controls_layout)
+        layout.addWidget(self.controls_container)
+        
+        # Presentation mode buttons
+        presentation_layout = QHBoxLayout()
+        
+        self.toggle_input_button = QPushButton("Hide Input Feed")
+        self.toggle_input_button.clicked.connect(self.toggle_input_feed)
+        presentation_layout.addWidget(self.toggle_input_button)
+        
+        self.toggle_controls_button = QPushButton("Hide Controls")
+        self.toggle_controls_button.clicked.connect(self.toggle_controls)
+        presentation_layout.addWidget(self.toggle_controls_button)
+        
+        self.toggle_presentation_button = QPushButton("Enter Presentation Mode")
+        self.toggle_presentation_button.clicked.connect(self.toggle_presentation_mode)
+        presentation_layout.addWidget(self.toggle_presentation_button)
+        
+        layout.addLayout(presentation_layout)
         
         # Initialize threads
-        self.ws_client = WebSocketClient(uri=self.server_ws_uri)
+        self.ws_client = WebSocketClient(uri=self.server_ws_uri, max_retries=10, initial_retry_delay=1.0)
         self.camera_thread = CameraThread()
         
         # Initialize the audio device index for both STT and FFT
@@ -109,6 +155,7 @@ class MainWindow(QMainWindow):
         # State variables
         self.current_frame = None
         self.processing_frame = False
+        self.presentation_mode = False
 
         # Get initial settings
         self.get_initial_settings()
@@ -122,23 +169,31 @@ class MainWindow(QMainWindow):
         """Handle received pipeline settings"""
         self.control_panel.setup_pipeline_options(settings)
         self.start_button.setEnabled(True)
-        self.status_bar.update_processing_status("Ready")
+        self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
 
     def handle_status_change(self, status: str):
         """Handle WebSocket status changes"""
-        self.status_bar.update_processing_status(status)
-        if status == "connected":
+        if status.startswith("Retrying connection"):
+            self.status_bar.update_processing_status(f"Retrying connection to {self.server_host}:{self.server_port}...")
+        elif status == "connected":
             self.status_bar.update_connection_status(True)
+            # Update the status bar with server info
+            self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
             # Start the MJPEG stream when connected
             self.processed_display.start_stream(self.ws_client.user_id, self.server_http_uri)
         elif status == "disconnected":
             self.status_bar.update_connection_status(False)
+            # Clear the server info from status bar
+            self.status_bar.update_processing_status("")
             # Stop the stream when disconnected
             self.processed_display.stop_stream()
         elif status == "ready":
             # Reset UI state when camera is stopped
             self.start_button.setText("Start Camera")
-            self.status_bar.update_processing_status("Ready")
+            self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
+        elif status == "Connection failed after maximum retries":
+            self.status_bar.update_connection_status(False)
+            self.status_bar.update_processing_status("")
 
     def handle_camera_frame(self, frame):
         """Handle new frame from camera"""
@@ -245,6 +300,106 @@ class MainWindow(QMainWindow):
             self.fft_active = False
             self.fft_button.setText("Start Audio FFT")
             self.status_bar.update_processing_status("FFT audio analysis stopped")
+            
+    def toggle_input_feed(self):
+        """Toggle visibility of the input camera feed"""
+        if self.camera_container.isVisible():
+            self.camera_container.hide()
+            self.toggle_input_button.setText("Show Input Feed")
+            # Adjust the processed display to take full width
+            self.processed_container.setMinimumWidth(self.width() - 40)
+            # Resize window to be more compact
+            new_width = max(self.width() // 2, 640)  # Don't go smaller than 640px
+            self.resize(new_width, self.height())
+        else:
+            self.camera_container.show()
+            self.toggle_input_button.setText("Hide Input Feed")
+            # Reset the processed display width
+            self.processed_container.setMinimumWidth(0)
+            # Restore window width
+            self.resize(self.width() * 2, self.height())
+            
+    def toggle_controls(self):
+        """Toggle visibility of the controls panel"""
+        if self.controls_container.isVisible():
+            self.controls_container.hide()
+            self.toggle_controls_button.setText("Show Controls")
+            # Adjust window height
+            new_height = self.height() - self.controls_container.height()
+            self.resize(self.width(), new_height)
+        else:
+            self.controls_container.show()
+            self.toggle_controls_button.setText("Hide Controls")
+            # Restore window height
+            new_height = self.height() + self.controls_container.height()
+            self.resize(self.width(), new_height)
+            
+    def toggle_presentation_mode(self):
+        """Toggle presentation mode (hide input feed and controls)"""
+        if not self.presentation_mode:
+            # Store original window size for restoration
+            self.original_size = self.size()
+            
+            # Enter presentation mode
+            self.camera_container.hide()
+            self.controls_container.hide()
+            self.toggle_input_button.setText("Show Input Feed")
+            self.toggle_controls_button.setText("Show Controls")
+            self.toggle_presentation_button.setText("Exit Presentation Mode")
+            
+            # Hide status bar and connection label for cleaner look
+            self.status_bar.hide()
+            
+            # Calculate new window size
+            new_width = max(self.width() // 2, 640)  # Don't go smaller than 640px
+            new_height = self.height() - self.controls_container.height() - \
+                        self.status_bar.height()
+            
+            # Adjust the processed display to take full space
+            self.processed_container.setMinimumWidth(new_width - 40)
+            self.processed_container.setMinimumHeight(new_height - 40)
+            
+            # Center the output stream
+            self.feeds_layout.setAlignment(Qt.AlignCenter)
+            
+            # Resize window
+            self.resize(new_width, new_height)
+            
+            # Move window to center of screen
+            screen = QApplication.primaryScreen().geometry()
+            self.move(
+                (screen.width() - new_width) // 2,
+                (screen.height() - new_height) // 2
+            )
+        else:
+            # Exit presentation mode
+            self.camera_container.show()
+            self.controls_container.show()
+            self.toggle_input_button.setText("Hide Input Feed")
+            self.toggle_controls_button.setText("Hide Controls")
+            self.toggle_presentation_button.setText("Enter Presentation Mode")
+            
+            # Show status bar and connection label
+            self.status_bar.show()
+            
+            # Reset the processed display constraints
+            self.processed_container.setMinimumWidth(0)
+            self.processed_container.setMinimumHeight(0)
+            
+            # Reset layout alignment
+            self.feeds_layout.setAlignment(Qt.AlignLeft)
+            
+            # Restore original window size and position
+            if hasattr(self, 'original_size'):
+                self.resize(self.original_size)
+                # Center the restored window
+                screen = QApplication.primaryScreen().geometry()
+                self.move(
+                    (screen.width() - self.original_size.width()) // 2,
+                    (screen.height() - self.original_size.height()) // 2
+                )
+            
+        self.presentation_mode = not self.presentation_mode
 
     def closeEvent(self, event):
         """Handle window close event - cleanup all threads in proper order"""
