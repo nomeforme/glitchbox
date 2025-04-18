@@ -10,24 +10,36 @@ class StatusBar(QWidget):
         self.layout = QHBoxLayout()
         self.setLayout(self.layout)
         
-        # Connection status
-        self.conn_status = QLabel("Not Connected")
-        self.conn_status.setStyleSheet("color: red;")
-        self.layout.addWidget(self.conn_status)
+        # Left side container
+        left_container = QWidget()
+        left_layout = QHBoxLayout(left_container)
+        left_layout.setContentsMargins(0, 0, 0, 0)
         
         # FPS counter
         self.fps_label = QLabel("0 FPS")
-        self.layout.addWidget(self.fps_label)
+        left_layout.addWidget(self.fps_label)
         self.last_frame_time = time.time()
         self.frame_count = 0
         self.fps = 0
         
-        # Processing status 
-        self.proc_status = QLabel("")
-        self.layout.addWidget(self.proc_status)
+        # Small spacing between FPS and connection status
+        left_layout.addSpacing(5)
         
-        # Add stretch to push labels to the left
+        # Connection status
+        self.conn_status = QLabel("Not Connected")
+        self.conn_status.setStyleSheet("color: red;")
+        left_layout.addWidget(self.conn_status)
+        
+        # Add left container to main layout
+        self.layout.addWidget(left_container)
+        
+        # Add stretch to push server info to the right
         self.layout.addStretch()
+        
+        # Server info on the right
+        self.proc_status = QLabel("")
+        self.proc_status.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        self.layout.addWidget(self.proc_status)
         
         self.setMaximumHeight(30)
 
