@@ -440,13 +440,16 @@ class App:
 
                         if image is None:
                             continue
+
+                        if self.use_background_removal and getattr(params, 'use_output_bg_removal', False):
+                            image = self._apply_background_removal(image)
                             
                         # Update acid processor with the diffused image for next processing cycle
                         if self.use_acid_processor:
                             # Convert PIL image to numpy array if needed
                             img_diffusion = np.array(image)
                             self.acid_processor.update(img_diffusion)
-                            
+
                         frame = pil_to_frame(image)
                         # frame = pil_to_frame(params.acid_image)
 

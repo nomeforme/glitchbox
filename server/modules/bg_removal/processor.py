@@ -68,13 +68,14 @@ class BackgroundRemovalProcessor:
         self.model.eval()
         print(f'MODNet loaded successfully on {self.device}')
         
-    def process_image(self, pil_image, return_alpha=False):
+    def process_image(self, pil_image, return_alpha=False, bg_color='black'):
         """
         Process a PIL image to remove the background.
         
         Args:
             pil_image (PIL.Image): Input image as PIL Image
             return_alpha (bool): If True, return the alpha matte instead of the foreground
+            bg_color (str): Background color to use ('white' or 'black')
             
         Returns:
             PIL.Image: Processed image with background removed
@@ -121,8 +122,13 @@ class BackgroundRemovalProcessor:
             alpha_np = matte_np * np.full(frame_np.shape, 255.0)
             result_np = alpha_np.astype(np.uint8)
         else:
-            # Return foreground with white background
-            fg_np = matte_np * frame_np + (1 - matte_np) * np.full(frame_np.shape, 255.0)
+            # Return foreground with specified background color
+            if bg_color.lower() == 'black':
+                bg_color_np = np.full(frame_np.shape, 0.0)
+            else:  # default to white
+                bg_color_np = np.full(frame_np.shape, 255.0)
+                
+            fg_np = matte_np * frame_np + (1 - matte_np) * bg_color_np
             result_np = fg_np.astype(np.uint8)
         
         # Resize back to original size
@@ -131,20 +137,21 @@ class BackgroundRemovalProcessor:
         # Convert back to PIL
         return Image.fromarray(result_np)
     
-    def process_batch(self, pil_images, return_alpha=False):
+    def process_batch(self, pil_images, return_alpha=False, bg_color='white'):
         """
         Process a batch of PIL images to remove the background.
         
         Args:
             pil_images (list): List of PIL Images
             return_alpha (bool): If True, return the alpha matte instead of the foreground
+            bg_color (str): Background color to use ('white' or 'black')
             
         Returns:
             list: List of processed PIL Images with background removed
         """
         results = []
         for img in pil_images:
-            results.append(self.process_image(img, return_alpha))
+            results.append(self.process_image(img, return_alpha, bg_color))
         return results
 
 
