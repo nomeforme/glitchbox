@@ -5,6 +5,7 @@ import numpy as np
 import cv2
 import requests
 import threading
+from ..main import DISPLAY_WIDTH, DISPLAY_HEIGHT
 
 class StreamThread(QThread):
     """Thread for handling MJPEG stream from server"""
@@ -105,7 +106,7 @@ class ProcessedDisplay(QWidget):
         bytes_per_line = 3 * width
         q_image = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
         self.image_label.setPixmap(QPixmap.fromImage(q_image).scaled(
-            640, 480, Qt.KeepAspectRatio))
+            DISPLAY_WIDTH, DISPLAY_HEIGHT, Qt.KeepAspectRatio))
         
         # Update FPS counter in status bar
         main_window = self.window()

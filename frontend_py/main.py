@@ -1,8 +1,10 @@
 import sys
 import cv2
 import numpy as np
+import os
 import asyncio
 import argparse
+from dotenv import load_dotenv
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFrame
 from PySide6.QtCore import Qt, QTimer
 
@@ -13,9 +15,15 @@ from components import StatusBar
 from clients import WebSocketClient
 from threads import CameraThread, SpeechToTextThread, FFTAnalyzerThread
 
+load_dotenv(override=True)
+
+# Display and camera dimensions
+DISPLAY_WIDTH = 960
+DISPLAY_HEIGHT = 540
+
 # Default server configuration
-DEFAULT_SERVER_HOST = "100.85.63.124"
-DEFAULT_SERVER_PORT = 7860
+DEFAULT_SERVER_HOST = os.getenv("DEFAULT_SERVER_HOST")
+DEFAULT_SERVER_PORT = os.getenv("DEFAULT_SERVER_PORT")
 
 class MainWindow(QMainWindow):
     def __init__(self, server_host, server_port):

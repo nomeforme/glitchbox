@@ -2,6 +2,7 @@ from PySide6.QtWidgets import QLabel
 from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QImage, QPixmap
 import numpy as np
+from ..main import DISPLAY_WIDTH, DISPLAY_HEIGHT
 
 class CameraDisplay(QLabel):
     """Widget to display camera feed"""
@@ -20,7 +21,7 @@ class CameraDisplay(QLabel):
         bytes_per_line = 3 * width
         q_image = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
         self.setPixmap(QPixmap.fromImage(q_image).scaled(
-            640, 480, Qt.KeepAspectRatio))
+            DISPLAY_WIDTH, DISPLAY_HEIGHT, Qt.KeepAspectRatio))
 
     def clear_display(self):
         """Clear the display"""
