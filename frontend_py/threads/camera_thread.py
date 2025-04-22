@@ -2,10 +2,15 @@ from PySide6.QtCore import QThread, Signal
 import cv2
 import time
 import numpy as np
+from ..main import DISPLAY_WIDTH, DISPLAY_HEIGHT
 
 class CameraThread(QThread):
     """Thread for handling camera capture"""
     frame_ready = Signal(np.ndarray)
+    
+    # Class variables for camera dimensions
+    CAMERA_WIDTH = 960
+    CAMERA_HEIGHT = 540
 
     def __init__(self):
         super().__init__()
@@ -16,6 +21,8 @@ class CameraThread(QThread):
         """Main thread loop for capturing camera frames"""
         try:
             self.camera = cv2.VideoCapture(0)
+            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, DISPLAY_WIDTH)
+            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, DISPLAY_HEIGHT)
             if not self.camera.isOpened():
                 print("[Camera] Failed to open camera")
                 return
@@ -26,6 +33,9 @@ class CameraThread(QThread):
                 if not ret:
                     print("[Camera] Failed to read frame")
                     break
+                    
+                # # Resize frame to 640x480
+                # frame = cv2.resize(frame, (854, 480))
                     
                 # Convert BGR to RGB for display
                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
