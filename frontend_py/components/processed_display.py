@@ -5,7 +5,12 @@ import numpy as np
 import cv2
 import requests
 import threading
-from ..main import DISPLAY_WIDTH, DISPLAY_HEIGHT
+import sys
+import os
+
+# Add the parent directory to the path to allow importing from the parent package
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import DISPLAY_WIDTH, DISPLAY_HEIGHT
 
 class StreamThread(QThread):
     """Thread for handling MJPEG stream from server"""
