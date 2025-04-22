@@ -203,10 +203,10 @@ class Pipeline:
             1, min=1, max=15, title="Steps", field="range", hide=True, id="steps"
         )
         width: int = Field(
-            512, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
+            960, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
         )
         height: int = Field(
-            512, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
+            540, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
         )
         guidance_scale: float = Field(
             1.21,
@@ -284,6 +284,12 @@ class Pipeline:
             field="checkbox",
             hide=True,
             id="debug_canny",
+        )
+        use_output_bg_removal: bool = Field(
+            False,
+            title="Use Output Background Removal",
+            field="checkbox",
+            id="use_output_bg_removal",
         )
 
     def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype):
