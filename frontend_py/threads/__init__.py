@@ -1,3 +1,7 @@
+"""
+Threads package for the Glitch Machine Engine.
+"""
+
 from .camera_thread import CameraThread
 from .fft_thread import FFTAnalyzerThread
 from .stt_thread import SpeechToTextThread

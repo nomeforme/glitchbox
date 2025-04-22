@@ -17,10 +17,6 @@ from threads import CameraThread, SpeechToTextThread, FFTAnalyzerThread
 
 load_dotenv(override=True)
 
-# Display and camera dimensions
-DISPLAY_WIDTH = 960
-DISPLAY_HEIGHT = 540
-
 # Default server configuration
 DEFAULT_SERVER_HOST = os.getenv("DEFAULT_SERVER_HOST")
 DEFAULT_SERVER_PORT = os.getenv("DEFAULT_SERVER_PORT")

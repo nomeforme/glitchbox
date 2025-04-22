@@ -2,16 +2,17 @@ from PySide6.QtCore import QThread, Signal
 import cv2
 import time
 import numpy as np
-from ..main import DISPLAY_WIDTH, DISPLAY_HEIGHT
+import sys
+import os
+
+# Add the parent directory to the path to allow importing from the parent package
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import DISPLAY_WIDTH, DISPLAY_HEIGHT
 
 class CameraThread(QThread):
     """Thread for handling camera capture"""
     frame_ready = Signal(np.ndarray)
     
-    # Class variables for camera dimensions
-    CAMERA_WIDTH = 960
-    CAMERA_HEIGHT = 540
-
     def __init__(self):
         super().__init__()
         self.running = False

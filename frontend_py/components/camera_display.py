@@ -2,7 +2,12 @@ from PySide6.QtWidgets import QLabel
 from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QImage, QPixmap
 import numpy as np
-from ..main import DISPLAY_WIDTH, DISPLAY_HEIGHT
+import sys
+import os
+
+# Add the parent directory to the path to allow importing from the parent package
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import DISPLAY_WIDTH, DISPLAY_HEIGHT
 
 class CameraDisplay(QLabel):
     """Widget to display camera feed"""
