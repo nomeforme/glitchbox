@@ -21,6 +21,10 @@ class Args(NamedTuple):
     compel: bool = False
     debug: bool = False
     use_acid_processor: bool = False
+    # Enable depth estimation
+    use_depth_estimator: bool = False
+    depth_engine_path: str = "modules/depth_anything/depth_anything_small.engine"
+    depth_grayscale: bool = False
     # Enable prompt travel
     use_prompt_travel: bool = False
     use_latent_travel: bool = False
@@ -478,6 +482,22 @@ parser.add_argument(
     dest="loop_prompts",
     action="store_false",
     help="Don't loop back to the beginning when reaching the end of prompts",
+)
+
+# Add depth estimation arguments
+parser.add_argument(
+    "--use-depth-estimator",
+    dest="use_depth_estimator",
+    action="store_true",
+    default=True,
+    help="Enable depth estimation using DepthAnything TensorRT",
+)
+parser.add_argument(
+    "--depth-grayscale",
+    dest="depth_grayscale",
+    action="store_true",
+    default=False,
+    help="Output depth maps in grayscale instead of colored visualization",
 )
 
 parser.set_defaults(taesd=USE_TAESD)

@@ -13,6 +13,7 @@ IGNORE
 server/prompts/*.txt
 server/loras/*
 server/modules/bg_removal/pretrained/*
+server/modules/depth_anything/models/*
 
 # Ignore log files
 *.log
