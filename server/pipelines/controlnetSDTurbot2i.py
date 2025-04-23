@@ -30,9 +30,11 @@ from typing import Optional
 from modules.prompt_travel.prompt_travel import PromptTravel
 #
 taesd_model = "madebyollin/taesd"
-controlnet_model = "thibaud/controlnet-sd21-canny-diffusers"
+# controlnet_model = "thibaud/controlnet-sd21-canny-diffusers"
 # controlnet_model = "thibaud/controlnet-sd21-openpose-diffusers"
-# controlnet_model = "thibaud/controlnet-sd21-depth-diffusers"
+controlnet_model = "thibaud/controlnet-sd21-depth-diffusers"
+controlnet_canny_model = "thibaud/controlnet-sd21-canny-diffusers"
+controlnet_depth_model = "thibaud/controlnet-sd21-depth-diffusers"
 base_model = "stabilityai/sd-turbo"
 
 # LoRA models
@@ -278,12 +280,12 @@ class Pipeline:
             hide=True,
             id="canny_high_threshold",
         )
-        debug_canny: bool = Field(
+        debug_controlnet: bool = Field(
             False,
-            title="Debug Canny",
+            title="Debug ControlNet",
             field="checkbox",
             hide=True,
-            id="debug_canny",
+            id="debug_controlnet",
         )
         use_output_bg_removal: bool = Field(
             False,
@@ -291,19 +293,36 @@ class Pipeline:
             field="checkbox",
             id="use_output_bg_removal",
         )
+        controlnet_type: str = Field(
+            "depth",
+            title="ControlNet Type",
+            field="select",
+            id="controlnet_type",
+            options=["depth", "canny"],
+        )
 
     def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype):
+        # Load both ControlNet models
         controlnet_canny = ControlNetModel.from_pretrained(
-            controlnet_model, torch_dtype=torch_dtype
+            controlnet_canny_model, torch_dtype=torch_dtype
+        )
+        controlnet_depth = ControlNetModel.from_pretrained(
+            controlnet_depth_model, torch_dtype=torch_dtype
         )
         self.pipes = {}
 
+        # Initialize with depth model by default
         self.pipe = StableDiffusionControlNetPipeline.from_pretrained(
             base_model,
-            controlnet=controlnet_canny,
+            controlnet=controlnet_depth,
             safety_checker=None,
             torch_dtype=torch_dtype,
         )
+        
+        # Store both models for later use
+        self.controlnet_canny = controlnet_canny
+        self.controlnet_depth = controlnet_depth
+        self.current_controlnet = "depth"
 
         if args.taesd:
             self.pipe.vae = AutoencoderTiny.from_pretrained(
@@ -468,12 +487,13 @@ class Pipeline:
         prompt = params.prompt
         prompt_embeds = None
 
-        # Update LoRA models if needed
-        self.load_loras(params.lora_models, params.fuse_loras, params.lora_scale, params.adapter_weights)
+        if self.current_controlnet == "depth":
+            control_image = getattr(params, 'control_image', None)
+        if self.current_controlnet == "canny":
+            control_image = self.canny_torch(
+                params.image, params.canny_low_threshold, params.canny_high_threshold
+            )
 
-        control_image = self.canny_torch(
-            params.image, params.canny_low_threshold, params.canny_high_threshold
-        )
         # control_image = openpose(params.image)
         # control_image = midas(params.image)
         steps = params.steps
@@ -588,7 +608,7 @@ class Pipeline:
         if getattr(params, "use_latent_travel", False):
             setattr(self, "stored_result_latents", result_latents)
 
-        if params.debug_canny:
+        if params.debug_controlnet:
             # paste control_image on top of result_image
             w0, h0 = (200, 200)
             control_image = control_image.resize((w0, h0))

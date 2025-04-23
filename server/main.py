@@ -32,6 +32,8 @@ from modules.prompt_travel.embeddings_service import router as embeddings_router
 from modules.prompt_scheduler import PromptTravelScheduler
 # Import background removal processor
 from modules.bg_removal import get_processor
+# Import the depth estimator
+from modules.depth_anything.depth_anything_trt import DepthAnythingTRT
 
 import numpy as np
 
@@ -47,6 +49,26 @@ class App:
         self.conn_manager = ConnectionManager()
         if self.args.safety_checker:
             self.safety_checker = SafetyChecker(device=device.type)
+        
+        # Initialize depth estimator if enabled
+        self.use_depth_estimator = getattr(self.args, 'use_depth_estimator', False)
+        if self.use_depth_estimator:
+            print("[main.py] Depth estimator will be initialized on startup")
+            # The actual initialization happens in the startup event
+            
+            # Get the engine path from config or use default
+            self.depth_engine_path = os.path.join(
+                os.path.dirname(os.path.abspath(__file__)),
+                "modules", "depth_anything", "models", "depth_anything_v2_vits.trt"
+            )
+            
+            # Check if the engine file exists
+            if not os.path.exists(self.depth_engine_path):
+                print(f"[main.py] Warning: Depth engine file not found: {self.depth_engine_path}")
+                print("[main.py] Running without depth estimation")
+                self.use_depth_estimator = False
+            else:
+                print(f"[main.py] Using depth engine: {self.depth_engine_path}")
         
         # Initialize prompt travel service
         self.use_prompt_travel = getattr(self.args, 'use_prompt_travel', False)
@@ -197,6 +219,20 @@ class App:
         async def startup_event():
             # Startup
             print("Application startup")
+            
+            # Initialize depth estimator if enabled
+            if self.use_depth_estimator:
+                try:
+                    print("[main.py] Initializing depth estimator")
+                    self.depth_estimator = DepthAnythingTRT(
+                        engine_path=self.depth_engine_path,
+                        device=device.type
+                    )
+                    print("[main.py] Depth estimator initialized")
+                except Exception as e:
+                    print(f"[main.py] Error initializing depth estimator: {e}")
+                    print("[main.py] Running without depth estimation")
+                    self.use_depth_estimator = False
             
             # Initialize embeddings service if prompt travel is enabled
             if self.use_prompt_travel and hasattr(self.pipeline, 'pipe'):
@@ -387,6 +423,22 @@ class App:
                                 # print(f"[main.py] After acid processing, image type: {type(params.image)}")
                             if self.use_background_removal and params.image:
                                 params.image = self._apply_background_removal(params.image)
+                            
+                            # Apply depth estimation if enabled
+                            if self.use_depth_estimator and params.image and getattr(params, 'use_depth_estimation', True):
+                                try:
+                                    print("[main.py] Applying depth estimation")
+                                    # Get the depth map
+                                    depth_map = self.depth_estimator.get_depth(params.image)
+                                    
+                                    # Set the control image in the params
+                                    # This is the key part that sets params.control_image for use in the pipeline
+                                    setattr(params, 'control_image', depth_map)
+                                    
+                                    print("[main.py] Depth estimation applied")
+                                except Exception as e:
+                                    print(f"[main.py] Error during depth estimation: {e}")
+                                    # Continue without depth estimation
 
                         await self.conn_manager.update_data(user_id, params)
                         await self.conn_manager.send_json(user_id, {"status": "wait"})
