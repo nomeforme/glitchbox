@@ -10,6 +10,8 @@ from pipelines.utils.canny_gpu import SobelOperator
 import os
 import glob
 from typing import List, Dict, Optional, Union
+import gc
+from pathlib import Path
 
 try:
     import intel_extension_for_pytorch as ipex  # type: ignore
@@ -25,6 +27,8 @@ import uuid
 import torchvision.transforms as T
 from diffusers.utils.remote_utils import remote_decode
 from typing import Optional
+import torch
+# import torch_tensorrt
 
 # NOTE: this is a custom prompt travel module
 from modules.prompt_travel.prompt_travel import PromptTravel
@@ -50,7 +54,8 @@ lora_models = {
     "artificialguybr/studioghibli-redmond-2-1v-studio-ghibli-lora-for-freedom-redmond-sd-2-1": "artificialguybr/studioghibli-redmond-2-1v-studio-ghibli-lora-for-freedom-redmond-sd-2-1",
     "style_pi_2": "server/loras/style_pi_2.safetensors",
     "pytorch_lora_weights": "server/loras/pytorch_lora_weights.safetensors",
-    "FKATwigs_A1-000038": "server/loras/FKATwigs_A1-000038.safetensors"
+    "FKATwigs_A1-000038": "server/loras/FKATwigs_A1-000038.safetensors",
+    "dark":"server/loras/flowers-000022.safetensors"
 }
 
 # Default LoRAs to use - can be a single LoRA or a list of LoRAs to fuse
@@ -94,6 +99,7 @@ Image to Image pipeline using
     > with a MJPEG stream server.
 </p>
 <p class="text-sm text-gray-500">
+
     Change the prompt to generate different images, accepts <a
     href="https://github.com/damian0815/compel/blob/main/doc/syntax.md"
     target="_blank"
@@ -205,10 +211,10 @@ class Pipeline:
             1, min=1, max=15, title="Steps", field="range", hide=True, id="steps"
         )
         width: int = Field(
-            960, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
+            640, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
         )
         height: int = Field(
-            540, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
+            480, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
         )
         guidance_scale: float = Field(
             1.21,
@@ -330,7 +336,7 @@ class Pipeline:
             ).to(device)
 
         if args.sfast:
-            print("\nRunning sfast compile\n")
+            print("Using sfast compile\n")
             from sfast.compilers.stable_diffusion_pipeline_compiler import (
                 compile,
                 CompilationConfig,
@@ -341,6 +347,8 @@ class Pipeline:
             config.enable_triton = True
             config.enable_cuda_graph = True
             self.pipe = compile(self.pipe, config=config)
+
+            print("\nRunning with sfast compile\n")
 
         if args.onediff:
             print("\nRunning onediff compile\n")
@@ -373,18 +381,20 @@ class Pipeline:
                 taesd_model, torch_dtype=torch_dtype, use_safetensors=True
             ).to(device)
 
-        if args.torch_compile:
-            self.pipe.unet = torch.compile(
-                self.pipe.unet, mode="reduce-overhead", fullgraph=True
-            )
-            self.pipe.vae = torch.compile(
-                self.pipe.vae, mode="reduce-overhead", fullgraph=True
-            )
-            self.pipe(
-                prompt="warmup",
-                image=[Image.new("RGB", (768, 768))],
-                control_image=[Image.new("RGB", (768, 768))],
-            )
+        # # NOTE: torch compile temp ENABLED
+        # if True:
+        #     print("\nRunning torch compile\n")
+        #     self.pipe.unet = torch.compile(
+        #         self.pipe.unet, mode="reduce-overhead", fullgraph=True
+        #     )
+        #     self.pipe.vae = torch.compile(
+        #         self.pipe.vae, mode="reduce-overhead", fullgraph=True
+        #     )
+        #     # self.pipe(
+        #     #    prompt="warmup",
+        #     #    image=[Image.new("RGB", (768, 768))],
+        #     #    control_image=[Image.new("RGB", (768, 768))],
+        #     # )
 
         # Initialize PromptTravel for both text and latent interpolation
         self.pipe.prompt_travel = PromptTravel(
@@ -501,7 +511,7 @@ class Pipeline:
         if int(steps * strength) < 1:
             steps = math.ceil(1 / max(0.10, strength))
 
-# Use provided prompt embeddings if available - with safer attribute check
+        # Use provided prompt embeddings if available - with safer attribute check
         has_prompt_embeds = hasattr(params, "prompt_embeds") and params.prompt_embeds is not None
 
         if has_prompt_embeds:
