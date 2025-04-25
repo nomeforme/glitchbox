@@ -283,6 +283,7 @@ class App:
             
             try:
                 while True:
+                    loop_start_time = time.time()
                     if (
                         self.args.timeout > 0
                         and time.time() - last_time > self.args.timeout
@@ -307,17 +308,24 @@ class App:
                         print("[main.py] Processing prompt travel requests")
                         # We'll process prompt travel after params is defined in the next_frame section
                     
+                    receive_json_start = time.time()
                     data = await self.conn_manager.receive_json(user_id)
+                    if self.args.debug:
+                        print(f"Time to receive JSON data: {time.time() - receive_json_start:.4f}s")
 
                     if data["status"] == "next_frame":
                         info = pipeline.Info()
+                        receive_params_start = time.time()
                         params = await self.conn_manager.receive_json(user_id)
+                        if self.args.debug:
+                            print(f"Time to receive params: {time.time() - receive_params_start:.4f}s")
                         # Update acid processor settings if included in params
 
                         ########### FREQ DATA FROM FRONTEND ######################33
                         # print(f"[main.py] Handle websocket data - params: {params}")
                         # print(f"[main.py] Use acid settings in params: {params}")
                         if self.use_acid_processor and "acid_settings" in params:
+                            acid_settings_start = time.time()
                             acid_settings = params.pop("acid_settings", {})
                             # print(f"[main.py] Handle websocket data - acid_settings: {acid_settings}")
                             self._update_acid_settings(acid_settings)
@@ -334,12 +342,18 @@ class App:
                                         print(f"[main.py] Updated zoom factor from frequency analysis: {new_zoom:.2f}")
                                     # Apply the updated zoom factor to the acid processor
                                     self.acid_processor.set_zoom_factor(new_zoom)
+                            if self.args.debug:
+                                print(f"Time to process acid settings: {time.time() - acid_settings_start:.4f}s")
                         
+                        params_creation_start = time.time()
                         params = pipeline.InputParams(**params)
                         params = SimpleNamespace(**params.dict())
+                        if self.args.debug:
+                            print(f"Time to create params object: {time.time() - params_creation_start:.4f}s")
                         
                         # Process prompt travel requests if enabled
                         if self.use_prompt_travel and getattr(params, 'use_prompt_travel', False):
+                            prompt_travel_start = time.time()
                             try:
                                 # Set user_id on params for the pipeline to use
                                 user_id_str = str(user_id)
@@ -405,27 +419,42 @@ class App:
                             except Exception as e:
                                 print(f"Error during prompt travel: {e}")
                                 # Continue without prompt travel embeddings
+                            if self.args.debug:
+                                print(f"Time to process prompt travel: {time.time() - prompt_travel_start:.4f}s")
                         
                         if info.input_mode == "image":
+                            receive_image_start = time.time()
                             image_data = await self.conn_manager.receive_bytes(user_id)
+                            if self.args.debug:
+                                print(f"Time to receive image data: {time.time() - receive_image_start:.4f}s")
 
                             if len(image_data) == 0:
                                 await self.conn_manager.send_json(
                                     user_id, {"status": "send_frame"}
                                 )
                                 continue
+                            
+                            image_processing_start = time.time()
                             params.image = bytes_to_pil(image_data)
                             
                             # Apply acid processing if enabled
                             if self.use_acid_processor and params.image:
                                 # print(f"[main.py] Handle websocket data - image: {params.image}")
+                                acid_start = time.time()
                                 params.image = self._apply_acid_processing(params.image)
+                                if self.args.debug:
+                                    print(f"Time for acid processing: {time.time() - acid_start:.4f}s")
                                 # print(f"[main.py] After acid processing, image type: {type(params.image)}")
+                            
                             if self.use_background_removal and params.image:
+                                bg_removal_start = time.time()
                                 params.image = self._apply_background_removal(params.image)
+                                if self.args.debug:
+                                    print(f"Time for background removal: {time.time() - bg_removal_start:.4f}s")
                             
                             # Apply depth estimation if enabled
                             if self.use_depth_estimator and params.image and getattr(params, 'use_depth_estimation', True):
+                                depth_start = time.time()
                                 try:
                                     print("[main.py] Applying depth estimation")
                                     # Get the depth map
@@ -439,9 +468,18 @@ class App:
                                 except Exception as e:
                                     print(f"[main.py] Error during depth estimation: {e}")
                                     # Continue without depth estimation
+                                if self.args.debug:
+                                    print(f"Time for depth estimation: {time.time() - depth_start:.4f}s")
+                            
+                            if self.args.debug:
+                                print(f"Total image processing time: {time.time() - image_processing_start:.4f}s")
 
+                        update_data_start = time.time()
                         await self.conn_manager.update_data(user_id, params)
                         await self.conn_manager.send_json(user_id, {"status": "wait"})
+                        if self.args.debug:
+                            print(f"Time to update data and send wait status: {time.time() - update_data_start:.4f}s")
+                            print(f"Total loop processing time: {time.time() - loop_start_time:.4f}s")
 
             except Exception as e:
                 logging.error(f"Websocket Error: {e}, {user_id} ")
@@ -457,7 +495,7 @@ class App:
             try:
 
                 async def generate():
-                    last_params = SimpleNamespace()
+                    # last_params = SimpleNamespace()
                     while True:
                         last_time = time.time()
                         await self.conn_manager.send_json(
@@ -465,21 +503,24 @@ class App:
                         )
                         params = await self.conn_manager.get_latest_data(user_id)
                         
-                        # Compare params while excluding tensor attributes to avoid comparison error
-                        params_equal = False
-                        if params is not None and hasattr(params, '__dict__') and hasattr(last_params, '__dict__'):
-                            # Create filtered dictionaries excluding tensor attributes
-                            params_dict = {k: v for k, v in params.__dict__.items() 
-                                          if not isinstance(v, torch.Tensor)}
-                            last_params_dict = {k: v for k, v in last_params.__dict__.items() 
-                                               if not isinstance(v, torch.Tensor)}
-                            params_equal = params_dict == last_params_dict
+                        # # Compare params while excluding tensor attributes to avoid comparison error
+                        # params_equal = False
+                        # if params is not None and hasattr(params, '__dict__') and hasattr(last_params, '__dict__'):
+                        #     # Create filtered dictionaries excluding tensor attributes
+                        #     params_dict = {k: v for k, v in params.__dict__.items() 
+                        #                   if not isinstance(v, torch.Tensor)}
+                        #     last_params_dict = {k: v for k, v in last_params.__dict__.items() 
+                        #                        if not isinstance(v, torch.Tensor)}
+                        #     params_equal = params_dict == last_params_dict
                             
-                        if params_equal or params is None:
-                            await asyncio.sleep(THROTTLE)
-                            continue
+                        # if params_equal or params is None:
+                        #     await asyncio.sleep(THROTTLE)
+                        #     continue
                             
-                        last_params: SimpleNamespace = params
+                        # last_params: SimpleNamespace = params
+                        if self.args.debug:
+                            print(f"All the param stuff time taken: {time.time() - last_time}")
+
                         last_img_time = time.time()
                         image = pipeline.predict(params)
                         if self.args.debug:
@@ -494,22 +535,33 @@ class App:
                             continue
 
                         if self.use_background_removal and getattr(params, 'use_output_bg_removal', False):
+                            last_remove_time = time.time()
                             image = self._apply_background_removal(image)
-                            
+                            after_remove_time = time.time() - last_remove_time
+                            if self.args.debug:
+                                print(f"Output background removal time taken: {after_remove_time}")
                         # Update acid processor with the diffused image for next processing cycle
                         if self.use_acid_processor:
+                            last_acid_time = time.time()
                             # Convert PIL image to numpy array if needed
                             img_diffusion = np.array(image)
                             self.acid_processor.update(img_diffusion)
-
+                            after_acid_time = time.time() - last_acid_time
+                            if self.args.debug:
+                                print(f"Acid time taken: {after_acid_time}")
+                        
+                        last_frame_time = time.time()
                         frame = pil_to_frame(image)
+                        if self.args.debug:
+                            print(f"Pil to frame time taken: {time.time() - last_frame_time}")
                         # frame = pil_to_frame(params.acid_image)
-
+                        last_yielding_the_frame = time.time()
                         yield frame
                         # https://bugs.chromium.org/p/chromium/issues/detail?id=1250396
                         if not is_firefox(request.headers["user-agent"]):
                             yield frame
                         if self.args.debug:
+                            print(f"Yielding Time taken: {time.time() - last_yielding_the_frame}")
                             print(f"Websocket Time taken: {time.time() - last_time}")
 
                 return StreamingResponse(

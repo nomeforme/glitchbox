@@ -217,7 +217,7 @@ class Pipeline:
             safety_checker=None,
             torch_dtype=torch_dtype,
         )
-
+        self.pipe.load_lora_weights("server/loras/flowers-000022.safetensors")
         if args.taesd:
             self.pipe.vae = AutoencoderTiny.from_pretrained(
                 taesd_model, torch_dtype=torch_dtype, use_safetensors=True
@@ -394,7 +394,7 @@ class Pipeline:
         # )
 
         #print("latents", latents)   
-        print("latents shape", latents.shape)
+        #print("latents shape", latents.shape)
 
         steps = params.steps
         strength = params.strength

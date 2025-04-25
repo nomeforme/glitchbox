@@ -3,7 +3,7 @@ name = "real-time-latent-consistency-model"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 dependencies = [
     "accelerate>=1.5.2",
     "colored>=2.3.0",
@@ -27,12 +27,16 @@ dependencies = [
     "pycuda>=2025.1",
     "rembg>=2.0.65",
     "setuptools>=77.0.3",
-    "tensorrt>=10.9.0.34",
-    "torch>=2.6.0",
-    "torch-xla>=2.6.1",
-    "torchvision>=0.21.0",
     "transformers>=4.49.0",
     "uvicorn[standard]>=0.34.0",
+    "tensorrt>=10.9.0.34",
+    "torch==2.6.0",
+    "torchvision>=0.21.0",
+    "xformers>=0.0.29.post3",
+    "triton>=3.2.0",
+    "oneflow>=0.9.1.dev20231222",
+    "onediff>=1.2.1.dev46",
+    "onnxruntime-gpu>=1.21.1",
 ]
 
 [tool.uv.sources]

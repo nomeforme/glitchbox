@@ -45,3 +45,13 @@ GIT_SSH_COMMAND="ssh -i ~/.ssh/id_GT2" git add .
 
 echo "pinentry-program /usr/bin/pinentry-curses" > ~/.gnupg/gpg-agent.conf && gpgconf --kill gpg-agent
 export GPG_TTY=$(tty) && echo "export GPG_TTY=\$(tty)" >> ~/.bashrc
+
+uv run server/tensorrt_convert/sd_to_onnx.py --model_path stabilityai/sd-turbo --controlnet_path thibaud/controlnet-sd21-depth-diffusers thibaud/controlnet-sd21-canny-diffusers --output_path server/tensorrt_convert/onnx_models
+
+# Using local depth sd2.1 controlnet
+uv run server/tensorrt_convert/sd_to_onnx.py --model_path stabilityai/sd-turbo --controlnet_path server/tensorrt_convert/checkpoints/diffusion_pytorch_model.safetensors --output_path server/tensorrt_convert/onnx_models
+uv run server/tensorrt_convert/convert_all_models.py
+
+uv run server/pipelines/trtControlnetImg2Img.py --sd_model "stabilityai/sd-turbo" --onnx_model_dir "server/tensorrt_convert/onnx_models" --unet_engine_path "server/tensorrt_convert/onnx_models/unet/unet.engine" --qr_img_path "server/assets/mountain.png"
+
+uv pip install -v -U git+https://github.com/chengzeyi/stable-fast.git@main#egg=stable-fast --no-build-isolation

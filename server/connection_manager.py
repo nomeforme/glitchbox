@@ -4,7 +4,14 @@ import asyncio
 from fastapi import WebSocket
 from starlette.websockets import WebSocketState
 import logging
+import time
 from types import SimpleNamespace
+
+# Configure logging to include filename
+logging.basicConfig(
+    format='%(asctime)s - %(filename)s - %(levelname)s - %(message)s',
+    level=logging.INFO
+)
 
 Connections = Dict[UUID, Dict[str, Union[WebSocket, asyncio.Queue]]]
 
@@ -22,15 +29,16 @@ class ConnectionManager:
     async def connect(
         self, user_id: UUID, websocket: WebSocket, max_queue_size: int = 0
     ):
+        start_time = time.time()
         await websocket.accept()
         user_count = self.get_user_count()
-        print(f"User count: {user_count}")
+        logging.info(f"User count: {user_count}")
         if max_queue_size > 0 and user_count >= max_queue_size:
-            print("Server is full")
+            logging.warning("Server is full")
             await websocket.send_json({"status": "error", "message": "Server is full"})
             await websocket.close()
             raise ServerFullException("Server is full")
-        print(f"New user connected: {user_id}")
+        logging.info(f"New user connected: {user_id}")
         self.active_connections[user_id] = {
             "websocket": websocket,
             "queue": asyncio.Queue(),
@@ -40,23 +48,34 @@ class ConnectionManager:
         )
         await websocket.send_json({"status": "wait"})
         await websocket.send_json({"status": "send_frame"})
+        end_time = time.time()
+        logging.info(f"Connection setup completed in {end_time - start_time:.2f} seconds")
 
     def check_user(self, user_id: UUID) -> bool:
         return user_id in self.active_connections
 
     async def update_data(self, user_id: UUID, new_data: SimpleNamespace):
+        start_time = time.time()
         user_session = self.active_connections.get(user_id)
         if user_session:
             queue = user_session["queue"]
             await queue.put(new_data)
+            end_time = time.time()
+            logging.info(f"Data update completed in {end_time - start_time:.2f} seconds")
 
     async def get_latest_data(self, user_id: UUID) -> SimpleNamespace:
+        start_time = time.time()
         user_session = self.active_connections.get(user_id)
         if user_session:
             queue = user_session["queue"]
             try:
-                return await queue.get()
+                data = await queue.get()
+                end_time = time.time()
+                logging.info(f"Data retrieval completed in {end_time - start_time:.2f} seconds")
+                return data
             except asyncio.QueueEmpty:
+                end_time = time.time()
+                logging.info(f"Empty queue check completed in {end_time - start_time:.2f} seconds")
                 return None
 
     def delete_user(self, user_id: UUID):
@@ -87,25 +106,39 @@ class ConnectionManager:
         self.delete_user(user_id)
 
     async def send_json(self, user_id: UUID, data: Dict):
+        start_time = time.time()
         try:
             websocket = self.get_websocket(user_id)
             if websocket:
                 await websocket.send_json(data)
+                end_time = time.time()
+                logging.info(f"JSON send completed in {end_time - start_time:.2f} seconds")
         except Exception as e:
-            logging.error(f"Error: Send json: {e}")
+            end_time = time.time()
+            logging.error(f"Error: Send json: {e} (took {end_time - start_time:.2f} seconds)")
 
     async def receive_json(self, user_id: UUID) -> Dict:
+        start_time = time.time()
         try:
             websocket = self.get_websocket(user_id)
             if websocket:
-                return await websocket.receive_json()
+                data = await websocket.receive_json()
+                end_time = time.time()
+                logging.info(f"JSON receive completed in {end_time - start_time:.2f} seconds")
+                return data
         except Exception as e:
-            logging.error(f"Error: Receive json: {e}")
+            end_time = time.time()
+            logging.error(f"Error: Receive json: {e} (took {end_time - start_time:.2f} seconds)")
 
     async def receive_bytes(self, user_id: UUID) -> bytes:
+        start_time = time.time()
         try:
             websocket = self.get_websocket(user_id)
             if websocket:
-                return await websocket.receive_bytes()
+                data = await websocket.receive_bytes()
+                end_time = time.time()
+                logging.info(f"Bytes receive completed in {end_time - start_time:.2f} seconds")
+                return data
         except Exception as e:
-            logging.error(f"Error: Receive bytes: {e}")
+            end_time = time.time()
+            logging.error(f"Error: Receive bytes: {e} (took {end_time - start_time:.2f} seconds)")
