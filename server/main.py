@@ -31,9 +31,11 @@ from modules.prompt_travel.embeddings_service import router as embeddings_router
 # Import the prompt travel scheduler
 from modules.prompt_scheduler import PromptTravelScheduler
 # Import background removal processor
-from modules.bg_removal import get_processor
+from modules.bg_removal import get_processor as get_bg_removal_processor
 # Import the depth estimator
 from modules.depth_anything.depth_anything_trt import DepthAnythingTRT
+# Import the PIL upscaler processor
+from modules.pil_upscaler import get_processor as get_upscaler_processor
 
 import numpy as np
 
@@ -196,8 +198,17 @@ class App:
         
         # Initialize background removal processor
         if self.use_background_removal:
-            self.bg_removal_processor = get_processor(device=device.type)
+            self.bg_removal_processor = get_bg_removal_processor(device=device.type)
             print("[main.py] Background removal processor initialized")
+            
+        # Initialize PIL upscaler processor
+        self.use_pil_upscaler = getattr(self.args, 'use_pil_upscaler', False)
+        if self.use_pil_upscaler:
+            self.upscaler_processor = get_upscaler_processor(device=device.type)
+            # Configure upscaler with default settings from config
+            self.upscaler_processor.set_scale_factor(getattr(self.args, 'upscaler_scale_factor', 2))
+            self.upscaler_processor.set_resample_method(getattr(self.args, 'upscaler_resample_method', 'lanczos'))
+            print("[main.py] PIL upscaler processor initialized")
         
         self.init_app()
 
@@ -314,7 +325,7 @@ class App:
                         print(f"Time to receive JSON data: {time.time() - receive_json_start:.4f}s")
 
                     if data["status"] == "next_frame":
-                        info = pipeline.Info()
+                        info = self.pipeline.Info()
                         receive_params_start = time.time()
                         params = await self.conn_manager.receive_json(user_id)
                         if self.args.debug:
@@ -346,7 +357,7 @@ class App:
                                 print(f"Time to process acid settings: {time.time() - acid_settings_start:.4f}s")
                         
                         params_creation_start = time.time()
-                        params = pipeline.InputParams(**params)
+                        params = self.pipeline.InputParams(**params)
                         params = SimpleNamespace(**params.dict())
                         if self.args.debug:
                             print(f"Time to create params object: {time.time() - params_creation_start:.4f}s")
@@ -522,7 +533,7 @@ class App:
                             print(f"All the param stuff time taken: {time.time() - last_time}")
 
                         last_img_time = time.time()
-                        image = pipeline.predict(params)
+                        image = self.pipeline.predict(params)
                         if self.args.debug:
                             print(f"Img gen time taken: {time.time() - last_img_time}")
 
@@ -540,6 +551,15 @@ class App:
                             after_remove_time = time.time() - last_remove_time
                             if self.args.debug:
                                 print(f"Output background removal time taken: {after_remove_time}")
+                                
+                        # Apply PIL upscaling if enabled
+                        if self.use_pil_upscaler and getattr(params, 'use_output_upscaling', False):
+                            last_upscale_time = time.time()
+                            image = self._apply_pil_upscaling(image)
+                            after_upscale_time = time.time() - last_upscale_time
+                            if self.args.debug:
+                                print(f"Output PIL upscaling time taken: {after_upscale_time}")
+                                
                         # Update acid processor with the diffused image for next processing cycle
                         if self.use_acid_processor:
                             last_acid_time = time.time()
@@ -682,6 +702,13 @@ class App:
             # Reload prompts
             if "reload_prompts" in settings and settings["reload_prompts"]:
                 self.prompt_travel_scheduler.reload_prompts()
+                
+        # Update PIL upscaler settings if enabled
+        if self.use_pil_upscaler:
+            if "upscaler_scale_factor" in settings:
+                self.upscaler_processor.set_scale_factor(settings["upscaler_scale_factor"])
+            if "upscaler_resample_method" in settings:
+                self.upscaler_processor.set_resample_method(settings["upscaler_resample_method"])
     
     def _apply_acid_processing(self, pil_image):
         """Process image with acid processor and return processed PIL image"""
@@ -721,12 +748,28 @@ class App:
             return pil_image
             
         return self.bg_removal_processor.process_image(pil_image)
+        
+    def _apply_pil_upscaling(self, pil_image):
+        """
+        Apply upscaling to a PIL image using PIL.
+        
+        Args:
+            pil_image (PIL.Image): Input image
+            
+        Returns:
+            PIL.Image: Upscaled image
+        """
+        if not self.use_pil_upscaler:
+            return pil_image
+            
+        return self.upscaler_processor.process_image(pil_image)
 
 print(f"Device: {device}")
 print(f"torch_dtype: {torch_dtype}")
 pipeline_class = get_pipeline_class(config.pipeline)
 pipeline = pipeline_class(config, device, torch_dtype)
-app = App(config, pipeline).app
+app_instance = App(config, pipeline)
+app = app_instance.app
 
 if __name__ == "__main__":
     import uvicorn
@@ -734,7 +777,7 @@ if __name__ == "__main__":
     try:
         print(f"Starting server on {config.host}:{config.port}")
         uvicorn.run(
-            "main:app",
+            app,
             host=config.host,
             port=config.port,
             reload=config.reload,

@@ -37,6 +37,7 @@ dependencies = [
     "oneflow>=0.9.1.dev20231222",
     "onediff>=1.2.1.dev46",
     "onnxruntime-gpu>=1.21.1",
+    "super-image>=0.1.7",
 ]
 
 [tool.uv.sources]

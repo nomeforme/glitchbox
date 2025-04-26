@@ -16,6 +16,7 @@ from pycuda.tools import make_default_context
 from transformers import CLIPTokenizer
 
 from diffusers import OnnxRuntimeModel, StableDiffusionImg2ImgPipeline, UniPCMultistepScheduler, LCMScheduler, AutoencoderKL, AutoencoderTiny
+from diffusers.pipelines.pipeline_utils import DiffusionPipeline, StableDiffusionMixin
 from diffusers.image_processor import VaeImageProcessor
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline
 from diffusers.pipelines.stable_diffusion import StableDiffusionPipelineOutput
@@ -25,50 +26,9 @@ from diffusers.utils import (
     logging,
     replace_example_docstring,
 )
+from diffusers.loaders import FromSingleFileMixin, IPAdapterMixin, StableDiffusionLoraLoaderMixin, TextualInversionLoaderMixin
 
 from diffusers.utils.torch_utils import is_compiled_module, is_torch_version, randn_tensor
-
-import torch
-from PIL import Image
-from typing import List, Union
-
-def tensor_to_pil(images):
-    """
-    Efficiently convert a batch of PyTorch tensors to PIL Images.
-
-    Args:
-        images (torch.Tensor): Tensor with shape (B, C, H, W) or (C, H, W).
-
-    Returns:
-        List[PIL.Image.Image] if batch, or single PIL.Image.Image if input was 1 image.
-    """
-    if not isinstance(images, torch.Tensor):
-        raise TypeError(f"Expected torch.Tensor, got {type(images)}")
-    
-    is_single = False
-    if images.ndim == 3:
-        images = images.unsqueeze(0)  # (1, C, H, W)
-        is_single = True
-    elif images.ndim != 4:
-        raise ValueError(f"Expected tensor of shape (B, C, H, W) or (C, H, W), got {images.shape}")
-
-    if images.is_cuda:
-        images = images.cpu()
-
-    if images.dtype != torch.uint8:
-        images = (images * 255).clamp(0, 255).to(torch.uint8)
-
-    images = images.permute(0, 2, 3, 1).contiguous()  # (B, H, W, C)
-    np_images = images.numpy()
-
-    pil_images = []
-    for img in np_images:
-        if img.shape[-1] == 1:
-            pil_images.append(Image.fromarray(img.squeeze(-1), mode="L"))
-        else:
-            pil_images.append(Image.fromarray(img))
-
-    return pil_images[0] if is_single else pil_images
 
 
 
@@ -90,12 +50,34 @@ def load_engine(trt_runtime, engine_path):
     return engine
 
 
+class TensorRTModelConfig:
+    """Configuration class for TensorRTModel."""
+    def __init__(
+        self,
+        in_channels: int = 4,
+        out_channels: int = 4,
+        sample_size: int = 64,
+    ):
+        self.in_channels = in_channels
+        self.out_channels = out_channels
+        self.sample_size = sample_size
+
+
 class TensorRTModel:
     def __init__(
         self,
         trt_engine_path,
+        in_channels: int = 4,
+        out_channels: int = 4,
+        sample_size: int = 64,
         **kwargs,
     ):
+        self.config = TensorRTModelConfig(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            sample_size=sample_size,
+        )
+
         cuda.init()
         stream = cuda.Stream()
         TRT_LOGGER = trt.Logger(trt.Logger.VERBOSE)
@@ -277,7 +259,14 @@ def prepare_image(image):
     return image
 
 
-class TensorRTStableDiffusionControlNetImg2ImgPipeline(DiffusionPipeline):
+class TensorRTStableDiffusionControlNetImg2ImgPipeline(
+    DiffusionPipeline,
+    StableDiffusionMixin,
+    TextualInversionLoaderMixin,
+    StableDiffusionLoraLoaderMixin,
+    IPAdapterMixin,
+    FromSingleFileMixin,
+):
     vae: AutoencoderKL
     text_encoder: OnnxRuntimeModel
     tokenizer: CLIPTokenizer
@@ -765,7 +754,7 @@ class TensorRTStableDiffusionControlNetImg2ImgPipeline(DiffusionPipeline):
         prompt_embeds: Optional[torch.FloatTensor] = None,
         negative_prompt_embeds: Optional[torch.FloatTensor] = None,
         output_type: Optional[str] = "pil",
-        return_dict: bool = True,
+        return_dict: bool = False,
         callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
         callback_steps: int = 1,
         cross_attention_kwargs: Optional[Dict[str, Any]] = None,
@@ -981,15 +970,17 @@ class TensorRTStableDiffusionControlNetImg2ImgPipeline(DiffusionPipeline):
 
         # 6. Prepare latent variables
         prepare_latents_start = time.time()
-        latents = self.prepare_latents(
-            image,
-            latent_timestep,
-            batch_size,
-            num_images_per_prompt,
-            torch_dtype,
-            device,
-            generator,
-        )
+        print(f"found latents: {latents}")
+        if latents is None:
+            latents = self.prepare_latents(
+                image,
+                latent_timestep,
+                batch_size,
+                num_images_per_prompt,
+                torch_dtype,
+                device,
+                generator,
+            )
         print(f"[TIMING] Latents preparation: {time.time() - prepare_latents_start:.4f} seconds")
 
         # 7. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
@@ -1016,78 +1007,76 @@ class TensorRTStableDiffusionControlNetImg2ImgPipeline(DiffusionPipeline):
         denoising_start = time.time()
         step_times = []
         
-        with self.progress_bar(total=max(1, num_inference_steps)) as progress_bar:
-            for i, t in enumerate(timesteps):
-                step_start = time.time()
-                
-                # expand the latents if we are doing classifier free guidance
-                latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+        for i, t in enumerate(timesteps):
+            step_start = time.time()
+            
+            # expand the latents if we are doing classifier free guidance
+            latent_model_input = torch.cat([latents] * 2) if do_classifier_free_guidance else latents
+            latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
-                if isinstance(controlnet_keep[i], list):
-                    cond_scale = [c * s for c, s in zip(controlnet_conditioning_scale, controlnet_keep[i])]
-                else:
-                    controlnet_cond_scale = controlnet_conditioning_scale
-                    if isinstance(controlnet_cond_scale, list):
-                        controlnet_cond_scale = controlnet_cond_scale[0]
-                    cond_scale = controlnet_cond_scale * controlnet_keep[i]
+            if isinstance(controlnet_keep[i], list):
+                cond_scale = [c * s for c, s in zip(controlnet_conditioning_scale, controlnet_keep[i])]
+            else:
+                controlnet_cond_scale = controlnet_conditioning_scale
+                if isinstance(controlnet_cond_scale, list):
+                    controlnet_cond_scale = controlnet_cond_scale[0]
+                cond_scale = controlnet_cond_scale * controlnet_keep[i]
 
-                # predict the noise residual
-                _latent_model_input = latent_model_input.cpu().detach().numpy()
-                _prompt_embeds = np.array(prompt_embeds, dtype=np_dtype)
-                _t = np.array([t.cpu().detach().numpy()], dtype=np_dtype)
+            # predict the noise residual
+            _latent_model_input = latent_model_input.cpu().detach().numpy()
+            _prompt_embeds = np.array(prompt_embeds, dtype=np_dtype)
+            _t = np.array([t.cpu().detach().numpy()], dtype=np_dtype)
 
-                if num_controlnet == 1:
-                    control_images = np.array([control_image.cpu().detach().numpy()], dtype=np_dtype)
-                else:
-                    control_images = []
-                    for _control_img in control_image:
-                        _control_img = _control_img.cpu().detach().numpy()
-                        control_images.append(_control_img)
-                    control_images = np.array(control_images, dtype=np_dtype)
+            if num_controlnet == 1:
+                control_images = np.array([control_image.cpu().detach().numpy()], dtype=np_dtype)
+            else:
+                control_images = []
+                for _control_img in control_image:
+                    _control_img = _control_img.cpu().detach().numpy()
+                    control_images.append(_control_img)
+                control_images = np.array(control_images, dtype=np_dtype)
 
-                control_scales = np.array(cond_scale, dtype=np_dtype)
-                control_scales = np.resize(control_scales, (num_controlnet, 1))
+            control_scales = np.array(cond_scale, dtype=np_dtype)
+            control_scales = np.resize(control_scales, (num_controlnet, 1))
 
-                print(f"cond_scale: {cond_scale}")
-                print(f"control_scales: {control_scales}")
-                print(f"control_images: {control_images.shape}")
-                print(f"len controlnet_keep: {len(controlnet_keep)}")
-                print(f"controlnet_keep: {controlnet_keep}")
+            print(f"cond_scale: {cond_scale}")
+            print(f"control_scales: {control_scales}")
+            print(f"control_images: {control_images.shape}")
+            print(f"len controlnet_keep: {len(controlnet_keep)}")
+            print(f"controlnet_keep: {controlnet_keep}")
 
-                unet_start = time.time()
-                noise_pred = self.unet(
-                    sample=_latent_model_input,
-                    timestep=_t,
-                    encoder_hidden_states=_prompt_embeds,
-                    controlnet_conds=control_images,
-                    conditioning_scales=control_scales,
-                )["noise_pred"]
-                unet_time = time.time() - unet_start
-                
-                noise_pred = torch.from_numpy(noise_pred).to(device)
+            unet_start = time.time()
+            noise_pred = self.unet(
+                sample=_latent_model_input,
+                timestep=_t,
+                encoder_hidden_states=_prompt_embeds,
+                controlnet_conds=control_images,
+                conditioning_scales=control_scales,
+            )["noise_pred"]
+            unet_time = time.time() - unet_start
+            
+            noise_pred = torch.from_numpy(noise_pred).to(device)
 
-                # perform guidance
-                if do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
+            # perform guidance
+            if do_classifier_free_guidance:
+                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                noise_pred = noise_pred_uncond + guidance_scale * (noise_pred_text - noise_pred_uncond)
 
-                # compute the previous noisy sample x_t -> x_t-1
-                scheduler_start = time.time()
-                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
-                scheduler_time = time.time() - scheduler_start
+            # compute the previous noisy sample x_t -> x_t-1
+            scheduler_start = time.time()
+            latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
+            scheduler_time = time.time() - scheduler_start
 
-                # call the callback, if provided
-                if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
-                    progress_bar.update()
-                    if callback is not None and i % callback_steps == 0:
-                        callback(i, t, latents)
-                
-                step_time = time.time() - step_start
-                step_times.append(step_time)
-                
-                if i % 5 == 0 or i == len(timesteps) - 1:
-                    print(f"[TIMING] Step {i}/{len(timesteps)-1}: {step_time:.4f}s (UNet: {unet_time:.4f}s, Scheduler: {scheduler_time:.4f}s)")
+            # call the callback, if provided
+            if i == len(timesteps) - 1 or ((i + 1) > num_warmup_steps and (i + 1) % self.scheduler.order == 0):
+                if callback is not None and i % callback_steps == 0:
+                    callback(i, t, latents)
+            
+            step_time = time.time() - step_start
+            step_times.append(step_time)
+            
+            if i % 5 == 0 or i == len(timesteps) - 1:
+                print(f"[TIMING] Step {i}/{len(timesteps)-1}: {step_time:.4f}s (UNet: {unet_time:.4f}s, Scheduler: {scheduler_time:.4f}s)")
         
         # Calculate average step time, handling the case when step_times is empty
         if step_times:
@@ -1122,9 +1111,7 @@ class TensorRTStableDiffusionControlNetImg2ImgPipeline(DiffusionPipeline):
 
         # Add timing for image processor
         image_processor_start = time.time()
-        print(f"[DEBUG] Output type: {output_type}")
         image = self.image_processor.postprocess(image, output_type=output_type, do_denormalize=do_denormalize)
-        # image = tensor_to_pil(image_tensor)
         print(f"[TIMING] Image processor postprocess: {time.time() - image_processor_start:.4f} seconds")
 
         print(f"[TIMING] Post-processing: {time.time() - postprocess_start:.4f} seconds")
@@ -1133,7 +1120,7 @@ class TensorRTStableDiffusionControlNetImg2ImgPipeline(DiffusionPipeline):
         print(f"[TIMING] Total pipeline execution: {total_time:.4f} seconds")
 
         if not return_dict:
-            return (image, has_nsfw_concept)
+            return (image, latents, has_nsfw_concept)
 
         return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=has_nsfw_concept)
 
