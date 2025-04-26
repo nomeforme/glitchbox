@@ -30,7 +30,6 @@ dependencies = [
     "transformers>=4.49.0",
     "uvicorn[standard]>=0.34.0",
     "tensorrt>=10.9.0.34",
-    "torch==2.6.0",
     "torchvision>=0.21.0",
     "xformers>=0.0.29.post3",
     "triton>=3.2.0",
@@ -38,6 +37,8 @@ dependencies = [
     "onediff>=1.2.1.dev46",
     "onnxruntime-gpu>=1.21.1",
     "super-image>=0.1.7",
+    "torch==2.6.0",
+    "omegaconf>=2.3.0",
 ]
 
 [tool.uv.sources]

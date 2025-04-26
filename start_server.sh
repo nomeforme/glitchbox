@@ -1,6 +1,6 @@
 # export HF_HOME="/media/monsterdrive/models"
-uv run server/main.py --pipeline controlnetSDTurbot2i --taesd # --torch_compile # --sfast
-uv run server/main.py --pipeline predict # --torch_compile # --sfast
+uv run server/main.py --pipeline controlnetSDTurbot2i --taesd --sfast # --torch_compile # --sfast
+# uv run server/main.py --pipeline predict # --torch_compile # --sfast
 
 # uv run server/main.py --pipeline controlnetTRTSDTurbot2i # --torch_compile # --sfast
 # uv run server/main.py --pipeline img2img
