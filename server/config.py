@@ -73,8 +73,9 @@ class Args(NamedTuple):
     test_x_max: int = 50
     test_y_max: int = 50
     use_background_removal: bool = True
-    # Enable PIL upscaler
-    use_pil_upscaler: bool = False
+    # Enable upscaler
+    use_upscaler: bool = False
+    upscaler_type: str = "fast_srgan"
     upscaler_scale_factor: float = 2.0
     upscaler_resample_method: str = "lanczos"
 
@@ -504,20 +505,28 @@ parser.add_argument(
     help="Save depth maps in grayscale",
 )
 
-# Add PIL upscaler arguments
+# Add upscaler arguments
 parser.add_argument(
-    "--use-pil-upscaler",
-    dest="use_pil_upscaler",
+    "--use-upscaler",
+    dest="use_upscaler",
     action="store_true",
     default=True,
-    help="Enable PIL upscaler for output images",
+    help="Enable upscaler for output images",
+)
+parser.add_argument(
+    "--upscaler-type",
+    dest="upscaler_type",
+    type=str,
+    default="fast_srgan",
+    choices=["pil", "fast_srgan"],
+    help="Type of upscaler to use (default: fast_srgan)",
 )
 parser.add_argument(
     "--upscaler-scale-factor",
     dest="upscaler_scale_factor",
     type=float,
     default=2.0,
-    help="Scale factor for PIL upscaler (default: 2.0)",
+    help="Scale factor for upscaler (default: 2.0)",
 )
 parser.add_argument(
     "--upscaler-resample-method",
@@ -525,7 +534,7 @@ parser.add_argument(
     type=str,
     default="lanczos",
     choices=["nearest", "bilinear", "bicubic", "lanczos"],
-    help="Resampling method for PIL upscaler (default: lanczos)",
+    help="Resampling method for upscaler (default: lanczos)",
 )
 
 parser.set_defaults(taesd=USE_TAESD)

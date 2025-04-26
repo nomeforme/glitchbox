@@ -34,8 +34,8 @@ from modules.prompt_scheduler import PromptTravelScheduler
 from modules.bg_removal import get_processor as get_bg_removal_processor
 # Import the depth estimator
 from modules.depth_anything.depth_anything_trt import DepthAnythingTRT
-# Import the PIL upscaler processor
-from modules.pil_upscaler import get_processor as get_upscaler_processor
+# Import the upscaler processor
+from modules.upscaler import get_processor as get_upscaler_processor
 
 import numpy as np
 
@@ -201,14 +201,15 @@ class App:
             self.bg_removal_processor = get_bg_removal_processor(device=device.type)
             print("[main.py] Background removal processor initialized")
             
-        # Initialize PIL upscaler processor
-        self.use_pil_upscaler = getattr(self.args, 'use_pil_upscaler', False)
-        if self.use_pil_upscaler:
-            self.upscaler_processor = get_upscaler_processor(device=device.type)
+        # Initialize upscaler processor
+        self.use_upscaler = getattr(self.args, 'use_upscaler', False)
+        if self.use_upscaler:
+            upscaler_type = getattr(self.args, 'upscaler_type', 'fast_srgan')
+            self.upscaler_processor = get_upscaler_processor(device=device.type, upscaler_type=upscaler_type)
             # Configure upscaler with default settings from config
             self.upscaler_processor.set_scale_factor(getattr(self.args, 'upscaler_scale_factor', 2))
             self.upscaler_processor.set_resample_method(getattr(self.args, 'upscaler_resample_method', 'lanczos'))
-            print("[main.py] PIL upscaler processor initialized")
+            print(f"[main.py] {upscaler_type.upper()} upscaler processor initialized")
         
         self.init_app()
 
@@ -553,12 +554,12 @@ class App:
                                 print(f"Output background removal time taken: {after_remove_time}")
                                 
                         # Apply PIL upscaling if enabled
-                        if self.use_pil_upscaler and getattr(params, 'use_output_upscaling', False):
+                        if self.use_upscaler and getattr(params, 'use_output_upscaling', False):
                             last_upscale_time = time.time()
-                            image = self._apply_pil_upscaling(image)
+                            image = self._apply_upscaling(image)
                             after_upscale_time = time.time() - last_upscale_time
                             if self.args.debug:
-                                print(f"Output PIL upscaling time taken: {after_upscale_time}")
+                                print(f"Output upscaling time taken: {after_upscale_time}")
                                 
                         # Update acid processor with the diffused image for next processing cycle
                         if self.use_acid_processor:
@@ -703,8 +704,8 @@ class App:
             if "reload_prompts" in settings and settings["reload_prompts"]:
                 self.prompt_travel_scheduler.reload_prompts()
                 
-        # Update PIL upscaler settings if enabled
-        if self.use_pil_upscaler:
+        # Update upscaler settings if enabled
+        if self.use_upscaler:
             if "upscaler_scale_factor" in settings:
                 self.upscaler_processor.set_scale_factor(settings["upscaler_scale_factor"])
             if "upscaler_resample_method" in settings:
@@ -749,7 +750,7 @@ class App:
             
         return self.bg_removal_processor.process_image(pil_image)
         
-    def _apply_pil_upscaling(self, pil_image):
+    def _apply_upscaling(self, pil_image):
         """
         Apply upscaling to a PIL image using PIL.
         
@@ -759,7 +760,7 @@ class App:
         Returns:
             PIL.Image: Upscaled image
         """
-        if not self.use_pil_upscaler:
+        if not self.use_upscaler:
             return pil_image
             
         return self.upscaler_processor.process_image(pil_image)
