@@ -73,6 +73,10 @@ class Args(NamedTuple):
     test_x_max: int = 50
     test_y_max: int = 50
     use_background_removal: bool = True
+    # Enable PIL upscaler
+    use_pil_upscaler: bool = False
+    upscaler_scale_factor: float = 2.0
+    upscaler_resample_method: str = "lanczos"
 
     def pretty_print(self):
         print("\n")
@@ -497,7 +501,31 @@ parser.add_argument(
     dest="depth_grayscale",
     action="store_true",
     default=False,
-    help="Output depth maps in grayscale instead of colored visualization",
+    help="Save depth maps in grayscale",
+)
+
+# Add PIL upscaler arguments
+parser.add_argument(
+    "--use-pil-upscaler",
+    dest="use_pil_upscaler",
+    action="store_true",
+    default=True,
+    help="Enable PIL upscaler for output images",
+)
+parser.add_argument(
+    "--upscaler-scale-factor",
+    dest="upscaler_scale_factor",
+    type=float,
+    default=2.0,
+    help="Scale factor for PIL upscaler (default: 2.0)",
+)
+parser.add_argument(
+    "--upscaler-resample-method",
+    dest="upscaler_resample_method",
+    type=str,
+    default="lanczos",
+    choices=["nearest", "bilinear", "bicubic", "lanczos"],
+    help="Resampling method for PIL upscaler (default: lanczos)",
 )
 
 parser.set_defaults(taesd=USE_TAESD)

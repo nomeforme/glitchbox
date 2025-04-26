@@ -18,5 +18,7 @@ server/tensorrt_convert/onnx_models/*
 server/tensorrt_convert/onnx_models_tiny_vae/*
 server/tensorrt_convert/onnx_models_vanilla_vae/*
 
+server/assets/*
+
 # Ignore log files
 *.log
