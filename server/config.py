@@ -517,7 +517,7 @@ parser.add_argument(
     "--upscaler-type",
     dest="upscaler_type",
     type=str,
-    default="fast_srgan",
+    default="pil",
     choices=["pil", "fast_srgan"],
     help="Type of upscaler to use (default: fast_srgan)",
 )

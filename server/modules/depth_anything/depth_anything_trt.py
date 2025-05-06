@@ -69,17 +69,22 @@ class DepthAnythingTRT:
         Returns:
             PIL.Image: Depth map as a PIL image
         """
+        print(f"Input image type: {type(image)}")
+        
         # Convert PIL image to numpy array if needed
         if isinstance(image, Image.Image):
             # Get original dimensions
             orig_w, orig_h = image.size
+            print(f"Original image dimensions: {orig_w}x{orig_h}")
             
             # Convert to numpy array using the load_image function
             input_image, _ = load_image(image)
+            print(f"Converted input image shape: {input_image.shape}")
         else:
             # Assume image is already a numpy array
             input_image = image
             orig_h, orig_w = input_image.shape[:2]
+            print(f"Input numpy array shape: {input_image.shape}")
         
         # Copy the input image to the pagelocked memory
         np.copyto(self.h_input, input_image.ravel())
@@ -99,10 +104,29 @@ class DepthAnythingTRT:
         
         depth = self.h_output
         
-        # Process the depth output
-        depth = np.reshape(depth, self.output_shape[2:])
+        # Get the expected output shape
+        expected_shape = self.output_shape
+        print(f"Expected output shape: {expected_shape}")
+        print(f"Actual output size: {depth.size}")
+        
+        # Reshape the output to match the expected shape
+        try:
+            depth = np.reshape(depth, expected_shape)
+            print(f"Reshaped depth shape: {depth.shape}")
+            # Remove batch dimension only, keep the 2D shape
+            depth = depth[0]  # Shape should now be (518, 518)
+            print(f"After removing batch dimension: {depth.shape}")
+        except ValueError as e:
+            print(f"Error reshaping depth output: {e}")
+            print(f"Current shape: {depth.shape}")
+            raise
+        
+        # Normalize depth values
         depth = (depth - depth.min()) / (depth.max() - depth.min()) * 255.0
         depth = depth.astype(np.uint8)
+        
+        # Resize to original image dimensions
+        print(f"Resizing depth map to: {orig_w}x{orig_h}")
         depth = cv2.resize(depth, (orig_w, orig_h))
         
         # Convert to PIL Image
