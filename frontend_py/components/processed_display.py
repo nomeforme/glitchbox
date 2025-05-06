@@ -10,7 +10,7 @@ import os
 
 # Add the parent directory to the path to allow importing from the parent package
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import DISPLAY_WIDTH, DISPLAY_HEIGHT
+from config import DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_SCALE
 
 class StreamThread(QThread):
     """Thread for handling MJPEG stream from server"""
@@ -111,7 +111,7 @@ class ProcessedDisplay(QWidget):
         bytes_per_line = 3 * width
         q_image = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
         self.image_label.setPixmap(QPixmap.fromImage(q_image).scaled(
-            DISPLAY_WIDTH, DISPLAY_HEIGHT, Qt.KeepAspectRatio))
+            DISPLAY_WIDTH * DISPLAY_SCALE, DISPLAY_HEIGHT * DISPLAY_SCALE, Qt.KeepAspectRatio))
         
         # Update FPS counter in status bar
         main_window = self.window()

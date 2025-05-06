@@ -17,11 +17,12 @@ class CameraThread(QThread):
         super().__init__()
         self.running = False
         self.camera = None
+        self.device_index = 0
 
     def run(self):
         """Main thread loop for capturing camera frames"""
         try:
-            self.camera = cv2.VideoCapture(0)
+            self.camera = cv2.VideoCapture(self.device_index)
             self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, DISPLAY_WIDTH)
             self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, DISPLAY_HEIGHT)
             if not self.camera.isOpened():
