@@ -22,7 +22,6 @@ from config import Args
 from pydantic import BaseModel, Field
 from PIL import Image
 import math
-from controlnet_aux import OpenposeDetector, MidasDetector
 import uuid
 import torchvision.transforms as T
 from diffusers.utils.remote_utils import remote_decode
@@ -55,13 +54,23 @@ lora_models = {
     "style_pi_2": "server/loras/style_pi_2.safetensors",
     "pytorch_lora_weights": "server/loras/pytorch_lora_weights.safetensors",
     "FKATwigs_A1-000038": "server/loras/FKATwigs_A1-000038.safetensors",
-    "dark":"server/loras/flowers-000022.safetensors"
+    "dark":"server/loras/flowers-000022.safetensors",
+    "marina1":"server/loras/marina-glitch-000140.safetensors",
+    "marina-red": "server/loras/marina-red-000140.safetensors",
+    "abstract-monochrome": "server/loras/abstract-monochrome-000140.safetensors",
+    "abstract-brokenglass-red": "server/loras/abstract_brokenglass_red-000140.safetensors",
+    "full-body-glitch-monochrome": "server/loras/full_body_glitch-monochrome-000140.safetensors",
+    "full-body-glitch-reddish": "server/loras/full_body_glitch-reddish-000140.safetensors",
+    "mid-body-shoulders-glitch-monochrome": "server/loras/mid_body_shoulders_glitch-monochrome-000140.safetensors",
+    "mid-body-shoulders-glitch-reddish": "server/loras/mid_body_shoulders_glitch-reddish-000140.safetensors",
+    "mid-body-torso-glitch-monochrome": "server/loras/mid_body_torso_glitch-monochrome-000140.safetensors",
+    "mid-body-torso-glitch-reddish": "server/loras/mid_body_torso_glitch-reddish-000140.safetensors"
 }
 
 # Default LoRAs to use - can be a single LoRA or a list of LoRAs to fuse
-default_loras = ["FKATwigs_A1-000038"]
+default_loras = ["full-body-glitch-reddish"]
 # Default adapter weights for each LoRA (in the same order as default_loras)
-default_adapter_weights = [1.0]
+default_adapter_weights = [0.9]
 # default_loras = ["pbarbarant/sd-sonio"]
 # default_loras = ["FKATwigs_A1-000038", "pbarbarant/sd-sonio"]
 
@@ -381,20 +390,20 @@ class Pipeline:
                 taesd_model, torch_dtype=torch_dtype, use_safetensors=True
             ).to(device)
 
-        # # NOTE: torch compile temp ENABLED
-        # if True:
-        #     print("\nRunning torch compile\n")
-        #     self.pipe.unet = torch.compile(
-        #         self.pipe.unet, mode="reduce-overhead", fullgraph=True
-        #     )
-        #     self.pipe.vae = torch.compile(
-        #         self.pipe.vae, mode="reduce-overhead", fullgraph=True
-        #     )
-        #     # self.pipe(
-        #     #    prompt="warmup",
-        #     #    image=[Image.new("RGB", (768, 768))],
-        #     #    control_image=[Image.new("RGB", (768, 768))],
-        #     # )
+        # NOTE: torch compile temp ENABLED
+        if args.torch_compile:
+            print("\nRunning torch compile\n")
+            self.pipe.unet = torch.compile(
+                self.pipe.unet, mode="reduce-overhead", fullgraph=True
+            )
+            self.pipe.vae = torch.compile(
+                self.pipe.vae, mode="reduce-overhead", fullgraph=True
+            )
+            # self.pipe(
+            #    prompt="warmup",
+            #    image=[Image.new("RGB", (768, 768))],
+            #    control_image=[Image.new("RGB", (768, 768))],
+            # )
 
         # Initialize PromptTravel for both text and latent interpolation
         self.pipe.prompt_travel = PromptTravel(
@@ -594,7 +603,7 @@ class Pipeline:
             prompt_embeds=prompt_embeds,
             generator=generator,
             strength=strength,
-            num_inference_steps=steps,
+            num_inference_steps=1,
             guidance_scale=params.guidance_scale,
             width=params.width,
             height=params.height,

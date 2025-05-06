@@ -46,9 +46,10 @@ def build_engine(onnx_file_path, engine_file_path, precision="fp32"):
 if __name__ == "__main__":
     # Get the directory of the current script
     current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(current_dir)
     
     # Construct absolute paths
-    onnx_path = os.path.join(current_dir, "depth_anything", "models", "depth_anything_v2_vits.onnx")
-    engine_path = os.path.join(current_dir, "depth_anything", "models", "depth_anything_v2_vits.trt")
+    onnx_path = os.path.join(parent_dir, "models", "depth_anything_v2_vits.onnx")
+    engine_path = os.path.join(parent_dir, "models", "depth_anything_v2_vits.trt")
     
     build_engine(onnx_path, engine_path, precision="fp16")
