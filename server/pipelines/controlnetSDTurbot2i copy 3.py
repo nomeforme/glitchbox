@@ -12,7 +12,6 @@ import glob
 from typing import List, Dict, Optional, Union
 import gc
 from pathlib import Path
-import time
 
 try:
     import intel_extension_for_pytorch as ipex  # type: ignore
@@ -69,9 +68,9 @@ lora_models = {
 }
 
 # Default LoRAs to use - can be a single LoRA or a list of LoRAs to fuse
-default_loras = ["full-body-glitch-reddish", "abstract-monochrome"]
+default_loras = ["full-body-glitch-reddish"]
 # Default adapter weights for each LoRA (in the same order as default_loras)
-default_adapter_weights = [0.0, 1.0]
+default_adapter_weights = [0.9]
 # default_loras = ["pbarbarant/sd-sonio"]
 # default_loras = ["FKATwigs_A1-000038", "pbarbarant/sd-sonio"]
 
@@ -140,16 +139,6 @@ class Pipeline:
             field="textarea",
             id="target_prompt",
             hide=True,
-        )
-        pipe_index: int = Field(
-            0,
-            min=0,
-            max=1,
-            step=1,
-            title="Pipe Index",
-            field="range",
-            id="pipe_index",
-            description="Select which pipe to use (0: [1.0, 0.0] weights, 1: [0.5, 0.5] weights)"
         )
         use_prompt_travel: bool = Field(
             True,
@@ -337,148 +326,126 @@ class Pipeline:
         )
         self.pipes = {}
 
-        # Define two sets of adapter weights
-        self.adapter_weights_sets = [
-            [1.0, 0.0],  # First set: full weight on second LoRA
-            [0.5, 0.5]   # Second set: equal weights
-        ]
-
-        # Initialize two pipes with different adapter weights
-        self.pipes = []
-        self.pipe_states = []  # Store pipe-specific state here
+        # Initialize with depth model by default
+        self.pipe = StableDiffusionControlNetPipeline.from_pretrained(
+            base_model,
+            controlnet=controlnet_depth,
+            safety_checker=None,
+            torch_dtype=torch_dtype,
+        )
         
-        for adapter_weights in self.adapter_weights_sets:
-            # Initialize with depth model by default
-            pipe = StableDiffusionControlNetPipeline.from_pretrained(
-                base_model,
-                controlnet=controlnet_depth,
-                safety_checker=None,
-                torch_dtype=torch_dtype,
+        # Store both models for later use
+        self.controlnet_canny = controlnet_canny
+        self.controlnet_depth = controlnet_depth
+        self.current_controlnet = "depth"
+
+        if args.taesd:
+            self.pipe.vae = AutoencoderTiny.from_pretrained(
+                taesd_model, torch_dtype=torch_dtype, use_safetensors=True
+            ).to(device)
+
+        if args.sfast:
+            print("Using sfast compile\n")
+            from sfast.compilers.stable_diffusion_pipeline_compiler import (
+                compile,
+                CompilationConfig,
             )
-            
-            # Store both models for later use
-            pipe.controlnet_canny = controlnet_canny
-            pipe.controlnet_depth = controlnet_depth
-            pipe.current_controlnet = "depth"
 
-            if args.taesd:
-                pipe.vae = AutoencoderTiny.from_pretrained(
-                    taesd_model, torch_dtype=torch_dtype, use_safetensors=True
-                ).to(device)
+            config = CompilationConfig.Default()
+            config.enable_xformers = True
+            config.enable_triton = True
+            config.enable_cuda_graph = True
+            self.pipe = compile(self.pipe, config=config)
 
-            if args.sfast:
-                print("Using sfast compile\n")
-                from sfast.compilers.stable_diffusion_pipeline_compiler import (
-                    compile,
-                    CompilationConfig,
-                )
+            print("\nRunning with sfast compile\n")
 
-                config = CompilationConfig.Default()
-                config.enable_xformers = True
-                config.enable_triton = True
-                config.enable_cuda_graph = True
-                pipe = compile(pipe, config=config)
+        if args.onediff:
+            print("\nRunning onediff compile\n")
+            from onediff.infer_compiler import oneflow_compile
 
-                print("\nRunning with sfast compile\n")
+            self.pipe.unet = oneflow_compile(self.pipe.unet)
+            self.pipe.vae.encoder = oneflow_compile(self.pipe.vae.encoder)
+            self.pipe.vae.decoder = oneflow_compile(self.pipe.vae.decoder)
+            self.pipe.controlnet = oneflow_compile(self.pipe.controlnet)
 
-            if args.onediff:
-                print("\nRunning onediff compile\n")
-                from onediff.infer_compiler import oneflow_compile
+        self.canny_torch = SobelOperator(device=device)
 
-                pipe.unet = oneflow_compile(pipe.unet)
-                pipe.vae.encoder = oneflow_compile(pipe.vae.encoder)
-                pipe.vae.decoder = oneflow_compile(pipe.vae.decoder)
-                pipe.controlnet = oneflow_compile(pipe.controlnet)
+        self.pipe.scheduler = LCMScheduler.from_config(self.pipe.scheduler.config)
+        self.pipe.set_progress_bar_config(disable=True)
+        self.pipe.to(device=device, dtype=torch_dtype)
+        if device.type != "mps":
+            self.pipe.unet.to(memory_format=torch.channels_last)
 
-            pipe.canny_torch = SobelOperator(device=device)
+        if args.compel:
+            from compel import Compel
 
-            pipe.scheduler = LCMScheduler.from_config(pipe.scheduler.config)
-            pipe.set_progress_bar_config(disable=True)
-            pipe.to(device=device, dtype=torch_dtype)
-            if device.type != "mps":
-                pipe.unet.to(memory_format=torch.channels_last)
-
-            if args.compel:
-                from compel import Compel
-
-                pipe.compel_proc = Compel(
-                    tokenizer=pipe.tokenizer,
-                    text_encoder=pipe.text_encoder,
-                    truncate_long_prompts=True,
-                )
-
-            if args.taesd:
-                pipe.vae = AutoencoderTiny.from_pretrained(
-                    taesd_model, torch_dtype=torch_dtype, use_safetensors=True
-                ).to(device)
-
-            # NOTE: torch compile temp ENABLED
-            if args.torch_compile:
-                print("\nRunning torch compile\n")
-                pipe.unet = torch.compile(
-                    pipe.unet, mode="reduce-overhead", fullgraph=True
-                )
-                pipe.vae = torch.compile(
-                    pipe.vae, mode="reduce-overhead", fullgraph=True
-                )
-
-            # Initialize PromptTravel for both text and latent interpolation
-            pipe.prompt_travel = PromptTravel(
-                text_encoder=pipe.text_encoder,
-                tokenizer=pipe.tokenizer,
+            self.pipe.compel_proc = Compel(
+                tokenizer=self.pipe.tokenizer,
+                text_encoder=self.pipe.text_encoder,
+                truncate_long_prompts=True,
             )
-            
-            # Create a state dictionary for this pipe
-            pipe_state = {
-                'current_lora_models': [],
-                'fuse_loras': False,
-                'lora_scale': 1.0,
-                'lora_weights_loaded': False,
-                'current_adapter_weights': [],
-                'stored_result_latents': None
-            }
-            
-            # Load default LoRA(s) during initialization with specific adapter weights
-            print(f"Loading default LoRA(s): {default_loras} with weights {adapter_weights}")
-            # If there's only one LoRA, don't fuse. If there are multiple, fuse them automatically
-            should_fuse = len(default_loras) > 1
-            self.load_loras_for_pipe(pipe, pipe_state, default_loras, fuse_loras=should_fuse, lora_scale=1.0, adapter_weights=adapter_weights)
-            
-            self.pipes.append(pipe)
-            self.pipe_states.append(pipe_state)
 
-        # Store the current pipe index
-        self.current_pipe_idx = 0
+        if args.taesd:
+            self.pipe.vae = AutoencoderTiny.from_pretrained(
+                taesd_model, torch_dtype=torch_dtype, use_safetensors=True
+            ).to(device)
 
-    def load_loras_for_pipe(self, pipe, pipe_state, lora_models_list: List[str], fuse_loras: bool = False, lora_scale: float = 1.0, adapter_weights: Optional[List[float]] = None) -> None:
+        # NOTE: torch compile temp ENABLED
+        if args.torch_compile:
+            print("\nRunning torch compile\n")
+            self.pipe.unet = torch.compile(
+                self.pipe.unet, mode="reduce-overhead", fullgraph=True
+            )
+            self.pipe.vae = torch.compile(
+                self.pipe.vae, mode="reduce-overhead", fullgraph=True
+            )
+            # self.pipe(
+            #    prompt="warmup",
+            #    image=[Image.new("RGB", (768, 768))],
+            #    control_image=[Image.new("RGB", (768, 768))],
+            # )
+
+        # Initialize PromptTravel for both text and latent interpolation
+        self.pipe.prompt_travel = PromptTravel(
+            text_encoder=self.pipe.text_encoder,
+            tokenizer=self.pipe.tokenizer,
+        )
+        
+        # Initialize LoRA-related attributes
+        self.current_lora_models = []
+        self.fuse_loras = False
+        self.lora_scale = 1.0
+        self.lora_weights_loaded = False
+        self.current_adapter_weights = []
+        
+        # Load default LoRA(s) during initialization
+        print(f"Loading default LoRA(s): {default_loras}")
+        # If there's only one LoRA, don't fuse. If there are multiple, fuse them automatically
+        should_fuse = len(default_loras) > 1
+        self.load_loras(default_loras, fuse_loras=should_fuse, lora_scale=1.0, adapter_weights=default_adapter_weights)
+
+    def load_loras(self, lora_models_list: List[str], fuse_loras: bool = False, lora_scale: float = 1.0, adapter_weights: Optional[List[float]] = None) -> None:
         """
-        Load or update LoRA models for a specific pipe.
+        Load or update LoRA models for the pipeline.
         
         Args:
-            pipe: The pipeline to load LoRAs into
-            pipe_state: Dictionary containing pipe-specific state
             lora_models_list: List of LoRA model names to load
             fuse_loras: Whether to fuse multiple LoRAs
             lora_scale: Scale factor for LoRA weights
             adapter_weights: Optional list of weights for each LoRA adapter
         """
-        start_time = time.time()
-        
         # Filter out "None" from the selected LoRAs
         selected_loras = [lora for lora in lora_models_list if lora != "None"]
         
         # If no LoRAs are selected, unload any previously loaded LoRAs
         if not selected_loras:
-            if pipe_state['lora_weights_loaded']:
-                unload_start = time.time()
-                pipe.unload_lora_weights()
-                print(f"Unloading LoRA weights took: {time.time() - unload_start:.2f} seconds")
-                pipe_state['lora_weights_loaded'] = False
-            pipe_state['current_lora_models'] = []
-            pipe_state['fuse_loras'] = False
-            pipe_state['lora_scale'] = 1.0
-            pipe_state['current_adapter_weights'] = []
-            print(f"Total LoRA unloading time: {time.time() - start_time:.2f} seconds")
+            if self.lora_weights_loaded:
+                self.pipe.unload_lora_weights()
+                self.lora_weights_loaded = False
+            self.current_lora_models = []
+            self.fuse_loras = False
+            self.lora_scale = 1.0
+            self.current_adapter_weights = []
             return
         
         # Ensure adapter_weights is a list of the same length as selected_loras
@@ -492,78 +459,62 @@ class Pipeline:
             adapter_weights = adapter_weights[:len(selected_loras)]
         
         # Check if we need to reload LoRAs
-        if (selected_loras != pipe_state['current_lora_models']) or (fuse_loras != pipe_state['fuse_loras']) or (lora_scale != pipe_state['lora_scale']) or (adapter_weights != pipe_state['current_adapter_weights']):
+        if (selected_loras != self.current_lora_models) or (fuse_loras != self.fuse_loras) or (lora_scale != self.lora_scale) or (adapter_weights != self.current_adapter_weights):
             # Unload any previously loaded LoRAs
-            if pipe_state['lora_weights_loaded']:
-                unload_start = time.time()
-                pipe.unload_lora_weights()
-                print(f"Unloading previous LoRA weights took: {time.time() - unload_start:.2f} seconds")
-                pipe_state['lora_weights_loaded'] = False
+            if self.lora_weights_loaded:
+                self.pipe.unload_lora_weights()
+                self.lora_weights_loaded = False
             
             # Load all selected LoRAs
-            load_start = time.time()
             for i, lora_id in enumerate(selected_loras):
                 adapter_name = f"lora_{i}"
-                lora_load_start = time.time()
                 print(f"Loading LoRA: {lora_id} as {adapter_name}")
-                pipe.load_lora_weights(lora_models[lora_id], adapter_name=adapter_name)
-                print(f"Loading {lora_id} took: {time.time() - lora_load_start:.2f} seconds")
-            print(f"Total LoRA loading time: {time.time() - load_start:.2f} seconds")
+                self.pipe.load_lora_weights(lora_models[lora_id], adapter_name=adapter_name)
             
             if fuse_loras and len(selected_loras) > 1:
                 # Fuse multiple LoRAs
-                fuse_start = time.time()
                 print(f"Fusing LoRAs: {selected_loras} with scale {lora_scale}")
                 adapter_names = [f"lora_{i}" for i in range(len(selected_loras))]
                 # First set the adapters with their respective weights
-                pipe.set_adapters(adapter_names=adapter_names, adapter_weights=adapter_weights)
+                self.pipe.set_adapters(adapter_names=adapter_names, adapter_weights=adapter_weights)
                 # Then fuse them with the global scale
-                pipe.fuse_lora(adapter_names=adapter_names, lora_scale=lora_scale)
+                self.pipe.fuse_lora(adapter_names=adapter_names, lora_scale=lora_scale)
                 # Unload the individual LoRAs after fusing
-                pipe.unload_lora_weights()
-                pipe_state['lora_weights_loaded'] = False
-                print(f"Fusing LoRAs took: {time.time() - fuse_start:.2f} seconds")
+                self.pipe.unload_lora_weights()
+                self.lora_weights_loaded = False
             else:
                 # Set the LoRAs as active with their respective weights
-                set_start = time.time()
                 adapter_names = [f"lora_{i}" for i in range(len(selected_loras))]
-                pipe.set_adapters(adapter_names=adapter_names, adapter_weights=adapter_weights)
-                print(f"Setting adapters took: {time.time() - set_start:.2f} seconds")
-                pipe_state['lora_weights_loaded'] = True
+                self.pipe.set_adapters(adapter_names=adapter_names, adapter_weights=adapter_weights)
+                self.lora_weights_loaded = True
             
             # Update current LoRA state
-            pipe_state['current_lora_models'] = selected_loras
-            pipe_state['fuse_loras'] = fuse_loras
-            pipe_state['lora_scale'] = lora_scale
-            pipe_state['current_adapter_weights'] = adapter_weights
-            
-        print(f"Total LoRA operation time: {time.time() - start_time:.2f} seconds")
+            self.current_lora_models = selected_loras
+            self.fuse_loras = fuse_loras
+            self.lora_scale = lora_scale
+            self.current_adapter_weights = adapter_weights
 
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
-        # Use the pipe index from params
-        self.current_pipe_idx = params.pipe_index
-        pipe = self.pipes[self.current_pipe_idx]
-        pipe_state = self.pipe_states[self.current_pipe_idx]
-        print(f"Using pipe {self.current_pipe_idx} with adapter weights {self.adapter_weights_sets[self.current_pipe_idx]}")
-
         generator = torch.manual_seed(params.seed)
         
         # Use target_seed if available, otherwise use seed+1
         target_seed = getattr(params, 'target_seed', None)
         if target_seed is None:
             target_seed = params.seed + 1
-        target_generator = torch.Generator(device=pipe.device).manual_seed(target_seed)
+        target_generator = torch.Generator(device=self.pipe.device).manual_seed(target_seed)
 
         prompt = params.prompt
         prompt_embeds = None
 
-        if pipe.current_controlnet == "depth":
+        if self.current_controlnet == "depth":
             control_image = getattr(params, 'control_image', None)
-        if pipe.current_controlnet == "canny":
-            control_image = pipe.canny_torch(
+        if self.current_controlnet == "canny":
+            control_image = self.canny_torch(
                 params.image, params.canny_low_threshold, params.canny_high_threshold
             )
 
+        # control_image = openpose(params.image)
+        # control_image = midas(params.image)
         steps = params.steps
         strength = params.strength
         if int(steps * strength) < 1:
@@ -574,17 +525,17 @@ class Pipeline:
 
         if has_prompt_embeds:
             prompt_embeds = params.prompt_embeds
-            if hasattr(prompt_embeds, 'device') and prompt_embeds.device != pipe.device:
-                prompt_embeds = prompt_embeds.to(pipe.device)
+            if hasattr(prompt_embeds, 'device') and prompt_embeds.device != self.pipe.device:
+                prompt_embeds = prompt_embeds.to(self.pipe.device)
             prompt = None
             
             if hasattr(params, "negative_prompt_embeds") and params.negative_prompt_embeds is not None:
                 negative_prompt_embeds = params.negative_prompt_embeds
-                if hasattr(negative_prompt_embeds, 'device') and negative_prompt_embeds.device != pipe.device:
-                    negative_prompt_embeds = negative_prompt_embeds.to(pipe.device)
+                if hasattr(negative_prompt_embeds, 'device') and negative_prompt_embeds.device != self.pipe.device:
+                    negative_prompt_embeds = negative_prompt_embeds.to(self.pipe.device)
         
-        elif hasattr(pipe, "compel_proc"):
-            prompt_embeds = pipe.compel_proc(
+        elif hasattr(self.pipe, "compel_proc"):
+            prompt_embeds = self.pipe.compel_proc(
                 [params.prompt, "human, humanoid, figurine, face"]
             )
             prompt = None
@@ -593,8 +544,8 @@ class Pipeline:
         latents = None
         if getattr(params, "use_latent_travel", False):
             # Check if we have stored result_latents from a previous call
-            if pipe_state['stored_result_latents'] is not None:
-                result_latents = pipe_state['stored_result_latents']
+            if hasattr(self, "stored_result_latents") and self.stored_result_latents is not None:
+                result_latents = self.stored_result_latents
             else:
                 # First call, no stored latents yet
                 result_latents = None
@@ -602,44 +553,51 @@ class Pipeline:
             print("result_latents: ", result_latents.shape if result_latents is not None else "None")
                 
             # Generate source latents
-            source_latents = pipe.prompt_travel.prepare_latents(
+            source_latents = self.pipe.prompt_travel.prepare_latents(
+                # processed_image,
+                # self.pipe.scheduler.timesteps[:1],
                 latents=result_latents,
                 batch_size=1,
-                num_channels_latents=pipe.unet.config.in_channels,
-                vae_scale_factor=pipe.vae_scale_factor,
-                scheduler=pipe.scheduler,
+                # num_images_per_prompt=1,
+                num_channels_latents=self.pipe.unet.config.in_channels,
+                vae_scale_factor=self.pipe.vae_scale_factor,
+                scheduler=self.pipe.scheduler,
                 height=params.height,
                 width=params.width,
-                dtype=pipe.dtype,
-                device=pipe.device,
+                dtype=self.pipe.dtype,
+                device=self.pipe.device,
                 generator=generator,
             )
             
             # Generate target latents with a different seed
-            target_latents = pipe.prompt_travel.prepare_latents(
+            target_latents = self.pipe.prompt_travel.prepare_latents(
+                # processed_image,
+                # self.pipe.scheduler.timesteps[:1],
                 latents=result_latents,
                 batch_size=1,
-                num_channels_latents=pipe.unet.config.in_channels,
-                vae_scale_factor=pipe.vae_scale_factor,
-                scheduler=pipe.scheduler,
+                # num_images_per_prompt=1,
+                num_channels_latents=self.pipe.unet.config.in_channels,
+                vae_scale_factor=self.pipe.vae_scale_factor,
+                scheduler=self.pipe.scheduler,
                 height=params.height,
                 width=params.width,
-                dtype=pipe.dtype,
-                device=pipe.device,
+                dtype=self.pipe.dtype,
+                device=self.pipe.device,
                 generator=target_generator,
             )
             
-            latents = pipe.prompt_travel.interpolate_latents(
+            latents = self.pipe.prompt_travel.interpolate_latents(
                 source_latents,
                 target_latents,
-                getattr(params, "latent_travel_factor", 0.5),
+                getattr(params, "latent_travel_factor", 0.5), # NOTE: should belatent travel factor latent_travel_factor
                 getattr(params, "latent_travel_method", "slerp")
             )
 
             print("prompt travel factor: ", getattr(params, "prompt_travel_factor", 0.5))
             print("latent travel factor: ", getattr(params, "latent_travel_factor", 0.5))
 
-        results = pipe(
+        results = self.pipe(
+            #image=params.image,
             image=control_image,
             prompt=prompt,
             prompt_embeds=prompt_embeds,
@@ -658,9 +616,16 @@ class Pipeline:
         result_image = results[0][0]
         result_latents = results[1]
 
+        # # print("result_latents: ", result_latents)
+        # image = remote_decode(
+        #     endpoint="https://q1bj3bpq6kzilnsu.us-east-1.aws.endpoints.huggingface.cloud/",
+        #     tensor=result_latents,
+        #     scaling_factor=0.18215,
+        # )
+        # image.save(f"result_latents_{uuid.uuid4()}.png")
         # Store result_latents for next call if latent travel is enabled
         if getattr(params, "use_latent_travel", False):
-            pipe_state['stored_result_latents'] = result_latents
+            setattr(self, "stored_result_latents", result_latents)
 
         if params.debug_controlnet:
             # paste control_image on top of result_image
