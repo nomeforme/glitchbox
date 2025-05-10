@@ -68,12 +68,10 @@ default_loras = ["full-body-glitch-reddish", "abstract-monochrome"]
 # Define adapter weights sets
 adapter_weights_sets = [
     [1.0, 0.0],    # First set: full weight on first LoRA
-    # [0.833, 0.167],
-    # [0.667, 0.333],
+    [0.75, 0.25],
     [0.5, 0.5],    # Middle set: equal weights
-    # # [0.333, 0.667],
-    # # [0.167, 0.833],
-    # [0.0, 1.0]     # Last set: full weight on second LoRA
+    [0.25, 0.75],
+    [0.0, 1.0]     # Last set: full weight on second LoRA
 ]
 
 # Function to read prompt prefix from .txt files
