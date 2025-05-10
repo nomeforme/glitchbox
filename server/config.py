@@ -61,6 +61,8 @@ class Args(NamedTuple):
     # Enable frequency zoom controller
     use_frequency_zoom: bool = True # TODO: change to more generic acid controller flag
     mic_index: int = 0
+    # Enable LoRA sound controller
+    use_lora_sound_control: bool = False
     # Test oscillator settings
     use_test_zoom: bool = False
     use_test_shift: bool = False
@@ -535,6 +537,14 @@ parser.add_argument(
     default="lanczos",
     choices=["nearest", "bilinear", "bicubic", "lanczos"],
     help="Resampling method for upscaler (default: lanczos)",
+)
+
+parser.add_argument(
+    "--use-lora-sound-control",
+    dest="use_lora_sound_control",
+    action="store_true",
+    default=False,
+    help="Enable LoRA sound controller",
 )
 
 parser.set_defaults(taesd=USE_TAESD)
