@@ -543,7 +543,7 @@ parser.add_argument(
     "--use-lora-sound-control",
     dest="use_lora_sound_control",
     action="store_true",
-    default=False,
+    default=True,
     help="Enable LoRA sound controller",
 )
 

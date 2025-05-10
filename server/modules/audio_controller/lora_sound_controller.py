@@ -31,13 +31,13 @@ class LoraSoundController:
         """Enable or disable debug printing"""
         self.debug = enabled
         
-    def process_frequency_bins(self, binned_fft):
+    def process_frequency_bins(self, normalized_energies):
         """
         Process frequency bins to adjust pipe index based on audio input.
         For now, returns a random pipe index within allowed range.
         
         Args:
-            binned_fft: List containing the frequency bins (low, mid, high)
+            normalized_energies: List containing the normalized energies
             
         Returns:
             int: Selected pipe index
@@ -48,13 +48,14 @@ class LoraSoundController:
                 print("Controller is disabled, returning current pipe index.")
             return self.current_pipe_index
 
-        if binned_fft is None or (isinstance(binned_fft, (list, tuple, np.ndarray)) and len(binned_fft) < 3):
+        if normalized_energies is None or (isinstance(normalized_energies, (list, tuple, np.ndarray)) and len(normalized_energies) < 3):
             if self.debug:
                 print(f"Invalid frequency bins, returning current pipe index: {self.current_pipe_index}")
             return self.current_pipe_index
         
         # For now, just return a random pipe index
-        new_pipe_index = random.randint(0, self.num_pipes - 1)
+        new_pipe_index = np.argmax(normalized_energies)
+
         
         if self.debug:
             print(f"Selected pipe index: {new_pipe_index}")

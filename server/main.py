@@ -366,7 +366,9 @@ class App:
                             # Process frequency bins if included in settings
                             if isinstance(acid_settings, dict) and "binned_fft" in acid_settings:
                                 binned_fft = acid_settings.get("binned_fft")
+                                normalized_energies = acid_settings.get("normalized_energies")
                                 print(f"[main.py] Handle websocket data - binned_fft: {binned_fft}")
+                                print(f"[main.py] Handle websocket data - normalized_energies: {normalized_energies}")
                                 if binned_fft is not None:
                                     # Process frequency bins for zoom if acid processor is enabled and test oscillation is disabled
                                     if self.use_acid_processor and not self.zoom_oscillator.enabled:
@@ -375,10 +377,11 @@ class App:
                                             print(f"[main.py] Updated zoom factor from frequency analysis: {new_zoom:.2f}")
                                         # Apply the updated zoom factor to the acid processor
                                         self.acid_processor.set_zoom_factor(new_zoom)
-                                    
+
+                                if normalized_energies is not None:
                                     # Process frequency bins for LoRA pipe selection if enabled
                                     if self.use_lora_sound_control:
-                                        new_pipe_index = self.lora_sound_controller.process_frequency_bins(binned_fft)
+                                        new_pipe_index = self.lora_sound_controller.process_frequency_bins(normalized_energies)
                                         if self.args.debug:
                                             print(f"[main.py] Updated pipe index from frequency analysis: {new_pipe_index}")
                                         # Update the pipe index in params
