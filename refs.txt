@@ -58,3 +58,5 @@ uv pip install -v -U git+https://github.com/chengzeyi/stable-fast.git@main#egg=s
 
 
 uv run server/pipelines/diffusers_pipelines/pipeline_controlnet_tensorrt.py --sd_model "stabilityai/sd-turbo" --onnx_model_dir "server/tensorrt_convert/onnx_models" --unet_engine_path "server/tensorrt_convert/onnx_models/unet/unet.engine" --qr_img_path "server/assets/mountain.png"
+
+pip install -U --pre oneflow -f https://github.com/siliconflow/oneflow_releases/releases/expanded_assets/community_cu121
