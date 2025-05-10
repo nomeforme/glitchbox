@@ -1,6 +1,7 @@
 from PySide6.QtCore import QThread, Signal
 import numpy as np
 from modules.fft.stream_analyzer import Stream_Analyzer
+from config import NUM_FFT_BINS, FFT_WINDOW_SIZE_MS, SMOOTHING_LENGTH_MS, EQUALIZER_STRENGTH, ROLLING_STATS_WINDOW_S
 
 class FFTAnalyzerThread(QThread):
     """Thread for handling real-time FFT audio analysis"""
@@ -23,10 +24,12 @@ class FFTAnalyzerThread(QThread):
             self.analyzer = Stream_Analyzer(
                 device = self.input_device_index,
                 rate   = 44100,               # Audio samplerate
-                FFT_window_size_ms  = 60,     # Window size used for the FFT transform
+                FFT_window_size_ms  = FFT_WINDOW_SIZE_MS,     # Window size used for the FFT transform
                 updates_per_second  = 500,    # How often to read the audio stream for new data
-                smoothing_length_ms = 50,     # Apply temporal smoothing to reduce noisy features
-                n_frequency_bins = 3,         # The FFT features are grouped in bins
+                smoothing_length_ms = SMOOTHING_LENGTH_MS,     # Apply temporal smoothing to reduce noisy features
+                n_frequency_bins = NUM_FFT_BINS,         # The FFT features are grouped in bins
+                rolling_stats_window_s = ROLLING_STATS_WINDOW_S,
+                equalizer_strength = EQUALIZER_STRENGTH,
                 visualize = 0,                # Visualize the FFT features with PyGame
                 verbose   = 0,                # Print running statistics (latency, fps, ...)
                 height    = 480,              # Height, in pixels, of the visualizer window
@@ -39,10 +42,13 @@ class FFTAnalyzerThread(QThread):
             while self.running:
                 # Get audio features from FFT analyzer
                 raw_fftx, raw_fft, binned_fftx, binned_fft = self.analyzer.get_audio_features()
+
+                normalized_energies = binned_fft / self.analyzer.bin_mean_values
                 
                 # Prepare data for emission
                 fft_data = {
                     "binned_fft": binned_fft.tolist() if isinstance(binned_fft, np.ndarray) else binned_fft,
+                    "normalized_energies": normalized_energies.tolist() if isinstance(normalized_energies, np.ndarray) else normalized_energies,
                     # "raw_fft": raw_fft.tolist() if isinstance(raw_fft, np.ndarray) else raw_fft
                 }
                 

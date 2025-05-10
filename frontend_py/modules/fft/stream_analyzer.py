@@ -27,6 +27,8 @@ class Stream_Analyzer:
         updates_per_second  = 100,
         smoothing_length_ms = 50,
         n_frequency_bins    = 51,
+        rolling_stats_window_s = 20,
+        equalizer_strength = 0.20,
         visualize = True,
         verbose   = False,
         height    = 450,
@@ -57,8 +59,8 @@ class Stream_Analyzer:
         self.rate = self.stream_reader.rate
 
         #Custom settings:
-        self.rolling_stats_window_s    = 20     # The axis range of the FFT features will adapt dynamically using a window of N seconds
-        self.equalizer_strength        = 0.20   # [0-1] --> gradually rescales all FFT features to have the same mean
+        self.rolling_stats_window_s    = rolling_stats_window_s     # The axis range of the FFT features will adapt dynamically using a window of N seconds
+        self.equalizer_strength        = equalizer_strength        # [0-1] --> gradually rescales all FFT features to have the same mean
         self.apply_frequency_smoothing = True   # Apply a postprocessing smoothing filter over the FFT outputs
 
         if self.apply_frequency_smoothing:
