@@ -21,7 +21,7 @@ import torch
 # Import the acid processor
 from modules.acid_processor import AcidProcessor, InputImageProcessor
 # Import the frequency zoom controller
-from modules.audio_controller import BeatZoomController
+from modules.audio_controller import BeatZoomController, LoraSoundController
 # Import fft analyzer
 from modules.fft.stream_analyzer import Stream_Analyzer
 # Import test oscillators
@@ -98,6 +98,7 @@ class App:
         
         # Initialize acid processors
         self.use_acid_processor = getattr(self.args, 'use_acid_processor', False)
+        self.use_lora_sound_control = getattr(self.args, 'use_lora_sound_control', False)
         if self.use_acid_processor:
             # print("[main.py] Initializing acid processor")
             self.input_processor = InputImageProcessor(device=device.type)
@@ -175,6 +176,15 @@ class App:
             )
             # Enable debug output if in debug mode
             self.frequency_zoom_controller.enable_debug(getattr(self.args, 'debug', False))
+            
+            # Initialize the LoRA sound controller
+            self.lora_sound_controller = LoraSoundController(
+                num_pipes=len(self.pipeline.pipes),  # Get number of pipes from pipeline
+                enabled=self.use_lora_sound_control,
+                debug=getattr(self.args, 'debug', False)
+            )
+            # Enable debug output if in debug mode
+            self.lora_sound_controller.enable_debug(getattr(self.args, 'debug', False))
             
             # Initialize test oscillators with config parameters
             self.zoom_oscillator = ZoomOscillator(
@@ -329,6 +339,17 @@ class App:
                         info = self.pipeline.Info()
                         receive_params_start = time.time()
                         params = await self.conn_manager.receive_json(user_id)
+
+                        params_creation_start = time.time()
+                        # Extract acid_settings before converting to SimpleNamespace
+                        acid_settings = params.pop("acid_settings", {}) if isinstance(params, dict) else {}
+                        params = self.pipeline.InputParams(**params)
+                        params = SimpleNamespace(**vars(params))
+                        # Add acid_settings back as an attribute
+                        setattr(params, 'acid_settings', acid_settings)
+
+                        print(f"[main.py] Received params: {params}")
+                        print(f"[main.py] params type: {type(params)}")
                         if self.args.debug:
                             print(f"Time to receive params: {time.time() - receive_params_start:.4f}s")
                         # Update acid processor settings if included in params
@@ -336,30 +357,35 @@ class App:
                         ########### FREQ DATA FROM FRONTEND ######################33
                         # print(f"[main.py] Handle websocket data - params: {params}")
                         # print(f"[main.py] Use acid settings in params: {params}")
-                        if self.use_acid_processor and "acid_settings" in params:
+                        if self.use_acid_processor and hasattr(params, 'acid_settings'):
                             acid_settings_start = time.time()
-                            acid_settings = params.pop("acid_settings", {})
+                            acid_settings = getattr(params, 'acid_settings', {})
                             # print(f"[main.py] Handle websocket data - acid_settings: {acid_settings}")
                             self._update_acid_settings(acid_settings)
                             
                             # Process frequency bins if included in settings
-                            if "binned_fft" in acid_settings and self.use_acid_processor and not self.zoom_oscillator.enabled:
-                                # Only process FFT data if test oscillation is disabled
+                            if isinstance(acid_settings, dict) and "binned_fft" in acid_settings:
                                 binned_fft = acid_settings.get("binned_fft")
                                 print(f"[main.py] Handle websocket data - binned_fft: {binned_fft}")
                                 if binned_fft is not None:
-                                    # Process the frequency bins and get updated zoom factor
-                                    new_zoom = self.frequency_zoom_controller.process_frequency_bins(binned_fft)
-                                    if self.args.debug:
-                                        print(f"[main.py] Updated zoom factor from frequency analysis: {new_zoom:.2f}")
-                                    # Apply the updated zoom factor to the acid processor
-                                    self.acid_processor.set_zoom_factor(new_zoom)
+                                    # Process frequency bins for zoom if acid processor is enabled and test oscillation is disabled
+                                    if self.use_acid_processor and not self.zoom_oscillator.enabled:
+                                        new_zoom = self.frequency_zoom_controller.process_frequency_bins(binned_fft)
+                                        if self.args.debug:
+                                            print(f"[main.py] Updated zoom factor from frequency analysis: {new_zoom:.2f}")
+                                        # Apply the updated zoom factor to the acid processor
+                                        self.acid_processor.set_zoom_factor(new_zoom)
+                                    
+                                    # Process frequency bins for LoRA pipe selection if enabled
+                                    if self.use_lora_sound_control:
+                                        new_pipe_index = self.lora_sound_controller.process_frequency_bins(binned_fft)
+                                        if self.args.debug:
+                                            print(f"[main.py] Updated pipe index from frequency analysis: {new_pipe_index}")
+                                        # Update the pipe index in params
+                                        setattr(params, 'pipe_index', new_pipe_index)
                             if self.args.debug:
                                 print(f"Time to process acid settings: {time.time() - acid_settings_start:.4f}s")
                         
-                        params_creation_start = time.time()
-                        params = self.pipeline.InputParams(**params)
-                        params = SimpleNamespace(**params.dict())
                         if self.args.debug:
                             print(f"Time to create params object: {time.time() - params_creation_start:.4f}s")
                         
@@ -625,37 +651,37 @@ class App:
             return
             
         # Input processor settings
-        if "do_human_seg" in settings:
-            self.input_processor.set_human_seg(settings["do_human_seg"])
-        if "resizing_factor" in settings:
-            self.input_processor.set_resizing_factor_humanseg(settings["resizing_factor"])
-        if "do_blur" in settings:
-            self.input_processor.set_blur(settings["do_blur"])
-        if "brightness" in settings:
-            self.input_processor.set_brightness(settings["brightness"])
-        if "do_infrared_colorize" in settings:
-            self.input_processor.set_infrared_colorize(settings["do_infrared_colorize"])
+        if hasattr(settings, 'do_human_seg'):
+            self.input_processor.set_human_seg(getattr(settings, 'do_human_seg'))
+        if hasattr(settings, 'resizing_factor'):
+            self.input_processor.set_resizing_factor_humanseg(getattr(settings, 'resizing_factor'))
+        if hasattr(settings, 'do_blur'):
+            self.input_processor.set_blur(getattr(settings, 'do_blur'))
+        if hasattr(settings, 'brightness'):
+            self.input_processor.set_brightness(getattr(settings, 'brightness'))
+        if hasattr(settings, 'do_infrared_colorize'):
+            self.input_processor.set_infrared_colorize(getattr(settings, 'do_infrared_colorize'))
         
         # Acid processor settings
-        if "acid_strength" in settings:
-            self.acid_processor.set_acid_strength(settings["acid_strength"])
-        if "coef_noise" in settings:
-            self.acid_processor.set_coef_noise(settings["coef_noise"])
-        if "do_acid_tracers" in settings:
-            self.acid_processor.set_acid_tracers(settings["do_acid_tracers"])
-        if "acid_strength_foreground" in settings:
-            self.acid_processor.set_acid_strength_foreground(settings["acid_strength_foreground"])
-        if "zoom_factor" in settings and "binned_fft" not in settings:
+        if hasattr(settings, 'acid_strength'):
+            self.acid_processor.set_acid_strength(getattr(settings, 'acid_strength'))
+        if hasattr(settings, 'coef_noise'):
+            self.acid_processor.set_coef_noise(getattr(settings, 'coef_noise'))
+        if hasattr(settings, 'do_acid_tracers'):
+            self.acid_processor.set_acid_tracers(getattr(settings, 'do_acid_tracers'))
+        if hasattr(settings, 'acid_strength_foreground'):
+            self.acid_processor.set_acid_strength_foreground(getattr(settings, 'acid_strength_foreground'))
+        if hasattr(settings, 'zoom_factor') and not hasattr(settings, 'binned_fft'):
             # Only set zoom directly if we're not getting it from frequency analysis
-            self.acid_processor.set_zoom_factor(settings["zoom_factor"])
-        if "x_shift" in settings:
-            self.acid_processor.set_x_shift(settings["x_shift"])
-        if "y_shift" in settings:
-            self.acid_processor.set_y_shift(settings["y_shift"])
-        if "do_acid_wobblers" in settings:
-            self.acid_processor.set_do_acid_wobblers(settings["do_acid_wobblers"])
-        if "color_matching" in settings:
-            self.acid_processor.set_color_matching(settings["color_matching"])
+            self.acid_processor.set_zoom_factor(getattr(settings, 'zoom_factor'))
+        if hasattr(settings, 'x_shift'):
+            self.acid_processor.set_x_shift(getattr(settings, 'x_shift'))
+        if hasattr(settings, 'y_shift'):
+            self.acid_processor.set_y_shift(getattr(settings, 'y_shift'))
+        if hasattr(settings, 'do_acid_wobblers'):
+            self.acid_processor.set_do_acid_wobblers(getattr(settings, 'do_acid_wobblers'))
+        if hasattr(settings, 'color_matching'):
+            self.acid_processor.set_color_matching(getattr(settings, 'color_matching'))
             
         # Update frequency zoom controller settings if present
         if "low_bin_sensitivity" in settings or "high_bin_sensitivity" in settings:
