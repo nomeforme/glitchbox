@@ -70,10 +70,25 @@ lora_models = {
 
 # Default LoRAs to use - can be a single LoRA or a list of LoRAs to fuse
 default_loras = ["full-body-glitch-reddish", "abstract-monochrome"]
-# Default adapter weights for each LoRA (in the same order as default_loras)
-default_adapter_weights = [0.0, 1.0]
-# default_loras = ["pbarbarant/sd-sonio"]
-# default_loras = ["FKATwigs_A1-000038", "pbarbarant/sd-sonio"]
+
+# Define adapter weights sets
+# adapter_weights_sets = [
+#     [1.0, 0.0],  # First set: full weight on second LoRA
+#     [0.75, 0.25],
+#     [0.5, 0.5],   # Second set: equal weights
+#     [0.25, 0.75],
+#     [0.0, 1.0]    # Third set: full weight on first LoRA
+# ]
+
+adapter_weights_sets = [
+    [1.0, 0.0],    # First set: full weight on first LoRA
+    # [0.833, 0.167],
+    # [0.667, 0.333],
+    [0.5, 0.5],    # Middle set: equal weights
+    # [0.333, 0.667],
+    # [0.167, 0.833],
+    [0.0, 1.0]     # Last set: full weight on second LoRA
+]
 
 # Function to read prompt prefix from .txt files
 def get_prompt_prefix():
@@ -121,8 +136,8 @@ Image to Image pipeline using
 # midas = MidasDetector.from_pretrained("lllyasviel/Annotators")
 class Pipeline:
     class Info(BaseModel):
-        name: str = "controlnet+sd15Turbo"
-        title: str = "SDv1.5 Turbo + Controlnet"
+        name: str = "controlnet+sd21Turbo"
+        title: str = "SDv2.1 Turbo + Controlnet"
         description: str = "Generates an image from a text prompt"
         input_mode: str = "image"
         page_content: str = page_content
@@ -144,12 +159,12 @@ class Pipeline:
         pipe_index: int = Field(
             0,
             min=0,
-            max=1,
+            max=len(adapter_weights_sets) - 1,
             step=1,
             title="Pipe Index",
             field="range",
             id="pipe_index",
-            description="Select which pipe to use (0: [1.0, 0.0] weights, 1: [0.5, 0.5] weights)"
+            description="Select which pipe to use (0: [1.0, 0.0] weights, 1: [0.5, 0.5] weights, 2: [0.0, 1.0] weights)"
         )
         use_prompt_travel: bool = Field(
             True,
@@ -198,13 +213,6 @@ class Pipeline:
             field="multiselect",
             id="lora_models",
             options=list(lora_models.keys()),
-        )
-        adapter_weights: List[float] = Field(
-            default_adapter_weights,
-            title="LoRA Adapter Weights",
-            field="multiselect",
-            id="adapter_weights",
-            hide=True,
         )
         fuse_loras: bool = Field(
             False,
@@ -337,17 +345,11 @@ class Pipeline:
         )
         self.pipes = {}
 
-        # Define two sets of adapter weights
-        self.adapter_weights_sets = [
-            [1.0, 0.0],  # First set: full weight on second LoRA
-            [0.5, 0.5]   # Second set: equal weights
-        ]
-
-        # Initialize two pipes with different adapter weights
+        # Initialize pipes with different adapter weights
         self.pipes = []
         self.pipe_states = []  # Store pipe-specific state here
         
-        for adapter_weights in self.adapter_weights_sets:
+        for adapter_weights in adapter_weights_sets:
             # Initialize with depth model by default
             pipe = StableDiffusionControlNetPipeline.from_pretrained(
                 base_model,
@@ -544,7 +546,7 @@ class Pipeline:
         self.current_pipe_idx = params.pipe_index
         pipe = self.pipes[self.current_pipe_idx]
         pipe_state = self.pipe_states[self.current_pipe_idx]
-        print(f"Using pipe {self.current_pipe_idx} with adapter weights {self.adapter_weights_sets[self.current_pipe_idx]}")
+        print(f"Using pipe {self.current_pipe_idx} with adapter weights {adapter_weights_sets[self.current_pipe_idx]}")
 
         generator = torch.manual_seed(params.seed)
         
