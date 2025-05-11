@@ -519,9 +519,9 @@ parser.add_argument(
     "--upscaler-type",
     dest="upscaler_type",
     type=str,
-    default="pil",
-    choices=["pil", "fast_srgan"],
-    help="Type of upscaler to use (default: fast_srgan)",
+    default="rvsr",
+    choices=["pil", "fast_srgan", "omni_sr", "rvsr", "dscf_sr"],
+    help="Type of upscaler to use (default: pil). Options: pil (basic), fast_srgan (high quality), omni_sr (high quality), rvsr (high quality), dscf_sr (high quality)",
 )
 parser.add_argument(
     "--upscaler-scale-factor",

@@ -31,5 +31,10 @@ cuda-python>=12.8.0
 omegaconf
 PyOpenGL
 PyOpenGL-accelerate
+timm
+einops
+xformers>=0.0.30
 # git+https://github.com/chengzeyi/stable-fast.git@main#egg=stable-fast
 git+https://github.com/lunarring/lunar_tools.git
+
+# pip install -v -U git+https://github.com/chengzeyi/stable-fast.git@main#egg=stable-fast --no-build-isolation

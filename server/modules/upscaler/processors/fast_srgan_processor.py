@@ -8,7 +8,7 @@ from omegaconf import OmegaConf
 # Import the Generator from the Fast-SRGAN module
 import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from fast_srgan.model import Generator
+from ..models.fast_srgan.model import Generator
 
 class FastSRGANProcessor:
     """
@@ -43,13 +43,13 @@ class FastSRGANProcessor:
         
         # Get the directory of the Fast-SRGAN module
         current_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        fast_srgan_dir = os.path.join(current_dir, "fast_srgan")
+        checkpoints_dir = os.path.join(current_dir, "checkpoints", "fast_srgan")
         
         # Set default paths if not provided
         if config_path is None:
-            config_path = os.path.join(fast_srgan_dir, "configs", "config.yaml")
+            config_path = os.path.join(checkpoints_dir, "config.yaml")
         if model_path is None:
-            model_path = os.path.join(fast_srgan_dir, "models", "model.pt")
+            model_path = os.path.join(checkpoints_dir, "model.pt")
             
         # Load model configuration
         self.config = OmegaConf.load(config_path)
@@ -63,6 +63,13 @@ class FastSRGANProcessor:
         for k, v in weights.items():
             new_weights[k.replace("_orig_mod.", "")] = v
         self.model.load_state_dict(new_weights)
+        
+        # Compile model for better performance
+        try:
+            self.model = torch.compile(self.model)
+            print("Successfully compiled model with torch.compile()")
+        except Exception as e:
+            print(f"Warning: Could not compile model: {e}")
         
         # Move model to device and set to evaluation mode
         self.model.to(self.device)
@@ -128,7 +135,11 @@ class FastSRGANProcessor:
         
         # Upscale the image
         with torch.no_grad():
-            sr_image = self.model(lr_image).cpu()
+            t1 = time.time()
+            sr_image = self.model(lr_image)
+            t2 = time.time()
+            print(f"Super Resolution - Time taken: {t2 - t1} seconds")
+            sr_image = sr_image.cpu()
             sr_image = (sr_image + 1.0) / 2.0
             sr_image = sr_image.permute(0, 2, 3, 1).squeeze()
             sr_image = (sr_image * 255).numpy().astype(np.uint8)

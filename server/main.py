@@ -214,7 +214,7 @@ class App:
         # Initialize upscaler processor
         self.use_upscaler = getattr(self.args, 'use_upscaler', False)
         if self.use_upscaler:
-            upscaler_type = getattr(self.args, 'upscaler_type', 'fast_srgan')
+            upscaler_type = getattr(self.args, 'upscaler_type', 'pil')
             self.upscaler_processor = get_upscaler_processor(device=device.type, upscaler_type=upscaler_type)
             # Configure upscaler with default settings from config
             self.upscaler_processor.set_scale_factor(getattr(self.args, 'upscaler_scale_factor', 2))
@@ -583,7 +583,7 @@ class App:
                                 print(f"Output background removal time taken: {after_remove_time}")
                                 
                         # Apply PIL upscaling if enabled
-                        if self.use_upscaler and getattr(params, 'use_output_upscaling', False):
+                        if self.use_upscaler:
                             last_upscale_time = time.time()
                             image = self._apply_upscaling(image)
                             after_upscale_time = time.time() - last_upscale_time
