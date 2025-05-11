@@ -19,6 +19,8 @@ server/tensorrt_convert/onnx_models/*
 server/tensorrt_convert/onnx_models_tiny_vae/*
 server/tensorrt_convert/onnx_models_vanilla_vae/*
 server/modules/fast_srgan/models/*
+server/modules/upscaler/checkpoints/**/*
+server/modules/upscaler/notebooks/*
 
 server/assets/*
 

@@ -1,5 +1,8 @@
-from .processor import PilUpscalerProcessor, get_processor as get_pil_processor
-from .fast_srgan_processor import FastSRGANProcessor, get_processor as get_fast_srgan_processor
+from .processors.pil_processor import PilUpscalerProcessor, get_processor as get_pil_processor
+from .processors.fast_srgan_processor import FastSRGANProcessor, get_processor as get_fast_srgan_processor
+from .processors.omni_sr_processor import OmniSRProcessor, get_processor as get_omni_sr_processor
+from .processors.rvsr_processor import RvsrUpscalerProcessor, get_processor as get_rvsr_processor
+from .processors.dscf_sr_processor import DscfEfdnUpscalerProcessor, get_processor as get_dscf_sr_processor
 from .factory import create_upscaler
 
 # Alias for create_upscaler for backward compatibility
@@ -22,6 +25,12 @@ __all__ = [
     'get_pil_processor',
     'FastSRGANProcessor',
     'get_fast_srgan_processor',
+    'OmniSRProcessor',
+    'get_omni_sr_processor',
+    'RvsrUpscalerProcessor',
+    'get_rvsr_processor',
+    'DscfEfdnUpscalerProcessor',
+    'get_dscf_sr_processor',
     'create_upscaler',
     'get_processor'
 ] 
