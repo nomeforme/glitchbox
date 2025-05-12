@@ -34,10 +34,9 @@ from modules.prompt_scheduler import PromptTravelScheduler
 from modules.bg_removal import get_processor as get_bg_removal_processor
 # Import the depth estimator
 from modules.depth_anything.depth_anything_trt import DepthAnythingTRT
-# Import the upscaler processor
-from modules.upscaler import get_processor as get_upscaler_processor
 
 import numpy as np
+import zmq
 
 
 THROTTLE = 1.0 / 120
@@ -211,15 +210,10 @@ class App:
             self.bg_removal_processor = get_bg_removal_processor(device=device.type)
             print("[main.py] Background removal processor initialized")
             
-        # Initialize upscaler processor
-        self.use_upscaler = getattr(self.args, 'use_upscaler', False)
-        if self.use_upscaler:
-            upscaler_type = getattr(self.args, 'upscaler_type', 'pil')
-            self.upscaler_processor = get_upscaler_processor(device=device.type, upscaler_type=upscaler_type)
-            # Configure upscaler with default settings from config
-            self.upscaler_processor.set_scale_factor(getattr(self.args, 'upscaler_scale_factor', 2))
-            self.upscaler_processor.set_resample_method(getattr(self.args, 'upscaler_resample_method', 'lanczos'))
-            print(f"[main.py] {upscaler_type.upper()} upscaler processor initialized")
+        # Initialize ZMQ context and socket
+        self.zmq_context = zmq.Context()
+        self.zmq_socket = self.zmq_context.socket(zmq.PUB)
+        self.zmq_socket.bind("tcp://*:5555")
         
         self.init_app()
 
@@ -533,94 +527,66 @@ class App:
 
         @self.app.get("/api/stream/{user_id}")
         async def stream(user_id: uuid.UUID, request: Request):
+            """Stream processed frames"""
             try:
+                print(f"[Server] Starting stream for user {user_id}")
+                # Start processing loop
+                while True:
+                    last_time = time.time()
+                    await self.conn_manager.send_json(
+                        user_id, {"status": "send_frame"}
+                    )
+                    params = await self.conn_manager.get_latest_data(user_id)
+                    
+                    if self.args.debug:
+                        print(f"All the param stuff time taken: {time.time() - last_time}")
 
-                async def generate():
-                    # last_params = SimpleNamespace()
-                    while True:
-                        last_time = time.time()
-                        await self.conn_manager.send_json(
-                            user_id, {"status": "send_frame"}
-                        )
-                        params = await self.conn_manager.get_latest_data(user_id)
-                        
-                        # # Compare params while excluding tensor attributes to avoid comparison error
-                        # params_equal = False
-                        # if params is not None and hasattr(params, '__dict__') and hasattr(last_params, '__dict__'):
-                        #     # Create filtered dictionaries excluding tensor attributes
-                        #     params_dict = {k: v for k, v in params.__dict__.items() 
-                        #                   if not isinstance(v, torch.Tensor)}
-                        #     last_params_dict = {k: v for k, v in last_params.__dict__.items() 
-                        #                        if not isinstance(v, torch.Tensor)}
-                        #     params_equal = params_dict == last_params_dict
+                    last_img_time = time.time()
+                    image = self.pipeline.predict(params)
+                    if self.args.debug:
+                        print(f"Img gen time taken: {time.time() - last_img_time}")
+
+                    if self.args.safety_checker:
+                        image, has_nsfw_concept = self.safety_checker(image)
+                        if has_nsfw_concept:
+                            image = None
+
+                    if image is None:
+                        continue
+
+                    if self.use_background_removal and getattr(params, 'use_output_bg_removal', False):
+                        last_remove_time = time.time()
+                        image = self._apply_background_removal(image)
+                        after_remove_time = time.time() - last_remove_time
+                        if self.args.debug:
+                            print(f"Output background removal time taken: {after_remove_time}")
                             
-                        # if params_equal or params is None:
-                        #     await asyncio.sleep(THROTTLE)
-                        #     continue
-                            
-                        # last_params: SimpleNamespace = params
+                    # Update acid processor with the diffused image for next processing cycle
+                    if self.use_acid_processor:
+                        last_acid_time = time.time()
+                        # Convert PIL image to numpy array if needed
+                        img_diffusion = np.array(image)
+                        self.acid_processor.update(img_diffusion)
+                        after_acid_time = time.time() - last_acid_time
                         if self.args.debug:
-                            print(f"All the param stuff time taken: {time.time() - last_time}")
+                            print(f"Acid time taken: {after_acid_time}")
+                    
+                    # Convert PIL to numpy array and send over ZMQ
+                    print("[Server] Converting image to numpy array...")
+                    image_np = np.array(image)
+                    print(f"[Server] Sending image of shape {image_np.shape} over ZMQ...")
+                    self.zmq_socket.send(image_np.tobytes())
+                    print("[Server] Image sent successfully")
+                    
+                    if self.args.debug:
+                        print(f"Total processing time: {time.time() - last_time}")
 
-                        last_img_time = time.time()
-                        image = self.pipeline.predict(params)
-                        if self.args.debug:
-                            print(f"Img gen time taken: {time.time() - last_img_time}")
-
-                        if self.args.safety_checker:
-                            image, has_nsfw_concept = self.safety_checker(image)
-                            if has_nsfw_concept:
-                                image = None
-
-                        if image is None:
-                            continue
-
-                        if self.use_background_removal and getattr(params, 'use_output_bg_removal', False):
-                            last_remove_time = time.time()
-                            image = self._apply_background_removal(image)
-                            after_remove_time = time.time() - last_remove_time
-                            if self.args.debug:
-                                print(f"Output background removal time taken: {after_remove_time}")
-                                
-                        # Apply PIL upscaling if enabled
-                        if self.use_upscaler:
-                            last_upscale_time = time.time()
-                            image = self._apply_upscaling(image)
-                            after_upscale_time = time.time() - last_upscale_time
-                            if self.args.debug:
-                                print(f"Output upscaling time taken: {after_upscale_time}")
-                                
-                        # Update acid processor with the diffused image for next processing cycle
-                        if self.use_acid_processor:
-                            last_acid_time = time.time()
-                            # Convert PIL image to numpy array if needed
-                            img_diffusion = np.array(image)
-                            self.acid_processor.update(img_diffusion)
-                            after_acid_time = time.time() - last_acid_time
-                            if self.args.debug:
-                                print(f"Acid time taken: {after_acid_time}")
-                        
-                        last_frame_time = time.time()
-                        frame = pil_to_frame(image)
-                        if self.args.debug:
-                            print(f"Pil to frame time taken: {time.time() - last_frame_time}")
-                        # frame = pil_to_frame(params.acid_image)
-                        last_yielding_the_frame = time.time()
-                        yield frame
-                        # https://bugs.chromium.org/p/chromium/issues/detail?id=1250396
-                        if not is_firefox(request.headers["user-agent"]):
-                            yield frame
-                        if self.args.debug:
-                            print(f"Yielding Time taken: {time.time() - last_yielding_the_frame}")
-                            print(f"Websocket Time taken: {time.time() - last_time}")
-
-                return StreamingResponse(
-                    generate(),
-                    media_type="multipart/x-mixed-replace;boundary=frame",
-                    headers={"Cache-Control": "no-cache"},
-                )
+                # This will never be reached, but needed for type checking
+                return JSONResponse({"status": "connected", "message": "ZMQ stream started"})
             except Exception as e:
-                logging.error(f"Streaming Error: {e}, {user_id} ")
+                print(f"[Server] Streaming Error: {e}")
+                import traceback
+                traceback.print_exc()
                 return HTTPException(status_code=404, detail="User not found")
 
         # route to setup frontend
@@ -733,13 +699,6 @@ class App:
             if "reload_prompts" in settings and settings["reload_prompts"]:
                 self.prompt_travel_scheduler.reload_prompts()
                 
-        # Update upscaler settings if enabled
-        if self.use_upscaler:
-            if "upscaler_scale_factor" in settings:
-                self.upscaler_processor.set_scale_factor(settings["upscaler_scale_factor"])
-            if "upscaler_resample_method" in settings:
-                self.upscaler_processor.set_resample_method(settings["upscaler_resample_method"])
-    
     def _apply_acid_processing(self, pil_image):
         """Process image with acid processor and return processed PIL image"""
 
@@ -778,21 +737,6 @@ class App:
             return pil_image
             
         return self.bg_removal_processor.process_image(pil_image)
-        
-    def _apply_upscaling(self, pil_image):
-        """
-        Apply upscaling to a PIL image using PIL.
-        
-        Args:
-            pil_image (PIL.Image): Input image
-            
-        Returns:
-            PIL.Image: Upscaled image
-        """
-        if not self.use_upscaler:
-            return pil_image
-            
-        return self.upscaler_processor.process_image(pil_image)
 
 print(f"Device: {device}")
 print(f"torch_dtype: {torch_dtype}")

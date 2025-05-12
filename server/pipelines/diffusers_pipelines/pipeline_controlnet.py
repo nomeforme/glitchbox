@@ -15,12 +15,15 @@
 
 import inspect
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+import time
 
 import numpy as np
 import PIL.Image
 import torch
 import torch.nn.functional as F
 from transformers import CLIPImageProcessor, CLIPTextModel, CLIPTokenizer, CLIPVisionModelWithProjection
+from torchvision.transforms import Resize
+from torchvision.transforms.functional import InterpolationMode
 
 from diffusers.callbacks import MultiPipelineCallbacks, PipelineCallback
 from diffusers.image_processor import PipelineImageInput, VaeImageProcessor
@@ -260,6 +263,9 @@ class StableDiffusionControlNetPipeline(
             vae_scale_factor=self.vae_scale_factor, do_convert_rgb=True, do_normalize=False
         )
         self.register_to_config(requires_safety_checker=requires_safety_checker)
+        
+        # # Initialize upscaler processor
+        # self.upscaler = get_processor(device=self._execution_device)
 
     # Copied from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion.StableDiffusionPipeline._encode_prompt
     def _encode_prompt(
@@ -1342,10 +1348,19 @@ class StableDiffusionControlNetPipeline(
             torch.cuda.empty_cache()
 
         if not output_type == "latent":
-            image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False, generator=generator)[
-                0
-            ]
-            image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
+            image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False, generator=generator)[0]
+            print(f"INNER PIPELINE - Image shape: {image.shape}")
+            print(f"INNER PIPELINE - Image type: {image.dtype}")
+            
+            # Use the upscaler if it exists
+            if hasattr(self, 'upscaler') and self.upscaler is not None:
+                print(f"UPSCALER - Device: {self._execution_device}")
+                image = self.upscaler.process_tensor(image)
+                print(f"INNER PIPELINE - After upscaler - Image shape: {image.shape}")
+                print(f"INNER PIPELINE - After upscaler - Image type: {image.dtype}")
+            
+            # image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
+            has_nsfw_concept = None
         else:
             image = latents
             has_nsfw_concept = None
@@ -1355,7 +1370,10 @@ class StableDiffusionControlNetPipeline(
         else:
             do_denormalize = [not has_nsfw for has_nsfw in has_nsfw_concept]
 
+        t1 = time.time()
         image = self.image_processor.postprocess(image, output_type=output_type, do_denormalize=do_denormalize)
+        t2 = time.time()
+        print(f"INNER PIPELINE - Postprocess time: {t2 - t1} seconds")
 
         # Offload all models
         self.maybe_free_model_hooks()
