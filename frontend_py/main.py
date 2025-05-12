@@ -341,8 +341,10 @@ class MainWindow(QMainWindow):
     def toggle_presentation_mode(self):
         """Toggle presentation mode (hide input feed and controls)"""
         if not self.presentation_mode:
-            # Store original window size for restoration
+            # Store original window size and state for restoration
             self.original_size = self.size()
+            self.original_pos = self.pos()
+            self.original_window_state = self.windowState()
             
             # Enter presentation mode
             self.camera_container.hide()
@@ -354,27 +356,20 @@ class MainWindow(QMainWindow):
             # Hide status bar and connection label for cleaner look
             self.status_bar.hide()
             
-            # Calculate new window size
-            new_width = max(self.width() // 2, 640)  # Don't go smaller than 640px
-            new_height = self.height() - self.controls_container.height() - \
-                        self.status_bar.height()
+            # Remove all margins and spacing from layouts
+            self.feeds_layout.setContentsMargins(0, 0, 0, 0)
+            self.feeds_layout.setSpacing(0)
+            self.layout().setContentsMargins(0, 0, 0, 0)
+            self.layout().setSpacing(0)
             
-            # Adjust the processed display to take full space
-            self.processed_container.setMinimumWidth(new_width - 40)
-            self.processed_container.setMinimumHeight(new_height - 40)
+            # Make the processed display fill the entire window
+            self.processed_container.setContentsMargins(0, 0, 0, 0)
+            self.processed_display.setContentsMargins(0, 0, 0, 0)
+            self.processed_label.hide()  # Hide the label in presentation mode
             
-            # Center the output stream
-            self.feeds_layout.setAlignment(Qt.AlignCenter)
+            # Go fullscreen
+            self.showFullScreen()
             
-            # Resize window
-            self.resize(new_width, new_height)
-            
-            # Move window to center of screen
-            screen = QApplication.primaryScreen().geometry()
-            self.move(
-                (screen.width() - new_width) // 2,
-                (screen.height() - new_height) // 2
-            )
         else:
             # Exit presentation mode
             self.camera_container.show()
@@ -385,23 +380,27 @@ class MainWindow(QMainWindow):
             
             # Show status bar and connection label
             self.status_bar.show()
+            self.processed_label.show()
             
-            # Reset the processed display constraints
-            self.processed_container.setMinimumWidth(0)
-            self.processed_container.setMinimumHeight(0)
+            # Restore original margins and spacing
+            self.feeds_layout.setContentsMargins(9, 9, 9, 9)
+            self.feeds_layout.setSpacing(6)
+            self.layout().setContentsMargins(9, 9, 9, 9)
+            self.layout().setSpacing(6)
             
-            # Reset layout alignment
-            self.feeds_layout.setAlignment(Qt.AlignLeft)
+            # Restore processed display margins
+            self.processed_container.setContentsMargins(9, 9, 9, 9)
+            self.processed_display.setContentsMargins(9, 9, 9, 9)
             
-            # Restore original window size and position
-            if hasattr(self, 'original_size'):
-                self.resize(self.original_size)
-                # Center the restored window
-                screen = QApplication.primaryScreen().geometry()
-                self.move(
-                    (screen.width() - self.original_size.width()) // 2,
-                    (screen.height() - self.original_size.height()) // 2
-                )
+            # Restore original window state
+            if hasattr(self, 'original_window_state'):
+                if self.original_window_state == Qt.WindowFullScreen:
+                    self.showFullScreen()
+                else:
+                    self.showNormal()
+                    self.resize(self.original_size)
+                    if hasattr(self, 'original_pos'):
+                        self.move(self.original_pos)
             
         self.presentation_mode = not self.presentation_mode
 

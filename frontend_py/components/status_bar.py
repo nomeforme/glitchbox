@@ -18,9 +18,8 @@ class StatusBar(QWidget):
         # FPS counter
         self.fps_label = QLabel("0 FPS")
         left_layout.addWidget(self.fps_label)
-        self.last_frame_time = time.time()
-        self.frame_count = 0
-        self.fps = 0
+        self.frame_times = []  # Store timestamps of recent frames
+        self.max_frames = 60  # Keep track of last 60 frames for FPS calculation
         
         # Small spacing between FPS and connection status
         left_layout.addSpacing(5)
@@ -53,16 +52,20 @@ class StatusBar(QWidget):
             self.conn_status.setStyleSheet("color: red;")
 
     def update_fps(self):
-        """Update FPS counter based on received frames"""
+        """Update FPS counter based on received frames using a rolling window"""
         current_time = time.time()
-        self.frame_count += 1
+        self.frame_times.append(current_time)
         
-        # Update FPS every second
-        if current_time - self.last_frame_time >= 1.0:
-            self.fps = self.frame_count
-            self.fps_label.setText(f"{self.fps} FPS")
-            self.frame_count = 0
-            self.last_frame_time = current_time
+        # Keep only the last max_frames timestamps
+        if len(self.frame_times) > self.max_frames:
+            self.frame_times = self.frame_times[-self.max_frames:]
+        
+        # Calculate FPS based on the time difference between oldest and newest frame
+        if len(self.frame_times) > 1:
+            time_diff = self.frame_times[-1] - self.frame_times[0]
+            if time_diff > 0:
+                fps = (len(self.frame_times) - 1) / time_diff
+                self.fps_label.setText(f"{fps:.1f} FPS")
 
     def _truncate_message(self, message: str, max_length: int = 50) -> str:
         """Truncate message if it's too long"""
