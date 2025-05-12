@@ -30,6 +30,18 @@ def tensor2uint(img, data_range):
         img = np.transpose(img, (1, 2, 0))
     return np.uint8((img*255.0/data_range).round())
 
+def normalize_to_01(tensor):
+    """
+    Convert tensor from [-1, 1] range to [0, 1] range
+    """
+    return (tensor + 1) / 2
+
+def denormalize_to_neg1_1(tensor):
+    """
+    Convert tensor from [0, 1] range to [-1, 1] range
+    """
+    return tensor * 2 - 1
+
 class DscfEfdnUpscalerProcessor:
     """
     A processor class for upscaling images using the DSCF-SR or EFDN model.
@@ -45,26 +57,14 @@ class DscfEfdnUpscalerProcessor:
         """
         self.device = device if device is not None else ('cuda' if torch.cuda.is_available() else 'cpu')
         self.model_type = "efdn" #model_type.lower()
-        # Load the model
-        self.model = self._load_model()
-        self.model.to(self.device)
-        self.model.eval()
-        # Try to compile the model if torch.compile is available
-        print(f"Checking for torch.compile support...")
-        if hasattr(torch, 'compile'):
-            print(f"torch.compile is available, attempting to compile model...")
-            try:
-                self.model = torch.compile(self.model)
-                print(f"Successfully compiled {self.model_type} model")
-            except Exception as e:
-                print(f"Failed to compile model: {e}")
-                print("Continuing with uncompiled model")
-        else:
-            print(f"torch.compile is not available, using uncompiled model")
         # Default scale factor
         self.scale_factor = 4  # Changed to 4 to match notebook
         # Data range for normalization
         self.data_range = 1.0  # Both models expect [0,1] input and output
+        # Load the model
+        self.model = self._load_model()
+        self.model.to(self.device)
+        self.model.eval()
         
     def _load_model(self):
         if self.model_type == 'dscf':
@@ -72,26 +72,50 @@ class DscfEfdnUpscalerProcessor:
                 num_in_ch=3,
                 num_out_ch=3,
                 feature_channels=26,
-                upscale=4,
+                upscale=self.scale_factor,
                 bias=True,
                 img_range=1.0,  # Since we normalize to [0,1]
                 rgb_mean=(0.485, 0.456, 0.406)
             )
             checkpoint_path = os.path.join(
-                os.path.dirname(__file__),
-                '../checkpoints/dscf_sr/team23_DSCF.pth'
+                os.path.dirname(os.path.dirname(__file__)),
+                'checkpoints/dscf_sr/team23_DSCF.pth'
             )
+            print(f"Loading DSCF-SR model from {checkpoint_path}")
         elif self.model_type == 'efdn':
-            model = EFDN(scale=4, in_channels=3, n_feats=48, out_channels=3)
-            checkpoint_path = os.path.join(
-                os.path.dirname(__file__),
-                '../checkpoints/dscf_sr/team00_EFDN.pth'
+            model = EFDN(
+                scale=self.scale_factor,
+                in_channels=3,
+                n_feats=48,
+                out_channels=3
             )
+            checkpoint_path = os.path.join(
+                os.path.dirname(os.path.dirname(__file__)),
+                'checkpoints/dscf_sr/team00_EFDN.pth'
+            )
+            print(f"Loading EFDN model from {checkpoint_path}")
         else:
             raise ValueError(f"Unknown model_type: {self.model_type}. Use 'dscf' or 'efdn'.")
         checkpoint_path = os.path.abspath(checkpoint_path)
         state_dict = torch.load(checkpoint_path, map_location=self.device)
         model.load_state_dict(state_dict, strict=True)
+        
+        # Convert model to half precision
+        model = model.half()
+        
+        # Try to compile the model if torch.compile is available
+        print(f"Checking for torch.compile support...")
+        if hasattr(torch, 'compile'):
+            print(f"torch.compile is available, attempting to compile model...")
+            try:
+                model = torch.compile(model)
+                print(f"Successfully compiled {self.model_type} model")
+            except Exception as e:
+                print(f"Failed to compile model: {e}")
+                print("Continuing with uncompiled model")
+        else:
+            print(f"torch.compile is not available, using uncompiled model")
+            
         return model
         
     def set_scale_factor(self, factor):
@@ -162,8 +186,38 @@ class DscfEfdnUpscalerProcessor:
         """
         return [self.process_image(img, scale_factor) for img in pil_images]
 
+    def process_tensor(self, image_tensor):
+        """
+        Process a tensor directly using the model without PIL conversion.
+        Args:
+            image_tensor (torch.Tensor): Input tensor of shape [B, C, H, W] in range [-1, 1]
+        Returns:
+            torch.Tensor: Upscaled tensor of shape [B, C, H*scale_factor, W*scale_factor] in range [-1, 1]
+        """
+        # Ensure tensor is on the correct device and convert to half precision
+        image_tensor = image_tensor.to(self.device).half()
+        
+        # First clamp to [-1, 1] to ensure input is in expected range
+        image_tensor = torch.clamp(image_tensor, -1.0, 1.0)
+        
+        # Convert from [-1, 1] to [0, 1] range for model processing
+        # The model expects [0,1] range as it was trained on uint8 images normalized to [0,1]
+        image_tensor = (image_tensor + 1) / 2
+        
+        # Process through model
+        with torch.no_grad():
+            t1 = time.time()
+            output = self.model(image_tensor)
+            t2 = time.time()
+            print(f"Super Resolution - Time taken: {t2 - t1} seconds")
+            
+        # Convert back to [-1, 1] range
+        # The model's output is already clamped to [0,1] by design
+        output = output * 2 - 1
+        
+        return output
 
-def get_processor(device=None, model_type='dscf'):
+def get_processor(device=None):
     """
     Factory function to create a DscfEfdnUpscalerProcessor instance.
     Args:
@@ -172,4 +226,4 @@ def get_processor(device=None, model_type='dscf'):
     Returns:
         DscfEfdnUpscalerProcessor: An instance of the upscaler processor
     """
-    return DscfEfdnUpscalerProcessor(device=device, model_type=model_type) 
+    return DscfEfdnUpscalerProcessor(device=device, model_type='efdn') 

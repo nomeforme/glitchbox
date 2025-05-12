@@ -30,6 +30,8 @@ import torch
 
 # NOTE: this is a custom prompt travel module
 from modules.prompt_travel.prompt_travel import PromptTravel
+# Import the upscaler processor
+from modules.upscaler import get_processor as get_upscaler_processor
 
 taesd_model = "madebyollin/taesd"
 controlnet_model = "thibaud/controlnet-sd21-depth-diffusers"
@@ -304,6 +306,16 @@ class Pipeline:
         self.pipes = []
         self.pipe_states = []
         
+        # Initialize upscaler processor if enabled
+        self.use_upscaler = getattr(args, 'use_upscaler', False)
+        if self.use_upscaler:
+            upscaler_type = getattr(args, 'upscaler_type', 'pil')
+            self.upscaler_processor = get_upscaler_processor(device=device.type, upscaler_type=upscaler_type)
+            # Configure upscaler with default settings from config
+            self.upscaler_processor.set_scale_factor(getattr(args, 'upscaler_scale_factor', 4))
+            self.upscaler_processor.set_resample_method(getattr(args, 'upscaler_resample_method', 'lanczos'))
+            print(f"[controlnetSDTurbot2i.py] {upscaler_type.upper()} upscaler processor initialized")
+        
         for adapter_weights in adapter_weights_sets:
             # Create pipeline with ControlNet model
             pipe = StableDiffusionControlNetPipeline.from_pretrained(
@@ -396,6 +408,10 @@ class Pipeline:
             # If there's only one LoRA, don't fuse. If there are multiple, fuse them automatically
             should_fuse = True #len(default_loras) > 1
             self.load_loras_for_pipe(pipe, pipe_state, default_loras, fuse_loras=should_fuse, lora_scale=1.0, adapter_weights=adapter_weights)
+            
+            # Pass the upscaler processor to the pipeline if enabled
+            if self.use_upscaler:
+                pipe.upscaler = self.upscaler_processor
             
             self.pipes.append(pipe)
             self.pipe_states.append(pipe_state)
@@ -612,7 +628,8 @@ class Pipeline:
 
         if params.debug_controlnet:
             # paste control_image on top of result_image
-            w0, h0 = (200, 200)
+            scale_factor = 4
+            w0, h0 = (scale_factor * 200, scale_factor * 200)
             control_image = control_image.resize((w0, h0))
             w1, h1 = result_image.size
             result_image.paste(control_image, (w1 - w0, h1 - h0))

@@ -43,6 +43,18 @@ class RvsrUpscalerProcessor:
         checkpoint_path = os.path.abspath(checkpoint_path)
         state_dict = torch.load(checkpoint_path, map_location=self.device)
         model.load_state_dict(state_dict, strict=True)
+        
+        # Convert model to float16
+        model = model.half()
+        
+        try:
+            print("Compiling RVSR model with torch.compile...")
+            model = torch.compile(model, mode="reduce-overhead")
+            print("RVSR model compilation complete!")
+        except Exception as e:
+            print(f"Failed to compile RVSR model: {str(e)}")
+            print("Falling back to uncompiled model")
+
         return model
         
     def set_scale_factor(self, factor):
@@ -108,6 +120,23 @@ class RvsrUpscalerProcessor:
         """
         return [self.process_image(img, scale_factor) for img in pil_images]
 
+    def process_tensor(self, image_tensor):
+        """
+        Process a tensor directly using RVSR without PIL conversion.
+        Args:
+            image_tensor (torch.Tensor): Input tensor of shape [B, C, H, W] in range [-1, 1]
+        Returns:
+            torch.Tensor: Upscaled tensor of shape [B, C, H*4, W*4] in range [-1, 1]
+        """
+        
+        # Perform inference
+        with torch.no_grad():
+            t1 = time.time()
+            output = self.model(image_tensor.to(device=self.device))
+            t2 = time.time()
+            print(f"Super Resolution - Time taken: {t2 - t1} seconds")
+            
+        return output
 
 def get_processor(device=None):
     """

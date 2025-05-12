@@ -7,6 +7,8 @@ import requests
 import threading
 import sys
 import os
+import zmq
+import time
 
 # Add the parent directory to the path to allow importing from the parent package
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -62,6 +64,97 @@ class StreamThread(QThread):
         self.running = False
         self.wait()
 
+class ZMQThread(QThread):
+    """Thread for handling ZMQ image stream"""
+    frame_received = Signal(np.ndarray)
+    
+    def __init__(self):
+        super().__init__()
+        self.running = False
+        print("[ZMQ] Initializing ZMQ context and socket...")
+        self.context = zmq.Context()
+        self.socket = self.context.socket(zmq.SUB)
+        print("[ZMQ] Attempting to connect to tcp://localhost:5555...")
+        try:
+            self.socket.connect("tcp://localhost:5555")
+            self.socket.setsockopt(zmq.SUBSCRIBE, b"")  # Subscribe to all messages
+            print("[ZMQ] Socket connected and subscribed")
+        except Exception as e:
+            print(f"[ZMQ] Failed to connect to ZMQ socket: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def run(self):
+        """Process the ZMQ stream"""
+        try:
+            print("[ZMQ] Starting ZMQ stream processing...")
+            self.running = True
+            frame_count = 0
+            start_time = time.time()
+            
+            while self.running:
+                try:
+                    # Receive raw bytes with timeout
+                    print("[ZMQ] Waiting for data...")
+                    if self.socket.poll(timeout=1000) == 0:  # 1 second timeout
+                        print("[ZMQ] No data received within timeout")
+                        continue
+                        
+                    data = self.socket.recv()
+                    if not data:
+                        print("[ZMQ] Received empty data")
+                        continue
+                        
+                    # Convert bytes to numpy array
+                    print(f"[ZMQ] Received data of size: {len(data)} bytes")
+                    frame = np.frombuffer(data, dtype=np.uint8)
+                    
+                    # Calculate expected size based on display dimensions
+                    expected_size = DISPLAY_HEIGHT * DISPLAY_WIDTH * 3  # 3 channels for RGB
+                    if len(frame) != expected_size:
+                        print(f"[ZMQ] Warning: Received data size {len(frame)} doesn't match expected size {expected_size}")
+                        continue
+                        
+                    # Reshape to image dimensions
+                    frame = frame.reshape(DISPLAY_HEIGHT, DISPLAY_WIDTH, 3)
+                    
+                    if frame is not None:
+                        frame_count += 1
+                        if frame_count % 30 == 0:  # Log every 30 frames
+                            elapsed = time.time() - start_time
+                            fps = frame_count / elapsed
+                            print(f"[ZMQ] Processed {frame_count} frames, FPS: {fps:.2f}")
+                        self.frame_received.emit(frame)
+                    else:
+                        print("[ZMQ] Failed to reshape frame")
+                        
+                except zmq.error.Again:
+                    print("[ZMQ] ZMQ timeout - no data received")
+                    continue
+                except Exception as e:
+                    print(f"[ZMQ] Error processing frame: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    continue
+                        
+        except Exception as e:
+            print(f"[ZMQ] Error in ZMQ thread: {e}")
+            import traceback
+            traceback.print_exc()
+        finally:
+            print("[ZMQ] Cleaning up ZMQ resources...")
+            self.running = False
+            self.socket.close()
+            self.context.term()
+            print("[ZMQ] ZMQ resources cleaned up")
+
+    def stop(self):
+        """Stop the ZMQ thread"""
+        print("[ZMQ] Stopping ZMQ thread...")
+        self.running = False
+        self.wait()
+        print("[ZMQ] ZMQ thread stopped")
+
 class ProcessedDisplay(QWidget):
     """Widget to display processed image output"""
     
@@ -78,9 +171,10 @@ class ProcessedDisplay(QWidget):
         
         # Stream handling
         self.stream_thread = None
+        self.zmq_thread = None
 
     def start_stream(self, user_id: str, server_uri: str = "http://localhost:7860"):
-        """Start receiving the MJPEG stream
+        """Start receiving the image stream
         
         Args:
             user_id: The user ID for the stream
@@ -89,18 +183,28 @@ class ProcessedDisplay(QWidget):
         if self.stream_thread and self.stream_thread.running:
             self.stop_stream()
             
-        # Create and start stream thread
+        # Create and start ZMQ thread
+        print("[ZMQ] Starting ZMQ stream")
+        self.zmq_thread = ZMQThread()
+        self.zmq_thread.frame_received.connect(self.update_frame)
+        self.zmq_thread.start()
+        
+        # Also start WebSocket stream for backward compatibility
         stream_url = f"{server_uri}/api/stream/{user_id}"
-        print(f"[Stream] Starting stream from: {stream_url}")
+        print(f"[Stream] Starting WebSocket stream from: {stream_url}")
         self.stream_thread = StreamThread(stream_url)
         self.stream_thread.frame_received.connect(self.update_frame)
         self.stream_thread.start()
 
     def stop_stream(self):
-        """Stop the stream thread"""
+        """Stop the stream threads"""
         if self.stream_thread:
             self.stream_thread.stop()
             self.stream_thread = None
+            
+        if self.zmq_thread:
+            self.zmq_thread.stop()
+            self.zmq_thread = None
 
     def update_frame(self, frame: np.ndarray):
         """Update the display with a new frame"""
