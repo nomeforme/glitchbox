@@ -20,6 +20,7 @@ dependencies = [
     "pyside6==6.6.1",
     "python-dotenv>=1.1.0",
     "python-multipart==0.0.6",
+    "pyzmq>=26.4.0",
     "realtimestt==0.3.98",
     "requests>=2.32.3",
     "scipy==1.15.1",

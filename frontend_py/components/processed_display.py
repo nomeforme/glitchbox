@@ -89,8 +89,6 @@ class ZMQThread(QThread):
         try:
             print("[ZMQ] Starting ZMQ stream processing...")
             self.running = True
-            frame_count = 0
-            start_time = time.time()
             
             while self.running:
                 try:
@@ -109,21 +107,16 @@ class ZMQThread(QThread):
                     print(f"[ZMQ] Received data of size: {len(data)} bytes")
                     frame = np.frombuffer(data, dtype=np.uint8)
                     
-                    # Calculate expected size based on display dimensions
-                    expected_size = DISPLAY_HEIGHT * DISPLAY_WIDTH * 3  # 3 channels for RGB
+                    # Calculate expected size based on display dimensions and upscaling
+                    expected_size = int(DISPLAY_HEIGHT * DISPLAY_WIDTH * 3 * (DISPLAY_SCALE ** 2))  # 3 channels for RGB, squared scale factor for 2D upscaling
                     if len(frame) != expected_size:
                         print(f"[ZMQ] Warning: Received data size {len(frame)} doesn't match expected size {expected_size}")
                         continue
                         
-                    # Reshape to image dimensions
-                    frame = frame.reshape(DISPLAY_HEIGHT, DISPLAY_WIDTH, 3)
+                    # Reshape to image dimensions accounting for upscaling
+                    frame = frame.reshape(int(DISPLAY_HEIGHT * DISPLAY_SCALE), int(DISPLAY_WIDTH * DISPLAY_SCALE), 3)
                     
                     if frame is not None:
-                        frame_count += 1
-                        if frame_count % 30 == 0:  # Log every 30 frames
-                            elapsed = time.time() - start_time
-                            fps = frame_count / elapsed
-                            print(f"[ZMQ] Processed {frame_count} frames, FPS: {fps:.2f}")
                         self.frame_received.emit(frame)
                     else:
                         print("[ZMQ] Failed to reshape frame")
@@ -189,7 +182,7 @@ class ProcessedDisplay(QWidget):
         self.zmq_thread.frame_received.connect(self.update_frame)
         self.zmq_thread.start()
         
-        # Also start WebSocket stream for backward compatibility
+        # NOTE: Required for ZMQ to start
         stream_url = f"{server_uri}/api/stream/{user_id}"
         print(f"[Stream] Starting WebSocket stream from: {stream_url}")
         self.stream_thread = StreamThread(stream_url)
@@ -214,8 +207,15 @@ class ProcessedDisplay(QWidget):
         height, width = frame.shape[:2]
         bytes_per_line = 3 * width
         q_image = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
-        self.image_label.setPixmap(QPixmap.fromImage(q_image).scaled(
-            DISPLAY_WIDTH * DISPLAY_SCALE, DISPLAY_HEIGHT * DISPLAY_SCALE, Qt.KeepAspectRatio))
+        
+        # Get the available size of the label
+        available_size = self.image_label.size()
+        
+        # Scale the pixmap to fit the available space while maintaining aspect ratio
+        pixmap = QPixmap.fromImage(q_image)
+        scaled_pixmap = pixmap.scaled(available_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        
+        self.image_label.setPixmap(scaled_pixmap)
         
         # Update FPS counter in status bar
         main_window = self.window()
