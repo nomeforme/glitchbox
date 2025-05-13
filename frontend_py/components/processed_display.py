@@ -9,10 +9,21 @@ import sys
 import os
 import zmq
 import time
+from dotenv import load_dotenv
 
 # Add the parent directory to the path to allow importing from the parent package
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_SCALE
+
+# Load environment variables
+load_dotenv(override=True)
+
+# Server configuration
+DEFAULT_SERVER_HOST = os.getenv("DEFAULT_SERVER_HOST")
+DEFAULT_SERVER_ZMQ_PORT = os.getenv("DEFAULT_SERVER_ZMQ_PORT")
+
+print(f"DEFAULT_SERVER_HOST: {DEFAULT_SERVER_HOST}")
+print(f"DEFAULT_SERVER_ZMQ_PORT: {DEFAULT_SERVER_ZMQ_PORT}")
 
 class StreamThread(QThread):
     """Thread for handling MJPEG stream from server"""
@@ -74,9 +85,10 @@ class ZMQThread(QThread):
         print("[ZMQ] Initializing ZMQ context and socket...")
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.SUB)
-        print("[ZMQ] Attempting to connect to tcp://localhost:5555...")
+        zmq_address = f"tcp://{DEFAULT_SERVER_HOST}:{DEFAULT_SERVER_ZMQ_PORT}"
+        print(f"[ZMQ] Attempting to connect to {zmq_address}...")
         try:
-            self.socket.connect("tcp://localhost:5555")
+            self.socket.connect(zmq_address)
             self.socket.setsockopt(zmq.SUBSCRIBE, b"")  # Subscribe to all messages
             print("[ZMQ] Socket connected and subscribed")
         except Exception as e:
