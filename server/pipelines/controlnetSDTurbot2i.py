@@ -61,11 +61,13 @@ lora_models = {
     "mid-body-shoulders-glitch-monochrome": "server/loras/mid_body_shoulders_glitch-monochrome-000140.safetensors",
     "mid-body-shoulders-glitch-reddish": "server/loras/mid_body_shoulders_glitch-reddish-000140.safetensors",
     "mid-body-torso-glitch-monochrome": "server/loras/mid_body_torso_glitch-monochrome-000140.safetensors",
-    "mid-body-torso-glitch-reddish": "server/loras/mid_body_torso_glitch-reddish-000140.safetensors"
+    "mid-body-torso-glitch-reddish": "server/loras/mid_body_torso_glitch-reddish-000140.safetensors",
+    "melier-bw": "server/loras/melier_bw-000068.safetensors"
 }
 
 # Default LoRAs to use - can be a single LoRA or a list of LoRAs to fuse
-default_loras = ["full-body-glitch-reddish", "abstract-monochrome"]
+# default_loras = ["full-body-glitch-reddish", "abstract-monochrome"]
+default_loras = ["melier-bw", "abstract-monochrome"]
 
 # Define adapter weights sets
 adapter_weights_sets = [
@@ -311,9 +313,6 @@ class Pipeline:
         if self.use_upscaler:
             upscaler_type = getattr(args, 'upscaler_type', 'pil')
             self.upscaler_processor = get_upscaler_processor(device=device.type, upscaler_type=upscaler_type)
-            # Configure upscaler with default settings from config
-            self.upscaler_processor.set_scale_factor(getattr(args, 'upscaler_scale_factor', 4))
-            self.upscaler_processor.set_resample_method(getattr(args, 'upscaler_resample_method', 'lanczos'))
             print(f"[controlnetSDTurbot2i.py] {upscaler_type.upper()} upscaler processor initialized")
         
         for adapter_weights in adapter_weights_sets:

@@ -2,6 +2,13 @@ import os
 import torch
 import torch.onnx
 import argparse
+import sys
+
+# Add parent directories to sys.path
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.append(ROOT_DIR)
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
 
 from modules.depth_anything.dpt import DPT_DINOv2
 from modules.depth_anything.util.transform import Resize, NormalizeImage, PrepareForNet
