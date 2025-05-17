@@ -33,7 +33,7 @@ from modules.prompt_scheduler import PromptTravelScheduler
 # Import background removal processor
 from modules.bg_removal import get_processor as get_bg_removal_processor
 # Import the depth estimator
-from modules.depth_anything.depth_anything_base import DepthAnything
+from modules.depth_anything.depth_anything_trt import DepthAnythingTRT as DepthAnything
 
 import numpy as np
 import zmq
@@ -241,7 +241,7 @@ class App:
                 try:
                     print("[main.py] Initializing depth estimator")
                     self.depth_estimator = DepthAnything(
-                        encoder='vits',
+                        engine_path=self.depth_engine_path,
                         device=device.type,
                         grayscale=getattr(self.args, 'depth_grayscale', False)
                     )

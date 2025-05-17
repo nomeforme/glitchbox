@@ -51,8 +51,8 @@ lora_models = {
     "style_pi_2": "server/loras/style_pi_2.safetensors",
     "pytorch_lora_weights": "server/loras/pytorch_lora_weights.safetensors",
     "FKATwigs_A1-000038": "server/loras/FKATwigs_A1-000038.safetensors",
-    "dark":"server/loras/flowers-000022.safetensors",
-    "marina1":"server/loras/marina-glitch-000140.safetensors",
+    "dark": "server/loras/flowers-000022.safetensors",
+    "marina1": "server/loras/marina-glitch-000140.safetensors",
     "marina-red": "server/loras/marina-red-000140.safetensors",
     "abstract-monochrome": "server/loras/abstract-monochrome-000140.safetensors",
     "abstract-brokenglass-red": "server/loras/abstract_brokenglass_red-000140.safetensors",
@@ -62,20 +62,29 @@ lora_models = {
     "mid-body-shoulders-glitch-reddish": "server/loras/mid_body_shoulders_glitch-reddish-000140.safetensors",
     "mid-body-torso-glitch-monochrome": "server/loras/mid_body_torso_glitch-monochrome-000140.safetensors",
     "mid-body-torso-glitch-reddish": "server/loras/mid_body_torso_glitch-reddish-000140.safetensors",
-    "melier-bw": "server/loras/melier_bw-000068.safetensors"
+    "melier-bw": "server/loras/melier_bw-000052.safetensors",
+    "melier-col": "server/loras/melier_col-000032.safetensors",
+    "nature-bw": "server/loras/nature_bw-000052.safetensors",
+    "nature-water": "server/loras/nature_water-000072.safetensors",
+    "robwood": "server/loras/robwood-000060.safetensors",
+    "sweet-vicious": "server/loras/sweet_vicious-000072.safetensors"
 }
 
 # Default LoRAs to use - can be a single LoRA or a list of LoRAs to fuse
-# default_loras = ["full-body-glitch-reddish", "abstract-monochrome"]
-default_loras = ["melier-bw", "abstract-monochrome"]
+lora_curation = [["full-body-glitch-reddish", "abstract-monochrome"], \
+                 ["melier-bw", "melier-col"], \
+                 ["nature-water", "nature-bw"], \
+                 ["sweet-vicious", "robwood"]]
+
+default_loras = lora_curation[2]
 
 # Define adapter weights sets
 adapter_weights_sets = [
     [1.0, 0.0],    # First set: full weight on first LoRA
-    # [0.75, 0.25],
-    # [0.5, 0.5],    # Middle set: equal weights
-    # [0.25, 0.75],
-    # [0.0, 1.0]     # Last set: full weight on second LoRA
+    [0.75, 0.25],
+    [0.5, 0.5],    # Middle set: equal weights
+    [0.25, 0.75],
+    [0.0, 1.0]     # Last set: full weight on second LoRA
 ]
 
 # Function to read prompt prefix from .txt files
@@ -524,6 +533,7 @@ class Pipeline:
 
         prompt = params.prompt
         prompt_embeds = None
+        negative_prompt_embeds = None
 
         control_image = getattr(params, 'control_image', None)
 
@@ -534,6 +544,8 @@ class Pipeline:
 
         # Use provided prompt embeddings if available - with safer attribute check
         has_prompt_embeds = hasattr(params, "prompt_embeds") and params.prompt_embeds is not None
+
+        print("[controlnetSDTurbot2i.py] PIPELINE has_prompt_embeds: ", has_prompt_embeds)
 
         if has_prompt_embeds:
             prompt_embeds = params.prompt_embeds
@@ -601,11 +613,15 @@ class Pipeline:
 
             print("prompt travel factor: ", getattr(params, "prompt_travel_factor", 0.5))
             print("latent travel factor: ", getattr(params, "latent_travel_factor", 0.5))
+            print("prompt: ", prompt)
+            print("prompt_embeds: ", prompt_embeds.shape if prompt_embeds is not None else "None")
+            print("negative_prompt_embeds: ", negative_prompt_embeds.shape if negative_prompt_embeds is not None else "None")
 
         results = pipe(
             image=control_image,
             prompt=prompt,
             prompt_embeds=prompt_embeds,
+            negative_prompt_embeds=negative_prompt_embeds,
             generator=generator,
             strength=strength,
             num_inference_steps=1,
