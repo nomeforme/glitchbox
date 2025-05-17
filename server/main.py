@@ -33,7 +33,7 @@ from modules.prompt_scheduler import PromptTravelScheduler
 # Import background removal processor
 from modules.bg_removal import get_processor as get_bg_removal_processor
 # Import the depth estimator
-from modules.depth_anything.depth_anything_trt import DepthAnythingTRT
+from modules.depth_anything.depth_anything_base import DepthAnything
 
 import numpy as np
 import zmq
@@ -240,9 +240,10 @@ class App:
             if self.use_depth_estimator:
                 try:
                     print("[main.py] Initializing depth estimator")
-                    self.depth_estimator = DepthAnythingTRT(
-                        engine_path=self.depth_engine_path,
-                        device=device.type
+                    self.depth_estimator = DepthAnything(
+                        encoder='vits',
+                        device=device.type,
+                        grayscale=getattr(self.args, 'depth_grayscale', False)
                     )
                     print("[main.py] Depth estimator initialized")
                 except Exception as e:
@@ -251,12 +252,20 @@ class App:
                     self.use_depth_estimator = False
             
             # Initialize embeddings service if prompt travel is enabled
-            if self.use_prompt_travel and hasattr(self.pipeline, 'pipe'):
+            print(f"[main.py] Use prompt travel: {self.use_prompt_travel}")
+            print(f"[main.py] Has pipeline pipe: {hasattr(self.pipeline, 'pipe')}")
+            print(f"[main.py] Has pipeline pipes: {hasattr(self.pipeline, 'pipes')}")
+            if self.use_prompt_travel and (hasattr(self.pipeline, 'pipe') or hasattr(self.pipeline, 'pipes')):
                 try:
                     print("[main.py] Initializing prompt travel service")
-                    # Get the models from the pipeline
-                    text_encoder = self.pipeline.pipe.text_encoder
-                    tokenizer = self.pipeline.pipe.tokenizer
+                    # Get the models from the pipeline - handle both single pipe and multiple pipes
+                    if hasattr(self.pipeline, 'pipe'):
+                        text_encoder = self.pipeline.pipe.text_encoder
+                        tokenizer = self.pipeline.pipe.tokenizer
+                    else:
+                        # Use the first pipe from the array
+                        text_encoder = self.pipeline.pipes[0].text_encoder
+                        tokenizer = self.pipeline.pipes[0].tokenizer
                     
                     # Initialize the embeddings service
                     await embeddings_service.initialize(
@@ -487,6 +496,9 @@ class App:
                                 if self.args.debug:
                                     print(f"Time for background removal: {time.time() - bg_removal_start:.4f}s")
                             
+                            # setattr(params, 'control_image', params.image)
+
+
                             # Apply depth estimation if enabled
                             if self.use_depth_estimator and params.image and getattr(params, 'use_depth_estimation', True):
                                 depth_start = time.time()

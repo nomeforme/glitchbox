@@ -60,3 +60,18 @@ uv pip install -v -U git+https://github.com/chengzeyi/stable-fast.git@main#egg=s
 uv run server/pipelines/diffusers_pipelines/pipeline_controlnet_tensorrt.py --sd_model "stabilityai/sd-turbo" --onnx_model_dir "server/tensorrt_convert/onnx_models" --unet_engine_path "server/tensorrt_convert/onnx_models/unet/unet.engine" --qr_img_path "server/assets/mountain.png"
 
 pip install -U --pre oneflow -f https://github.com/siliconflow/oneflow_releases/releases/expanded_assets/community_cu121
+
+# Pip backend
+uv pip install pip
+pip install -r server/requirements.txt
+pip uninstall torch torchvision torchaudio
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+pip install xformers --index-url https://download.pytorch.org/whl/cu128
+export TORCH_CUDA_ARCH_LIST="8.9"
+pip install -v -U git+https://github.com/chengzeyi/stable-fast.git@main#egg=stable-fast --no-build-isolation
+
+#Depth Anything TRT compile
+
+
+
+python -m torch.utils.collect_env

@@ -57,6 +57,8 @@ class EmbeddingsServiceManager:
         """
         if not self.initialized or not self.prompt_travel:
             print("Error: Embeddings service not initialized")
+            print(f"Prompt travel: {self.prompt_travel}")
+            print(f"Initialized: {self.initialized}")
             return
             
         if not prompt or not target_prompt:

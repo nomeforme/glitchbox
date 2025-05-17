@@ -37,4 +37,5 @@ xformers>=0.0.30
 # git+https://github.com/chengzeyi/stable-fast.git@main#egg=stable-fast
 git+https://github.com/lunarring/lunar_tools.git
 
+# export TORCH_CUDA_ARCH_LIST="8.9"
 # pip install -v -U git+https://github.com/chengzeyi/stable-fast.git@main#egg=stable-fast --no-build-isolation
