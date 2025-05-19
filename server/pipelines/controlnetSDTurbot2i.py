@@ -67,25 +67,64 @@ lora_models = {
     "nature-bw": "server/loras/nature_bw-000052.safetensors",
     "nature-water": "server/loras/nature_water-000072.safetensors",
     "robwood": "server/loras/robwood-000060.safetensors",
-    "sweet-vicious": "server/loras/sweet_vicious-000072.safetensors"
+    "sweet-vicious": "server/loras/sweet_vicious-000072.safetensors",
+    "liquid-love": "server/loras/liquid_love-000032.safetensors"
 }
 
 # Default LoRAs to use - can be a single LoRA or a list of LoRAs to fuse
-lora_curation = [["full-body-glitch-reddish", "abstract-monochrome"], \
-                 ["melier-bw", "melier-col"], \
-                 ["nature-water", "nature-bw"], \
-                 ["sweet-vicious", "robwood"]]
+DEFAULT_CURATION_INDEX = 3
 
-default_loras = lora_curation[2]
+lora_curation = {
+    "glitch_abstract": ["full-body-glitch-reddish", "abstract-monochrome"],
+    "melier": ["melier-bw", "melier-col"],
+    "liquid_nature": ["nature-bw", "nature-water"],
+    "sweet_robwood": ["sweet-vicious", "robwood"]
+}
 
-# Define adapter weights sets
-adapter_weights_sets = [
-    [1.0, 0.0],    # First set: full weight on first LoRA
-    [0.75, 0.25],
-    [0.5, 0.5],    # Middle set: equal weights
-    [0.25, 0.75],
-    [0.0, 1.0]     # Last set: full weight on second LoRA
-]
+curation_keys = ["glitch_abstract", "melier", "liquid_nature", "sweet_robwood"]
+
+# Define adapter weights sets - one set per lora_curation element
+adapter_weights_set_curation = {
+    "glitch_abstract": [  # ["full-body-glitch-reddish", "abstract-monochrome"]
+        [1.0, 0.0],    # Full weight on first LoRA
+        [0.75, 0.25],  # More weight on first LoRA
+        [0.5, 0.5],    # Equal weights
+        [0.25, 0.75],  # More weight on second LoRA
+        [0.0, 1.0]     # Full weight on second LoRA
+    ],
+    "melier": [  
+        [1.0, 0.0],
+        [0.7, 0.3],
+        [0.4, 0.6],
+        [0.2, 0.8],
+        [0.1, 0.9]
+    ],
+    "liquid_nature": [ 
+        [0.6, 0.4],
+        [0.6, 0.7],
+        [0.4, 0.9],
+        [0.3, 0.9],
+        [0.2, 0.9]
+    ],
+    "sweet_robwood": [
+        [0.9, 0.1],
+        [0.7, 0.3],
+        [0.5, 0.5],
+        [0.4, 0.6],
+        [0.3, 0.7]
+    ]
+}
+
+adapter_weights_sets = adapter_weights_set_curation[curation_keys[DEFAULT_CURATION_INDEX]]
+
+# adapter_weights_sets = [
+#     [1.0, 0.0],    # First set: full weight on first LoRA
+#     [0.75, 0.25],
+#     [0.5, 0.5],    # Middle set: equal weights
+#     [0.25, 0.75],
+#     [0.0, 1.0]     # Last set: full weight on second LoRA
+# ]
+
 
 # Function to read prompt prefix from .txt files
 def get_prompt_prefix():
@@ -153,15 +192,24 @@ class Pipeline:
             id="target_prompt",
             hide=True,
         )
+        curation_index: int = Field(
+            DEFAULT_CURATION_INDEX,
+            min=0,
+            max=len(curation_keys) - 1,
+            title="Curation Index",
+            field="range",
+            id="curation_index",
+            description=f"Select which LoRA pair to use: {', '.join(curation_keys)}"
+        )
         pipe_index: int = Field(
             0,
             min=0,
-            max=len(adapter_weights_sets) - 1,
+            max=4,
             step=1,
             title="Pipe Index",
             field="range",
             id="pipe_index",
-            description="Select which pipe to use (0: [1.0, 0.0] weights, 1: [0.5, 0.5] weights, 2: [0.0, 1.0] weights)"
+            description="Select which weight combination to use for the selected LoRA pair"
         )
         use_prompt_travel: bool = Field(
             True,
@@ -205,7 +253,7 @@ class Pipeline:
             hide=True,
         )
         lora_models: List[str] = Field(
-            [default_loras[0]] if default_loras else [],
+            [lora_curation[curation_keys[DEFAULT_CURATION_INDEX]][0]] if lora_curation[curation_keys[DEFAULT_CURATION_INDEX]] else [],
             title="LoRA Models",
             field="multiselect",
             id="lora_models",
@@ -306,13 +354,8 @@ class Pipeline:
         )
 
     def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype):
-        # Load ControlNet model
-        # controlnet = ControlNetModel.from_pretrained(
-        #     controlnet_model, torch_dtype=torch_dtype
-        # )
-        
-        # # Move model to device
-        # controlnet.to(device)
+        # Add current_curation_index to track changes
+        self.current_curation_index = None
         
         self.pipes = []
         self.pipe_states = []
@@ -412,10 +455,10 @@ class Pipeline:
             }
             
             # Load default LoRA(s) during initialization with specific adapter weights
-            print(f"Loading default LoRA(s): {default_loras} with weights {adapter_weights}")
+            print(f"Loading default LoRA(s): {lora_curation[curation_keys[DEFAULT_CURATION_INDEX]]} with weights {adapter_weights}")
             # If there's only one LoRA, don't fuse. If there are multiple, fuse them automatically
-            should_fuse = True #len(default_loras) > 1
-            self.load_loras_for_pipe(pipe, pipe_state, default_loras, fuse_loras=should_fuse, lora_scale=1.0, adapter_weights=adapter_weights)
+            should_fuse = True
+            self.load_loras_for_pipe(pipe, pipe_state, lora_curation[curation_keys[DEFAULT_CURATION_INDEX]], fuse_loras=should_fuse, lora_scale=1.0, adapter_weights=adapter_weights)
             
             # Pass the upscaler processor to the pipeline if enabled
             if self.use_upscaler:
@@ -516,12 +559,43 @@ class Pipeline:
             
         print(f"Total LoRA operation time: {time.time() - start_time:.2f} seconds")
 
+    def update_lora_set(self, pipe, pipe_state, curation_index: int) -> None:
+        """Helper function to update LoRAs if curation_index has changed"""
+        if self.current_curation_index != curation_index:
+            print(f"Updating LoRAs for curation index {curation_index}")
+            
+            # First unfuse and unload any existing LoRAs
+            if pipe_state['lora_weights_loaded'] or hasattr(pipe, 'fused_lora_weights'):
+                print("Unfusing and unloading existing LoRAs")
+                if hasattr(pipe, 'fused_lora_weights'):
+                    print("Unfusing LoRAs")
+                    pipe.unfuse_lora()
+                pipe.unload_lora_weights()
+                print("Unloading LoRA weights took: {time.time() - unload_start:.2f} seconds")
+                pipe_state['lora_weights_loaded'] = False
+                pipe_state['current_lora_models'] = []
+                pipe_state['fuse_loras'] = False
+                pipe_state['lora_scale'] = 1.0
+                pipe_state['current_adapter_weights'] = []
+            
+            # Now load the new LoRA set
+            default_loras = lora_curation[curation_keys[curation_index]]
+            adapter_weights = adapter_weights_set_curation[curation_keys[curation_index]][0]  # Start with first weight set
+            self.load_loras_for_pipe(pipe, pipe_state, default_loras, fuse_loras=True, lora_scale=1.0, adapter_weights=adapter_weights)
+            self.current_curation_index = curation_index
+
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
         # Use the pipe index from params
         self.current_pipe_idx = params.pipe_index
         pipe = self.pipes[self.current_pipe_idx]
         pipe_state = self.pipe_states[self.current_pipe_idx]
-        print(f"Using pipe {self.current_pipe_idx} with adapter weights {adapter_weights_sets[self.current_pipe_idx]}")
+        
+        # Update LoRAs if curation_index has changed
+        self.update_lora_set(pipe, pipe_state, params.curation_index)
+        
+        # Get current adapter weights based on both curation_index and pipe_index
+        adapter_weights = adapter_weights_set_curation[curation_keys[params.curation_index]][params.pipe_index]
+        print(f"Using pipe {self.current_pipe_idx} with adapter weights {adapter_weights}")
 
         generator = torch.manual_seed(params.seed)
         
