@@ -7,5 +7,6 @@ from .camera_display import CameraDisplay
 from .processed_display import ProcessedDisplay
 from .control_panel import ControlPanel
 from .status_bar import StatusBar
+from .fullscreen_window import FullscreenWindow
 
-__all__ = ['CameraDisplay', 'ProcessedDisplay', 'ControlPanel', 'StatusBar']
+__all__ = ['CameraDisplay', 'ProcessedDisplay', 'ControlPanel', 'StatusBar', 'FullscreenWindow']
