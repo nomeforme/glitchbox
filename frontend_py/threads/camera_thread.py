@@ -7,7 +7,7 @@ import os
 
 # Add the parent directory to the path to allow importing from the parent package
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import DISPLAY_WIDTH, DISPLAY_HEIGHT
+from config import DISPLAY_WIDTH, DISPLAY_HEIGHT, CAMERA_DEVICE_INDEX
 
 class CameraThread(QThread):
     """Thread for handling camera capture"""
@@ -17,7 +17,7 @@ class CameraThread(QThread):
         super().__init__()
         self.running = False
         self.camera = None
-        self.device_index = 0
+        self.device_index = CAMERA_DEVICE_INDEX
 
     def run(self):
         """Main thread loop for capturing camera frames"""

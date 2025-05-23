@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QLabel, QWidget, QVBoxLayout
+from PySide6.QtWidgets import QLabel, QWidget, QVBoxLayout, QPushButton, QHBoxLayout
 from PySide6.QtCore import Qt, Signal, QThread
 from PySide6.QtGui import QImage, QPixmap
 import numpy as np
@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 # Add the parent directory to the path to allow importing from the parent package
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_SCALE
+from .fullscreen_window import FullscreenWindow
 
 # Load environment variables
 load_dotenv(override=True)
@@ -174,9 +175,49 @@ class ProcessedDisplay(QWidget):
         self.image_label.setAlignment(Qt.AlignCenter)
         self.layout.addWidget(self.image_label)
         
+        # Fullscreen button
+        self.button_layout = QHBoxLayout()
+        self.fullscreen_button = QPushButton("Fullscreen")
+        self.fullscreen_button.clicked.connect(self.toggle_fullscreen)
+        self.fullscreen_button.setStyleSheet("""
+            QPushButton {
+                background-color: rgba(0, 0, 0, 50%);
+                color: white;
+                border: none;
+                padding: 5px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: rgba(0, 0, 0, 70%);
+            }
+        """)
+        self.button_layout.addStretch()
+        self.button_layout.addWidget(self.fullscreen_button)
+        self.layout.addLayout(self.button_layout)
+        
         # Stream handling
         self.stream_thread = None
         self.zmq_thread = None
+        
+        # Fullscreen window
+        self.fullscreen_window = None
+        self.is_fullscreen = False
+
+    def toggle_fullscreen(self):
+        """Toggle fullscreen window"""
+        if not self.is_fullscreen:
+            if not self.fullscreen_window:
+                self.fullscreen_window = FullscreenWindow()
+            self.fullscreen_window.show()
+            self.fullscreen_window.showFullScreen()
+            self.is_fullscreen = True
+            self.fullscreen_button.setText("Exit Fullscreen")
+        else:
+            if self.fullscreen_window:
+                self.fullscreen_window.close()
+                self.fullscreen_window = None
+            self.is_fullscreen = False
+            self.fullscreen_button.setText("Fullscreen")
 
     def start_stream(self, user_id: str, server_uri: str = "http://localhost:7860"):
         """Start receiving the image stream
@@ -229,6 +270,10 @@ class ProcessedDisplay(QWidget):
         
         self.image_label.setPixmap(scaled_pixmap)
         
+        # Update fullscreen window if active
+        if self.fullscreen_window and self.is_fullscreen:
+            self.fullscreen_window.update_frame(frame)
+        
         # Update FPS counter in status bar
         main_window = self.window()
         if main_window:
@@ -238,7 +283,12 @@ class ProcessedDisplay(QWidget):
         """Clear the display and stop stream"""
         self.stop_stream()
         self.image_label.clear()
+        if self.fullscreen_window:
+            self.fullscreen_window.clear_display()
 
     def __del__(self):
         """Cleanup on deletion"""
         self.stop_stream()
+        if self.fullscreen_window:
+            self.fullscreen_window.close()
+            self.fullscreen_window = None
