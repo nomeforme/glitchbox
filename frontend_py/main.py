@@ -124,6 +124,10 @@ class MainWindow(QMainWindow):
         self.toggle_presentation_button.clicked.connect(self.toggle_presentation_mode)
         presentation_layout.addWidget(self.toggle_presentation_button)
         
+        self.toggle_fullscreen_button = QPushButton("Detach Output")
+        self.toggle_fullscreen_button.clicked.connect(self.toggle_fullscreen)
+        presentation_layout.addWidget(self.toggle_fullscreen_button)
+        
         layout.addLayout(presentation_layout)
         
         # Initialize threads
@@ -403,6 +407,15 @@ class MainWindow(QMainWindow):
                         self.move(self.original_pos)
             
         self.presentation_mode = not self.presentation_mode
+
+    def toggle_fullscreen(self):
+        """Toggle fullscreen mode for the processed display"""
+        if hasattr(self, 'processed_display'):
+            self.processed_display.toggle_fullscreen()
+            if self.processed_display.is_fullscreen:
+                self.toggle_fullscreen_button.setText("Close Output Window")
+            else:
+                self.toggle_fullscreen_button.setText("Detach Output")
 
     def closeEvent(self, event):
         """Handle window close event - cleanup all threads in proper order"""
