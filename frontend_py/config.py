@@ -9,8 +9,12 @@ DISPLAY_SCALE = 4.0
 CAMERA_DEVICE_INDEX = 0
 
 # Audio settings
-NUM_FFT_BINS = 5
+NUM_FFT_BINS = 50
 FFT_WINDOW_SIZE_MS = 60
-SMOOTHING_LENGTH_MS = 50
-EQUALIZER_STRENGTH = 0.20
+SMOOTHING_LENGTH_MS = 1000 #50
+EQUALIZER_STRENGTH = 0.10 #0.20
 ROLLING_STATS_WINDOW_S = 20
+
+# FFT frequency range settings
+FFT_FREQ_START_IDX = 0  # Starting index for frequency range
+FFT_FREQ_END_IDX = None  # Ending index for frequency range (None means use all bins)
