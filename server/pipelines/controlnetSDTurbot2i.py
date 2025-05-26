@@ -27,104 +27,30 @@ import torchvision.transforms as T
 from diffusers.utils.remote_utils import remote_decode
 from typing import Optional
 import torch
+from .config import LoRACurationConfig
 
 # NOTE: this is a custom prompt travel module
 from modules.prompt_travel.prompt_travel import PromptTravel
 # Import the upscaler processor
 from modules.upscaler import get_processor as get_upscaler_processor
+from modules.postprocessing.pixelate import PixelateProcessor
 
 taesd_model = "madebyollin/taesd"
 controlnet_model = "thibaud/controlnet-sd21-depth-diffusers"
 base_model = "stabilityai/sd-turbo"
 
-# LoRA models
-lora_models = {
-    "None": None,
-    "radames/sd-21-DPO-LoRA": "radames/sd-21-DPO-LoRA",
-    "latent-consistency/lcm-lora-sdv2-1": "latent-consistency/lcm-lora-sdv2-1",
-    "latent-consistency/lcm-lora-sdv2-1-turbo": "latent-consistency/lcm-lora-sdv2-1-turbo",
-    "hakurei/waifu-diffusion": "hakurei/waifu-diffusion",
-    "ostris/ikea-instructions-lora": "ostris/ikea-instructions-lora",
-    "ostris/super-cereal-sdxl-lora": "ostris/super-cereal-sdxl-lora",
-    "pbarbarant/sd-sonio": "pbarbarant/sd-sonio",
-    "artificialguybr/studioghibli-redmond-2-1v-studio-ghibli-lora-for-freedom-redmond-sd-2-1": "artificialguybr/studioghibli-redmond-2-1v-studio-ghibli-lora-for-freedom-redmond-sd-2-1",
-    "style_pi_2": "server/loras/style_pi_2.safetensors",
-    "pytorch_lora_weights": "server/loras/pytorch_lora_weights.safetensors",
-    "FKATwigs_A1-000038": "server/loras/FKATwigs_A1-000038.safetensors",
-    "dark": "server/loras/flowers-000022.safetensors",
-    "marina1": "server/loras/marina-glitch-000140.safetensors",
-    "marina-red": "server/loras/marina-red-000140.safetensors",
-    "abstract-monochrome": "server/loras/abstract-monochrome-000140.safetensors",
-    "abstract-brokenglass-red": "server/loras/abstract_brokenglass_red-000140.safetensors",
-    "full-body-glitch-monochrome": "server/loras/full_body_glitch-monochrome-000140.safetensors",
-    "full-body-glitch-reddish": "server/loras/full_body_glitch-reddish-000140.safetensors",
-    "mid-body-shoulders-glitch-monochrome": "server/loras/mid_body_shoulders_glitch-monochrome-000140.safetensors",
-    "mid-body-shoulders-glitch-reddish": "server/loras/mid_body_shoulders_glitch-reddish-000140.safetensors",
-    "mid-body-torso-glitch-monochrome": "server/loras/mid_body_torso_glitch-monochrome-000140.safetensors",
-    "mid-body-torso-glitch-reddish": "server/loras/mid_body_torso_glitch-reddish-000140.safetensors",
-    "melier-bw": "server/loras/melier_bw-000052.safetensors",
-    "melier-col": "server/loras/melier_col-000032.safetensors",
-    "nature-bw": "server/loras/nature_bw-000052.safetensors",
-    "nature-water": "server/loras/nature_water-000072.safetensors",
-    "robwood": "server/loras/robwood-000060.safetensors",
-    "sweet-vicious": "server/loras/sweet_vicious-000072.safetensors",
-    "liquid-love": "server/loras/liquid_love-000032.safetensors"
-}
+# Initialize LoRACurationConfig
+lora_config = LoRACurationConfig()
 
-# Default LoRAs to use - can be a single LoRA or a list of LoRAs to fuse
-DEFAULT_CURATION_INDEX = 3
+# Use the LoRACurationConfig instance to replace existing logic
+lora_models = lora_config.get_lora_models()
+DEFAULT_CURATION_INDEX = lora_config.DEFAULT_CURATION_INDEX
+DEFAULT_LORA_SCALE = lora_config.DEFAULT_LORA_SCALE
+lora_curation = lora_config.get_lora_curation()
+curation_keys = lora_config.get_curation_keys()
+adapter_weights_set_curation = lora_config.get_adapter_weights_set_curation()
 
-lora_curation = {
-    "glitch_abstract": ["full-body-glitch-reddish", "abstract-monochrome"],
-    "melier": ["melier-bw", "melier-col"],
-    "liquid_nature": ["nature-bw", "nature-water"],
-    "sweet_robwood": ["sweet-vicious", "robwood"]
-}
-
-curation_keys = ["glitch_abstract", "melier", "liquid_nature", "sweet_robwood"]
-
-# Define adapter weights sets - one set per lora_curation element
-adapter_weights_set_curation = {
-    "glitch_abstract": [  # ["full-body-glitch-reddish", "abstract-monochrome"]
-        [1.0, 0.0],    # Full weight on first LoRA
-        [0.75, 0.25],  # More weight on first LoRA
-        [0.5, 0.5],    # Equal weights
-        [0.25, 0.75],  # More weight on second LoRA
-        [0.0, 1.0]     # Full weight on second LoRA
-    ],
-    "melier": [  
-        [1.0, 0.0],
-        [0.7, 0.3],
-        [0.4, 0.6],
-        [0.2, 0.8],
-        [0.1, 0.9]
-    ],
-    "liquid_nature": [ 
-        [0.6, 0.4],
-        [0.6, 0.7],
-        [0.4, 0.9],
-        [0.3, 0.9],
-        [0.2, 0.9]
-    ],
-    "sweet_robwood": [
-        [0.9, 0.1],
-        [0.7, 0.3],
-        [0.5, 0.5],
-        [0.4, 0.6],
-        [0.3, 0.7]
-    ]
-}
-
-adapter_weights_sets = adapter_weights_set_curation[curation_keys[DEFAULT_CURATION_INDEX]]
-
-# adapter_weights_sets = [
-#     [1.0, 0.0],    # First set: full weight on first LoRA
-#     [0.75, 0.25],
-#     [0.5, 0.5],    # Middle set: equal weights
-#     [0.25, 0.75],
-#     [0.0, 1.0]     # Last set: full weight on second LoRA
-# ]
-
+adapter_weights_sets = lora_config.get_default_adapter_weights()
 
 # Function to read prompt prefix from .txt files
 def get_prompt_prefix():
@@ -309,6 +235,15 @@ class Pipeline:
             hide=True,
             id="strength",
         )
+        lora_scale: float = Field(
+            0.5,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="LoRA Scale",
+            field="range",
+            id="lora_scale",
+        )
         controlnet_scale: float = Field(
             0.325,
             min=0,
@@ -366,6 +301,11 @@ class Pipeline:
             upscaler_type = getattr(args, 'upscaler_type', 'pil')
             self.upscaler_processor = get_upscaler_processor(device=device.type, upscaler_type=upscaler_type)
             print(f"[controlnetSDTurbot2i.py] {upscaler_type.upper()} upscaler processor initialized")
+        
+        # Initialize pixelate processor
+        self.use_pixelate_processor = getattr(args, 'use_pixelate_processor', False)
+        if self.use_pixelate_processor:
+            self.pixelate_processor = PixelateProcessor()
         
         for adapter_weights in adapter_weights_sets:
             # Create pipeline with ControlNet model
@@ -458,11 +398,14 @@ class Pipeline:
             print(f"Loading default LoRA(s): {lora_curation[curation_keys[DEFAULT_CURATION_INDEX]]} with weights {adapter_weights}")
             # If there's only one LoRA, don't fuse. If there are multiple, fuse them automatically
             should_fuse = True
-            self.load_loras_for_pipe(pipe, pipe_state, lora_curation[curation_keys[DEFAULT_CURATION_INDEX]], fuse_loras=should_fuse, lora_scale=1.0, adapter_weights=adapter_weights)
+            self.load_loras_for_pipe(pipe, pipe_state, lora_curation[curation_keys[DEFAULT_CURATION_INDEX]], fuse_loras=should_fuse, lora_scale=DEFAULT_LORA_SCALE, adapter_weights=adapter_weights)
             
             # Pass the upscaler processor to the pipeline if enabled
             if self.use_upscaler:
                 pipe.upscaler = self.upscaler_processor
+
+            if self.use_pixelate_processor:
+                pipe.pixelate_processor = self.pixelate_processor
             
             self.pipes.append(pipe)
             self.pipe_states.append(pipe_state)
@@ -717,7 +660,12 @@ class Pipeline:
 
         if params.debug_controlnet:
             # paste control_image on top of result_image
-            scale_factor = 4
+
+            if getattr(params, "use_upscaler", False):
+                scale_factor = 4
+            else:
+                scale_factor = 1
+
             w0, h0 = (scale_factor * 200, scale_factor * 200)
             control_image = control_image.resize((w0, h0))
             w1, h1 = result_image.size

@@ -75,3 +75,5 @@ pip install -v -U git+https://github.com/chengzeyi/stable-fast.git@main#egg=stab
 
 
 python -m torch.utils.collect_env
+
+export CUDA_VISIBLE_DEVICES=1,0

@@ -80,6 +80,8 @@ class Args(NamedTuple):
     upscaler_type: str = "fast_srgan"
     upscaler_scale_factor: float = 2.0
     upscaler_resample_method: str = "lanczos"
+    # Add pixelate processor argument
+    use_pixelate_processor: bool = False
 
     def pretty_print(self):
         print("\n")
@@ -507,12 +509,20 @@ parser.add_argument(
     help="Save depth maps in grayscale",
 )
 
+# Add pixelate processor argument
+parser.add_argument(
+    "--use-pixelate-processor",
+    dest="use_pixelate_processor",
+    action="store_true",
+    default=False,
+    help="Enable Pixelate Processor",
+)
 # Add upscaler arguments
 parser.add_argument(
     "--use-upscaler",
     dest="use_upscaler",
     action="store_true",
-    default=True,
+    default=False,
     help="Enable upscaler for output images",
 )
 parser.add_argument(

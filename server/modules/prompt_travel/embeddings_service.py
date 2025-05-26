@@ -118,12 +118,14 @@ class EmbeddingsServiceManager:
             embeds_from, neg_embeds = self.prompt_travel.encode_prompt(
                 prompt=prompt,
                 device=torch.device(self.device),
+                num_images_per_prompt=1,
                 do_classifier_free_guidance=True,
             )
             
             embeds_to, _ = self.prompt_travel.encode_prompt(
                 prompt=target_prompt,
                 device=torch.device(self.device),
+                num_images_per_prompt=1,
                 do_classifier_free_guidance=True,
             )
             

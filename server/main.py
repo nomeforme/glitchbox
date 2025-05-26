@@ -1,3 +1,6 @@
+import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+
 from fastapi import FastAPI, WebSocket, HTTPException, WebSocketDisconnect
 from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,7 +20,6 @@ from device import device, torch_dtype
 import asyncio
 import os
 import time
-import torch
 # Import the acid processor
 from modules.acid_processor import AcidProcessor, InputImageProcessor
 # Import the frequency zoom controller
@@ -37,6 +39,44 @@ from modules.depth_anything.depth_anything_trt import DepthAnythingTRT as DepthA
 
 import numpy as np
 import zmq
+import pycuda.driver as cuda
+
+# # Print detailed CUDA device information
+# print("\nDetailed CUDA Device Information:")
+# cuda.init()
+
+# # Get all devices and their properties
+# devices = []
+# for i in range(cuda.Device.count()):
+#     devicea = cuda.Device(i)
+#     devices.append({
+#         'index': i,
+#         'name': devicea.name(),
+#         'memory': devicea.total_memory(),
+#         'compute_capability': devicea.compute_capability()
+#     })
+
+# # Sort devices by compute capability (lower first) and then by memory
+# devices.sort(key=lambda x: (x['compute_capability'][0], x['compute_capability'][1], x['memory']))
+
+# # Print device information in sorted order
+# for device_info in devices:
+#     device = cuda.Device(device_info['index'])
+#     print(f"\nDevice {device_info['index']}: {device.name()}")
+#     print(f"  Make: NVIDIA")
+#     print(f"  Model: {device.name()}")
+#     print(f"  Compute Capability: {device.compute_capability()}")
+#     print(f"  Total Memory: {device.total_memory() / 1024**2:.2f} MB")
+#     print(f"  Multi Processor Count: {device.get_attribute(cuda.device_attribute.MULTIPROCESSOR_COUNT)}")
+#     print(f"  Clock Rate: {device.get_attribute(cuda.device_attribute.CLOCK_RATE) / 1000:.2f} MHz")
+#     print(f"  Max Threads Per Block: {device.get_attribute(cuda.device_attribute.MAX_THREADS_PER_BLOCK)}")
+#     print(f"  Max Block Dimensions: {device.get_attribute(cuda.device_attribute.MAX_BLOCK_DIM_X)} x {device.get_attribute(cuda.device_attribute.MAX_BLOCK_DIM_Y)} x {device.get_attribute(cuda.device_attribute.MAX_BLOCK_DIM_Z)}")
+#     print(f"  Max Grid Dimensions: {device.get_attribute(cuda.device_attribute.MAX_GRID_DIM_X)} x {device.get_attribute(cuda.device_attribute.MAX_GRID_DIM_Y)} x {device.get_attribute(cuda.device_attribute.MAX_GRID_DIM_Z)}")
+#     print(f"  Warp Size: {device.get_attribute(cuda.device_attribute.WARP_SIZE)}")
+#     print(f"  Max Shared Memory Per Block: {device.get_attribute(cuda.device_attribute.MAX_SHARED_MEMORY_PER_BLOCK) / 1024:.2f} KB")
+#     print(f"  Device Overlap: {'Yes' if device.get_attribute(cuda.device_attribute.ASYNC_ENGINE_COUNT) > 0 else 'No'}")
+#     print(f"  Concurrent Kernels: {'Yes' if device.get_attribute(cuda.device_attribute.CONCURRENT_KERNELS) else 'No'}")
+
 
 
 THROTTLE = 1.0 / 120
@@ -496,8 +536,8 @@ class App:
                                 if self.args.debug:
                                     print(f"Time for background removal: {time.time() - bg_removal_start:.4f}s")
                             
+                            # NOTE: Hack to set control image equal to input image
                             # setattr(params, 'control_image', params.image)
-
 
                             # Apply depth estimation if enabled
                             if self.use_depth_estimator and params.image and getattr(params, 'use_depth_estimation', True):
@@ -506,6 +546,9 @@ class App:
                                     print("[main.py] Applying depth estimation")
                                     # Get the depth map
                                     depth_map = self.depth_estimator.get_depth(params.image)
+
+                                    # if self.use_background_removal:
+                                    #     depth_map = self._apply_background_removal(depth_map)
                                     
                                     # Set the control image in the params
                                     # This is the key part that sets params.control_image for use in the pipeline
