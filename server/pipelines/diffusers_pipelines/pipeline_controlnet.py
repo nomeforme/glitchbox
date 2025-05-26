@@ -1361,6 +1361,9 @@ class StableDiffusionControlNetPipeline(
                 print(f"INNER PIPELINE - After upscaler - Image shape: {image.shape}")
                 print(f"INNER PIPELINE - After upscaler - Image type: {image.dtype}")
             
+            if hasattr(self, 'pixelate_processor') and self.pixelate_processor is not None:
+                image = self.pixelate_processor.apply(image)
+
             # image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
             has_nsfw_concept = None
         else:
