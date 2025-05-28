@@ -11,8 +11,8 @@ class LoraSoundController:
                  num_pipes=2,  # Number of available pipes in the pipeline
                  enabled=True,
                  debug=False,
-                 freq_start_idx=0,  # Start index for frequency range
-                 freq_end_idx=30,  # End index for frequency range (None means use all)
+                 freq_start_idx=15,  # Start index for frequency range
+                 freq_end_idx=20,  # End index for frequency range (None means use all)
                  averaging_factor=6):  # Number of bins to average together
         """
         Initialize the sound-reactive LoRA controller.
@@ -35,6 +35,9 @@ class LoraSoundController:
         
         # Current pipe index value
         self.current_pipe_index = 0
+
+        # Normalized energy thresholds
+        self.normalized_energy_thresholds = [0.0, 0.10, 0.20, 0.30, 0.40, 1.0]
 
     def enable_debug(self, enabled=True):
         """Enable or disable debug printing"""
@@ -114,12 +117,15 @@ class LoraSoundController:
             self.freq_end_idx = len(normalized_energies)
             
         normalized_energies_subset = normalized_energies[self.freq_start_idx:self.freq_end_idx]
+
+        use_energy = normalized_energies[25]
+        print(f"[LoraSoundController] DEBUG: Use energy: {use_energy}")
         
-        # Average the frequency bins
-        averaged_energies = self._average_frequency_bins(normalized_energies_subset)
-        
-        # For now, just return the highest energy bin pipe index
-        new_pipe_index = np.argmax(averaged_energies)
+        new_pipe_index = 0
+        for i in range(len(self.normalized_energy_thresholds) - 1):
+            if self.normalized_energy_thresholds[i] <= use_energy < self.normalized_energy_thresholds[i + 1]:
+                new_pipe_index = i
+                break
 
         if self.debug:
             print(f"Selected pipe index: {new_pipe_index}")

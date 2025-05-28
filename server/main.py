@@ -132,7 +132,8 @@ class App:
                 use_prompt_scheduler=getattr(self.args, 'use_prompt_scheduler', False),
                 prompts_dir=getattr(self.args, 'prompts_dir', "prompts"),
                 prompt_file_pattern=getattr(self.args, 'prompt_file_pattern', "*.txt"),
-                loop_prompts=getattr(self.args, 'loop_prompts', True)
+                loop_prompts=getattr(self.args, 'loop_prompts', True),
+                lora_model_name=config.lora_model_name  # Pass the LoRA model name from config
             )
         
         # Initialize acid processors
@@ -415,7 +416,7 @@ class App:
                                 if binned_fft is not None:
                                     # Process frequency bins for zoom if acid processor is enabled and test oscillation is disabled
                                     if self.use_acid_processor and not self.zoom_oscillator.enabled:
-                                        new_zoom = self.frequency_zoom_controller.process_frequency_bins(binned_fft)
+                                        new_zoom = self.frequency_zoom_controller.process_frequency_bins(normalized_energies)
                                         if self.args.debug:
                                             print(f"[main.py] Updated zoom factor from frequency analysis: {new_zoom:.2f}")
                                         # Apply the updated zoom factor to the acid processor

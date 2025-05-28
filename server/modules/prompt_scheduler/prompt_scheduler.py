@@ -22,7 +22,8 @@ class PromptScheduler:
                 enabled=False,
                 debug=False,
                 loop_prompts=True,
-                logging_enabled=False):
+                logging_enabled=False,
+                lora_model_name=None):
         """
         Initialize the prompt scheduler.
         
@@ -33,6 +34,7 @@ class PromptScheduler:
             debug (bool): Whether to print debug messages (default: False)
             loop_prompts (bool): Whether to loop back to the beginning when reaching the end (default: True)
             logging_enabled (bool): Whether to enable logging (default: False)
+            lora_model_name (str): Name of the LoRA model (default: None)
         """
         self.prompts_dir = prompts_dir
         self.prompt_file_pattern = prompt_file_pattern
@@ -40,6 +42,7 @@ class PromptScheduler:
         self.debug = debug
         self.loop_prompts = loop_prompts
         self.logging_enabled = logging_enabled
+        self.lora_model_name = lora_model_name  # Store lora_model_name as instance variable
         
         # Internal state
         self.prompts = []
@@ -123,50 +126,60 @@ class PromptScheduler:
     def load_prompts(self):
         """
         Load prompts from the specified directory and file pattern.
+        If a LoRA model name is provided, load the corresponding prompt file.
         """
         # Get the prompt prefix
         prompt_prefix = self.get_prompt_prefix()
-        
+
         # Get the absolute path to the prompts directory
         server_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         prompts_path = os.path.join(server_dir, self.prompts_dir)
-        
+
         if self.debug:
             print(f"[PromptScheduler] Looking for prompts in: {prompts_path}")
         if self.logging_enabled:
             self.logger.info(f"Looking for prompts in: {prompts_path}")
-        
-        # Find all prompt files matching the pattern
-        prompt_files = glob.glob(os.path.join(prompts_path, self.prompt_file_pattern))
-        
+
+        # If a LoRA model name is provided, construct the specific file path
+        if self.lora_model_name is not None:
+            print(f"[PromptScheduler] Loading prompts for LoRA model: {self.lora_model_name}")
+            # Look in the lora_prompts subdirectory for LoRA-specific prompts
+            lora_prompts_path = os.path.join(prompts_path, "lora_prompts")
+            prompt_file = os.path.join(lora_prompts_path, f"prompts_{self.lora_model_name}.txt")
+            prompt_files = [prompt_file] if os.path.exists(prompt_file) else []
+        else:
+            # Find all prompt files matching the pattern
+            print(f"[PromptScheduler] Looking for prompts in: {prompts_path} matching {self.prompt_file_pattern}")
+            prompt_files = glob.glob(os.path.join(prompts_path, self.prompt_file_pattern))
+
         # Filter out prefix files
         prompt_files = [f for f in prompt_files if not os.path.basename(f).startswith("prompt_prefix_")]
-        
+
         if not prompt_files:
             if self.debug:
                 print(f"[PromptScheduler] No prompt files found in {prompts_path} matching {self.prompt_file_pattern}")
             if self.logging_enabled:
                 self.logger.warning(f"No prompt files found in {prompts_path} matching {self.prompt_file_pattern}")
             return
-        
+
         # Read prompts from the first file found
         with open(prompt_files[0], 'r') as f:
             # Read lines and filter out empty lines
             raw_prompts = [line.strip() for line in f.readlines() if line.strip()]
-            
+
             # Apply the prompt prefix to each prompt
             self.prompts = [prompt_prefix + " " + prompt for prompt in raw_prompts]
-        
+
         if self.debug:
             print(f"[PromptScheduler] Loaded {len(self.prompts)} prompts from {prompt_files[0]}")
             for i, prompt in enumerate(self.prompts):
                 print(f"[PromptScheduler] Prompt {i+1}: {prompt}")
-        
+
         if self.logging_enabled:
             self.logger.info(f"Loaded {len(self.prompts)} prompts from {prompt_files[0]}")
             for i, prompt in enumerate(self.prompts):
                 self.logger.info(f"Prompt {i+1}: {prompt}")
-        
+
         # Initialize current and next prompts if we have at least 2 prompts
         if len(self.prompts) >= 2:
             self.current_prompt = self.prompts[0]

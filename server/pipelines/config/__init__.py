@@ -25,9 +25,8 @@ class LoRACurationConfig:
         get_adapter_weights_set_curation(): Returns the dictionary of adapter weight sets for curations.
     """
 
-    def __init__(self):
-
-        self.DEFAULT_CURATION_INDEX = 9
+    def __init__(self, default_curation_index=0):
+        self.DEFAULT_CURATION_INDEX = default_curation_index
         self.DEFAULT_LORA_SCALE = 1.0
     
         self.lora_models = {
@@ -35,47 +34,35 @@ class LoRACurationConfig:
             "radames/sd-21-DPO-LoRA": "radames/sd-21-DPO-LoRA",
             "latent-consistency/lcm-lora-sdv2-1": "latent-consistency/lcm-lora-sdv2-1",
             "latent-consistency/lcm-lora-sdv2-1-turbo": "latent-consistency/lcm-lora-sdv2-1-turbo",
-            "hakurei/waifu-diffusion": "hakurei/waifu-diffusion",
-            "ostris/ikea-instructions-lora": "ostris/ikea-instructions-lora",
-            "ostris/super-cereal-sdxl-lora": "ostris/super-cereal-sdxl-lora",
-            "pbarbarant/sd-sonio": "pbarbarant/sd-sonio",
-            "artificialguybr/studioghibli-redmond-2-1v-studio-ghibli-lora-for-freedom-redmond-sd-2-1": "artificialguybr/studioghibli-redmond-2-1v-studio-ghibli-lora-for-freedom-redmond-sd-2-1",
-            "style_pi_2": "server/loras/style_pi_2.safetensors",
-            "pytorch_lora_weights": "server/loras/pytorch_lora_weights.safetensors",
             "garance": "server/loras/garance-000038.safetensors",
             "dark": "server/loras/flowers-000022.safetensors",
-            "marina1": "server/loras/marina-glitch-000140.safetensors",
-            "marina-red": "server/loras/marina-red-000140.safetensors",
             "abstract-monochrome": "server/loras/abstract-monochrome-000140.safetensors",
             "abstract-brokenglass-red": "server/loras/abstract_brokenglass_red-000140.safetensors",
-            "full-body-glitch-monochrome": "server/loras/full_body_glitch-monochrome-000140.safetensors",
-            "full-body-glitch-reddish": "server/loras/full_body_glitch-reddish-000140.safetensors",
-            "mid-body-shoulders-glitch-monochrome": "server/loras/mid_body_shoulders_glitch-monochrome-000140.safetensors",
-            "mid-body-shoulders-glitch-reddish": "server/loras/mid_body_shoulders_glitch-reddish-000140.safetensors",
-            "mid-body-torso-glitch-monochrome": "server/loras/mid_body_torso_glitch-monochrome-000140.safetensors",
-            "mid-body-torso-glitch-reddish": "server/loras/mid_body_torso_glitch-reddish-000140.safetensors",
+            "full-body-glitch-reddish": "server/loras/full_body_glitch_reddish.safetensors",
             "melier-bw": "server/loras/melier_bw-000052.safetensors",
             "melier-col": "server/loras/melier_col-000032.safetensors",
-            "nature-bw": "server/loras/nature_bw-000052.safetensors",
-            "nature-water": "server/loras/nature_water-000072.safetensors",
-            "robwood": "server/loras/robwood-000060.safetensors",
+            "nature-water": "server/loras/nature_water-000023.safetensors",
+            "nature-fire": "server/loras/nature_fire-000019.safetensors",
+            "nature-smoke": "server/loras/nature_smoke-000019.safetensors",
+            "nature-sand": "server/loras/nature_sand-000015.safetensors",
+            "robwood": "server/loras/robwood.safetensors",
             "sweet-vicious": "server/loras/sweet_vicious-000072.safetensors",
             "liquid-love": "server/loras/liquid_love-000032.safetensors",
-            "glitch": "server/loras/glitch-000060.safetensors",
-            "pixels": "server/loras/pixels-000092.safetensors",
+            "glitch": "server/loras/glitch.safetensors",
+            "pixels": "server/loras/pixels-000011.safetensors",
             "origami": "server/loras/origami-000100.safetensors",
-            "twisted-bodies": "server/loras/twisted bodies-000100.safetensors",
+            "twisted-bodies": "server/loras/twistedbodies-000014.safetensors",
             "HAHACards_A2": "server/loras/HAHACards_A2-000015.safetensors",
             "goldworld": "server/loras/goldworld-000006.safetensors",
         }
 
         self.lora_curation = {
+            "twister_water": ["twisted-bodies", "nature-water"],
             "glitch_abstract": ["full-body-glitch-reddish", "abstract-monochrome"],
             "melier": ["melier-bw", "melier-col"],
             "liquid_nature": ["nature-bw", "nature-water"],
             "sweet_robwood": ["sweet-vicious", "robwood"],
-            "glitch_pixels": ["nature-water", "pixels"],
-            "origami_twisted": ["twisted-bodies", "origami"],
+            "glitch_pixels": ["pixels", "nature-water"],
             "marina_abstract": ["marina-red", "abstract-brokenglass-red"],
             "mid_body_glitch": ["mid-body-torso-glitch-reddish", "mid-body-shoulders-glitch-monochrome"],
             "garance": ["garance", "garance"],
@@ -120,7 +107,7 @@ class LoRACurationConfig:
                 [0.2, 0.8],
                 [0.0, 1.0]
             ],
-            "origami_twisted": [
+            "twister_water": [
                 [1.0, 0.0],
                 [0.8, 0.2],
                 [0.5, 0.5],

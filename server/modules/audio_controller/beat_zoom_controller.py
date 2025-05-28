@@ -18,7 +18,10 @@ class BeatZoomController:
                  use_baseline=False,
                  max_bin_decay_rate=0.995,
                  enabled=True,
-                 debug=False):
+                 debug=False,
+                 freq_start_idx=0,
+                 freq_end_idx=30,
+                 averaging_factor=6):
         """
         Initialize the beat-reactive zoom controller.
         
@@ -31,7 +34,7 @@ class BeatZoomController:
             energy_amplifier (float): Multiplier for the energy value 
             enabled (bool): Whether the controller is active
             use_baseline (bool): Whether to use baseline for energy calculation
-            max_bin_decay_rate (float): Rate at which max_low_bin decays (0.0-1.0)
+            max_bin_decay_rate (float): Rate at which max_use_bin decays (0.0-1.0)
             debug (bool): Enable debug printing
         """
         # Store configuration parameters
@@ -46,26 +49,28 @@ class BeatZoomController:
         self.use_baseline = use_baseline
         self.max_bin_decay_rate = max_bin_decay_rate
         self.debug = debug
-        
+        self.freq_start_idx = freq_start_idx
+        self.freq_end_idx = freq_end_idx
+        self.averaging_factor = averaging_factor
         # Initialize baseline for low frequency band
-        self.low_bin_baseline = deque(maxlen=baseline_window_size)
+        self.use_bin_baseline = deque(maxlen=baseline_window_size)
         
         # Current zoom factor value
         self.zoom_factor_value = 1.0
         
         # Store the highest low bin value seen for normalization
-        self.max_low_bin = 0.1 * self.amplifying_factor # Starting with a small value to avoid division by zero
+        self.max_use_bin = 0.1 * self.amplifying_factor # Starting with a small value to avoid division by zero
 
     def enable_debug(self, enabled=True):
         """Enable or disable debug printing"""
         self.debug = enabled
         
-    def process_frequency_bins(self, binned_fft):
+    def process_frequency_bins(self, normalized_energies):
         """
         Process frequency bins to adjust zoom factor based on low frequency energy.
         
         Args:
-            binned_fft: List containing the frequency bins (low, mid, high)
+            normalized_energies: List containing the frequency bins (low, mid, high)
             
         Returns:
             float: Adjusted zoom factor value
@@ -76,22 +81,22 @@ class BeatZoomController:
                 print("Controller is disabled, returning current zoom.")
             return self.zoom_factor_value
 
-        if binned_fft is None or (isinstance(binned_fft, (list, tuple, np.ndarray)) and len(binned_fft) < 3):
+        if normalized_energies is None or (isinstance(normalized_energies, (list, tuple, np.ndarray)) and len(normalized_energies) < 3):
             if self.debug:
                 print(f"Invalid frequency bins, returning current zoom: {self.zoom_factor_value}")
             return self.zoom_factor_value
                     
-        # Extract low frequency band from binned FFT multiplied by amplifying factor
-        low_bin = max(binned_fft) * self.amplifying_factor
+        # Extract max from binned FFT multiplied by amplifying factor
+        use_bin = normalized_energies[48] * self.amplifying_factor
 
-        self.low_bin_baseline.append(low_bin)
+        self.use_bin_baseline.append(use_bin)
 
-        if len(self.low_bin_baseline) > int(self.baseline_avg_pct * self.baseline_window_size):
-            low_baseline_avg = sum(self.low_bin_baseline) / len(self.low_bin_baseline)
-            pct_change = self.energy_amplifier * max(0, min(1, (low_bin - low_baseline_avg) / low_baseline_avg))
+        if len(self.use_bin_baseline) > int(self.baseline_avg_pct * self.baseline_window_size):
+            use_baseline_avg = sum(self.use_bin_baseline) / len(self.use_bin_baseline)
+            pct_change = self.energy_amplifier * max(0, min(1, (use_bin - use_baseline_avg) / use_baseline_avg))
             target_zoom = 1 + pct_change
 
-            print(f"Low bin: {low_bin:.2f}, Baseline: {low_baseline_avg:.2f}, Pct change: {pct_change:.2f}, Target zoom: {target_zoom:.2f}")
+            print(f"Use bin: {use_bin:.2f}, Baseline: {use_baseline_avg:.2f}, Pct change: {pct_change:.2f}, Target zoom: {target_zoom:.2f}")
         else:
             target_zoom = self.min_zoom
 
@@ -153,7 +158,7 @@ class BeatZoomController:
             
     def set_max_bin_decay_rate(self, decay_rate):
         """
-        Set the rate at which max_low_bin decays towards the baseline
+        Set the rate at which max_use_bin decays towards the baseline
         
         Args:
             decay_rate (float): Decay rate between 0.0 and 1.0

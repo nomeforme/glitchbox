@@ -82,6 +82,8 @@ class Args(NamedTuple):
     upscaler_resample_method: str = "lanczos"
     # Add pixelate processor argument
     use_pixelate_processor: bool = False
+    default_curation_index: int = 0
+    lora_model_name: str = "glitch"
 
     def pretty_print(self):
         print("\n")
@@ -555,6 +557,22 @@ parser.add_argument(
     action="store_true",
     default=True,
     help="Enable LoRA sound controller",
+)
+
+parser.add_argument(
+    "--default-curation-index",
+    dest="default_curation_index",
+    type=int,
+    default=0,
+    help="Default index for curation selection",
+)
+
+parser.add_argument(
+    "--lora-model-name",
+    dest="lora_model_name",
+    type=str,
+    default="twisted_bodies",
+    help="Name of the LoRA model to use for loading prompts",
 )
 
 parser.set_defaults(taesd=USE_TAESD)
