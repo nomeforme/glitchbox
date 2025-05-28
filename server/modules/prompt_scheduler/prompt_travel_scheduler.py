@@ -28,7 +28,8 @@ class PromptTravelScheduler:
                 prompts_dir="prompts",
                 prompt_file_pattern="*.txt",
                 loop_prompts=True,
-                logging_enabled=False):
+                logging_enabled=False,
+                lora_model_name=None):
         """
         Initialize the prompt travel scheduler.
         
@@ -46,6 +47,7 @@ class PromptTravelScheduler:
             prompt_file_pattern (str): Pattern to match prompt files (default: "*.txt")
             loop_prompts (bool): Whether to loop back to the beginning when reaching the end (default: True)
             logging_enabled (bool): Whether to enable logging (default: False)
+            lora_model_name (str): Name of the lora model (default: None)
         """
         self.min_factor = min_factor
         self.max_factor = max_factor
@@ -57,6 +59,8 @@ class PromptTravelScheduler:
         self.seed_enabled = seed_enabled
         self.use_prompt_scheduler = use_prompt_scheduler
         self.logging_enabled = logging_enabled
+
+        self.lora_model_name = lora_model_name
         
         # Internal state
         self.factor_value = min_factor
@@ -91,8 +95,10 @@ class PromptTravelScheduler:
                 enabled=True,
                 debug=debug,
                 loop_prompts=loop_prompts,
-                logging_enabled=logging_enabled
+                logging_enabled=logging_enabled,
+                lora_model_name=self.lora_model_name
             )
+            self.prompt_scheduler.load_prompts()
             if self.logging_enabled:
                 self.logger.info("Prompt scheduler initialized")
             # Check if prompts were loaded

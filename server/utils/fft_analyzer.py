@@ -59,7 +59,7 @@ def run_FFT_analyzer():
         rate   = None,               # Audio samplerate, None uses the default source settings
         FFT_window_size_ms  = 60,    # Window size used for the FFT transform
         updates_per_second  = 500,   # How often to read the audio stream for new data
-        smoothing_length_ms = 1000,    # Apply some temporal smoothing to reduce noisy features
+        smoothing_length_ms = 20,    # Apply some temporal smoothing to reduce noisy features
         rolling_stats_window_s = 20,
         equalizer_strength = 0.10,
         n_frequency_bins = 50, # The FFT features are grouped in bins

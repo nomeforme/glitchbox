@@ -66,7 +66,7 @@ def get_prompt_prefix():
         return f.read().strip()
 
 prompt_prefix = get_prompt_prefix()
-default_prompt = prompt_prefix + "a red monkey"
+default_prompt = prompt_prefix + "two figures in a dynamic, abstract dance, forming a surreal, interconnected sculpture against a black background."
 default_target_prompt = prompt_prefix + "a blue dog"
 
 page_content = """
@@ -138,7 +138,7 @@ class Pipeline:
             description="Select which weight combination to use for the selected LoRA pair"
         )
         use_prompt_travel: bool = Field(
-            True,
+            False,
             title="Use Prompt Travel",
             field="checkbox",
             id="use_prompt_travel",
@@ -177,19 +177,6 @@ class Pipeline:
             field="range",
             id="latent_travel_factor",
             hide=True,
-        )
-        lora_models: List[str] = Field(
-            [lora_curation[curation_keys[DEFAULT_CURATION_INDEX]][0]] if lora_curation[curation_keys[DEFAULT_CURATION_INDEX]] else [],
-            title="LoRA Models",
-            field="multiselect",
-            id="lora_models",
-            options=list(lora_models.keys()),
-        )
-        fuse_loras: bool = Field(
-            False,
-            title="Fuse LoRAs",
-            field="checkbox",
-            id="fuse_loras",
         )
         lora_scale: float = Field(
             1.0,
@@ -245,7 +232,7 @@ class Pipeline:
             id="lora_scale",
         )
         controlnet_scale: float = Field(
-            0.325,
+            0.55,
             min=0,
             max=1.0,
             step=0.001,
@@ -533,8 +520,8 @@ class Pipeline:
         pipe = self.pipes[self.current_pipe_idx]
         pipe_state = self.pipe_states[self.current_pipe_idx]
         
-        # Update LoRAs if curation_index has changed
-        self.update_lora_set(pipe, pipe_state, params.curation_index)
+        # # Update LoRAs if curation_index has changed
+        # self.update_lora_set(pipe, pipe_state, params.curation_index)
         
         # Get current adapter weights based on both curation_index and pipe_index
         adapter_weights = adapter_weights_set_curation[curation_keys[params.curation_index]][params.pipe_index]
