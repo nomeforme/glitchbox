@@ -77,3 +77,8 @@ pip install -v -U git+https://github.com/chengzeyi/stable-fast.git@main#egg=stab
 python -m torch.utils.collect_env
 
 export CUDA_VISIBLE_DEVICES=1,0
+
+# sound reaction refs and stuff
+https://en.wikipedia.org/wiki/Mel_scale#/media/File:Mel-Hz_plot.svg
+https://www.soundgym.co/blog/item?id=seven-frequency-zones-you-must-identify
+https://towardsdatascience.com/audio-deep-learning-made-simple-part-2-why-mel-spectrograms-perform-better-aad889a93505/

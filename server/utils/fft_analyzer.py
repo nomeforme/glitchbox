@@ -66,7 +66,7 @@ def run_FFT_analyzer():
         visualize = 1,               # Visualize the FFT features with PyGame
         verbose   = 0,    # Print running statistics (latency, fps, ...)
         height    = 960,     # Height, in pixels, of the visualizer window,
-        window_ratio = 1  # Float ratio of the visualizer window. e.g. 24/9
+        window_ratio = 16/9  # Float ratio of the visualizer window. e.g. 24/9
     )
     fps = 60  #How often to update the FFT features + display
     last_update = time.time()

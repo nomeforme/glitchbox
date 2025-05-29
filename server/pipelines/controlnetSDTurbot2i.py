@@ -39,19 +39,6 @@ taesd_model = "madebyollin/taesd"
 controlnet_model = "thibaud/controlnet-sd21-depth-diffusers"
 base_model = "stabilityai/sd-turbo"
 
-# Initialize LoRACurationConfig
-lora_config = LoRACurationConfig()
-
-# Use the LoRACurationConfig instance to replace existing logic
-lora_models = lora_config.get_lora_models()
-DEFAULT_CURATION_INDEX = lora_config.DEFAULT_CURATION_INDEX
-DEFAULT_LORA_SCALE = lora_config.DEFAULT_LORA_SCALE
-lora_curation = lora_config.get_lora_curation()
-curation_keys = lora_config.get_curation_keys()
-adapter_weights_set_curation = lora_config.get_adapter_weights_set_curation()
-
-adapter_weights_sets = lora_config.get_default_adapter_weights()
-
 # Function to read prompt prefix from .txt files
 def get_prompt_prefix():
     prompts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "prompts")
@@ -118,15 +105,7 @@ class Pipeline:
             id="target_prompt",
             hide=True,
         )
-        curation_index: int = Field(
-            DEFAULT_CURATION_INDEX,
-            min=0,
-            max=len(curation_keys) - 1,
-            title="Curation Index",
-            field="range",
-            id="curation_index",
-            description=f"Select which LoRA pair to use: {', '.join(curation_keys)}"
-        )
+
         pipe_index: int = Field(
             0,
             min=0,
@@ -294,7 +273,23 @@ class Pipeline:
         if self.use_pixelate_processor:
             self.pixelate_processor = PixelateProcessor()
         
-        for adapter_weights in adapter_weights_sets:
+        # Initialize LoRACurationConfig
+
+        self.curation_index = getattr(args, 'default_curation_index')
+
+        self.lora_config = LoRACurationConfig(default_curation_index=self.curation_index)
+
+        # Use the LoRACurationConfig instance to replace existing logic
+        self.lora_models = self.lora_config.get_lora_models()
+        # Use args.default_curation_index if available, otherwise use config default
+        self.default_lora_scale = self.lora_config.DEFAULT_LORA_SCALE
+        self.lora_curation = self.lora_config.get_lora_curation()
+        self.curation_keys = self.lora_config.get_curation_keys()
+        self.adapter_weights_set_curation = self.lora_config.get_adapter_weights_set_curation()
+
+        self.adapter_weights_sets = self.lora_config.get_default_adapter_weights()
+
+        for adapter_weights in self.adapter_weights_sets:
             # Create pipeline with ControlNet model
             pipe = StableDiffusionControlNetPipeline.from_pretrained(
                 base_model,
@@ -382,10 +377,10 @@ class Pipeline:
             }
             
             # Load default LoRA(s) during initialization with specific adapter weights
-            print(f"Loading default LoRA(s): {lora_curation[curation_keys[DEFAULT_CURATION_INDEX]]} with weights {adapter_weights}")
+            print(f"Loading default LoRA(s): {self.lora_curation[self.curation_keys[self.curation_index]]} with weights {adapter_weights}")
             # If there's only one LoRA, don't fuse. If there are multiple, fuse them automatically
             should_fuse = True
-            self.load_loras_for_pipe(pipe, pipe_state, lora_curation[curation_keys[DEFAULT_CURATION_INDEX]], fuse_loras=should_fuse, lora_scale=DEFAULT_LORA_SCALE, adapter_weights=adapter_weights)
+            self.load_loras_for_pipe(pipe, pipe_state, self.lora_curation[self.curation_keys[self.curation_index]], fuse_loras=should_fuse, lora_scale=self.default_lora_scale, adapter_weights=adapter_weights)
             
             # Pass the upscaler processor to the pipeline if enabled
             if self.use_upscaler:
@@ -456,7 +451,7 @@ class Pipeline:
                 adapter_name = f"lora_{i}"
                 lora_load_start = time.time()
                 print(f"Loading LoRA: {lora_id} as {adapter_name}")
-                pipe.load_lora_weights(lora_models[lora_id], adapter_name=adapter_name)
+                pipe.load_lora_weights(self.lora_models[lora_id], adapter_name=adapter_name)
                 print(f"Loading {lora_id} took: {time.time() - lora_load_start:.2f} seconds")
             print(f"Total LoRA loading time: {time.time() - load_start:.2f} seconds")
             
@@ -509,8 +504,8 @@ class Pipeline:
                 pipe_state['current_adapter_weights'] = []
             
             # Now load the new LoRA set
-            default_loras = lora_curation[curation_keys[curation_index]]
-            adapter_weights = adapter_weights_set_curation[curation_keys[curation_index]][0]  # Start with first weight set
+            default_loras = self.lora_curation[self.curation_keys[curation_index]]
+            adapter_weights = self.adapter_weights_set_curation[self.curation_keys[curation_index]][0]  # Start with first weight set
             self.load_loras_for_pipe(pipe, pipe_state, default_loras, fuse_loras=True, lora_scale=1.0, adapter_weights=adapter_weights)
             self.current_curation_index = curation_index
 
@@ -521,10 +516,10 @@ class Pipeline:
         pipe_state = self.pipe_states[self.current_pipe_idx]
         
         # # Update LoRAs if curation_index has changed
-        # self.update_lora_set(pipe, pipe_state, params.curation_index)
+        # self.update_lora_set(pipe, pipe_state, self.curation_index)
         
         # Get current adapter weights based on both curation_index and pipe_index
-        adapter_weights = adapter_weights_set_curation[curation_keys[params.curation_index]][params.pipe_index]
+        adapter_weights = self.adapter_weights_set_curation[self.curation_keys[self.curation_index]][params.pipe_index]
         print(f"Using pipe {self.current_pipe_idx} with adapter weights {adapter_weights}")
 
         generator = torch.manual_seed(params.seed)
@@ -543,8 +538,8 @@ class Pipeline:
 
         steps = params.steps
         strength = params.strength
-        if int(steps * strength) < 1:
-            steps = math.ceil(1 / max(0.10, strength))
+        # if int(steps * strength) < 1:
+        #     steps = math.ceil(1 / max(0.10, strength))
 
         # Use provided prompt embeddings if available - with safer attribute check
         has_prompt_embeds = hasattr(params, "prompt_embeds") and params.prompt_embeds is not None
@@ -628,7 +623,7 @@ class Pipeline:
             negative_prompt_embeds=negative_prompt_embeds,
             generator=generator,
             strength=strength,
-            num_inference_steps=1,
+            num_inference_steps=steps,
             guidance_scale=params.guidance_scale,
             width=params.width,
             height=params.height,
