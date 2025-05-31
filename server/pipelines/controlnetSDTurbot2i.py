@@ -314,9 +314,16 @@ class Pipeline:
 
                 config = CompilationConfig.Default()
                 config.enable_xformers = True
-                config.enable_triton = False
+                config.enable_triton = os.name != 'nt'  # Enable triton if not Windows
                 config.enable_cuda_graph = True
                 config.enable_jit = True
+                
+                # Log which options are enabled/disabled
+                print(f"sfast config - xformers: {'enabled' if config.enable_xformers else 'disabled'}")
+                print(f"sfast config - triton: {'enabled' if config.enable_triton else 'disabled'}")
+                print(f"sfast config - cuda_graph: {'enabled' if config.enable_cuda_graph else 'disabled'}")
+                print(f"sfast config - jit: {'enabled' if config.enable_jit else 'disabled'}")
+                
                 pipe = compile(pipe, config=config)
 
                 print("\nRunning with sfast compile\n")
