@@ -314,7 +314,7 @@ class Pipeline:
 
                 config = CompilationConfig.Default()
                 config.enable_xformers = True
-                config.enable_triton = True
+                config.enable_triton = False
                 config.enable_cuda_graph = True
                 config.enable_jit = True
                 pipe = compile(pipe, config=config)

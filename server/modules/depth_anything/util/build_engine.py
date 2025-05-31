@@ -1,5 +1,6 @@
-import tensorrt as trt
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+import tensorrt as trt
 import logging
 
 # Configure logging

@@ -135,8 +135,8 @@ class MainWindow(QMainWindow):
         self.camera_thread = CameraThread()
         
         # Initialize the audio device index for both STT and FFT
-        self.audio_device_index_stt = 16
-        self.audio_device_index_fft = 16
+        self.audio_device_index_stt = 1
+        self.audio_device_index_fft = 1
 
         # Initialize the STT thread with the audio device index
         self.stt_thread = SpeechToTextThread(input_device_index=self.audio_device_index_stt)
