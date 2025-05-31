@@ -563,7 +563,7 @@ parser.add_argument(
     "--default-curation-index",
     dest="default_curation_index",
     type=int,
-    default=2,
+    default=11,
     help="Default index for curation selection",
 )
 
