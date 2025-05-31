@@ -5,7 +5,7 @@ import os
 import asyncio
 import argparse
 from dotenv import load_dotenv
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFrame
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFrame, QScrollArea
 from PySide6.QtCore import Qt, QTimer
 
 from components import CameraDisplay
@@ -14,7 +14,7 @@ from components import ControlPanel
 from components import StatusBar
 from clients import WebSocketClient
 from threads import CameraThread, SpeechToTextThread, FFTAnalyzerThread
-
+from config import MIC_DEVICE_INDEX
 load_dotenv(override=True)
 
 # Default server configuration
@@ -31,11 +31,71 @@ class MainWindow(QMainWindow):
         self.server_port = server_port
         self.server_ws_uri = f"ws://{server_host}:{server_port}"
         self.server_http_uri = f"http://{server_host}:{server_port}"
+
+        self.audio_device_index = MIC_DEVICE_INDEX
         
-        # Create central widget and layout
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        layout = QVBoxLayout(central_widget)
+        # Create scroll area as the central widget
+        self.scroll_area = QScrollArea()
+        self.setCentralWidget(self.scroll_area)
+        
+        # Configure scroll area properties
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.scroll_area.setFrameShape(QFrame.NoFrame)
+        
+        # Enable smooth scrolling and configure for cross-platform compatibility
+        self.scroll_area.verticalScrollBar().setSingleStep(20)  # Smooth scrolling step
+        self.scroll_area.horizontalScrollBar().setSingleStep(20)
+        
+        # Set scroll bar styling for better appearance on both Windows and Linux
+        scroll_style = """
+        QScrollBar:vertical {
+            background: #f0f0f0;
+            width: 12px;
+            border-radius: 6px;
+        }
+        QScrollBar::handle:vertical {
+            background: #c0c0c0;
+            border-radius: 6px;
+            min-height: 20px;
+        }
+        QScrollBar::handle:vertical:hover {
+            background: #a0a0a0;
+        }
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            border: none;
+            background: none;
+        }
+        QScrollBar:horizontal {
+            background: #f0f0f0;
+            height: 12px;
+            border-radius: 6px;
+        }
+        QScrollBar::handle:horizontal {
+            background: #c0c0c0;
+            border-radius: 6px;
+            min-width: 20px;
+        }
+        QScrollBar::handle:horizontal:hover {
+            background: #a0a0a0;
+        }
+        QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+            border: none;
+            background: none;
+        }
+        """
+        self.scroll_area.setStyleSheet(scroll_style)
+        
+        # Create the main content widget that will be scrollable
+        self.main_content_widget = QWidget()
+        self.scroll_area.setWidget(self.main_content_widget)
+        
+        # Create layout for the main content
+        layout = QVBoxLayout(self.main_content_widget)
+        
+        # Set minimum size for the content widget to ensure proper scrolling
+        self.main_content_widget.setMinimumSize(800, 600)
         
         # Add status bar at the top
         self.status_bar = StatusBar()
@@ -133,18 +193,14 @@ class MainWindow(QMainWindow):
         # Initialize threads
         self.ws_client = WebSocketClient(uri=self.server_ws_uri, max_retries=10, initial_retry_delay=1.0)
         self.camera_thread = CameraThread()
-        
-        # Initialize the audio device index for both STT and FFT
-        self.audio_device_index_stt = 1
-        self.audio_device_index_fft = 1
 
         # Initialize the STT thread with the audio device index
-        self.stt_thread = SpeechToTextThread(input_device_index=self.audio_device_index_stt)
+        self.stt_thread = SpeechToTextThread(input_device_index=self.audio_device_index)
         self.stt_thread.transcription_updated.connect(self.handle_transcription)
         self.stt_active = False
         
         # Initialize the FFT thread with the audio device index
-        self.fft_thread = FFTAnalyzerThread(input_device_index=self.audio_device_index_fft)
+        self.fft_thread = FFTAnalyzerThread(input_device_index=self.audio_device_index)
         self.fft_thread.fft_data_updated.connect(self.handle_fft_data)
         self.fft_active = False
         
@@ -360,11 +416,15 @@ class MainWindow(QMainWindow):
             # Hide status bar and connection label for cleaner look
             self.status_bar.hide()
             
+            # Hide scroll bars in presentation mode
+            self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+            
             # Remove all margins and spacing from layouts
             self.feeds_layout.setContentsMargins(0, 0, 0, 0)
             self.feeds_layout.setSpacing(0)
-            self.layout().setContentsMargins(0, 0, 0, 0)
-            self.layout().setSpacing(0)
+            self.main_content_widget.layout().setContentsMargins(0, 0, 0, 0)
+            self.main_content_widget.layout().setSpacing(0)
             
             # Make the processed display fill the entire window
             self.processed_container.setContentsMargins(0, 0, 0, 0)
@@ -386,11 +446,15 @@ class MainWindow(QMainWindow):
             self.status_bar.show()
             self.processed_label.show()
             
+            # Restore scroll bars
+            self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            self.scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+            
             # Restore original margins and spacing
             self.feeds_layout.setContentsMargins(9, 9, 9, 9)
             self.feeds_layout.setSpacing(6)
-            self.layout().setContentsMargins(9, 9, 9, 9)
-            self.layout().setSpacing(6)
+            self.main_content_widget.layout().setContentsMargins(9, 9, 9, 9)
+            self.main_content_widget.layout().setSpacing(6)
             
             # Restore processed display margins
             self.processed_container.setContentsMargins(9, 9, 9, 9)
@@ -416,6 +480,45 @@ class MainWindow(QMainWindow):
                 self.toggle_fullscreen_button.setText("Close Output Window")
             else:
                 self.toggle_fullscreen_button.setText("Detach Output")
+
+    def scroll_to_top(self):
+        """Scroll to the top of the content"""
+        self.scroll_area.verticalScrollBar().setValue(0)
+        
+    def scroll_to_bottom(self):
+        """Scroll to the bottom of the content"""
+        self.scroll_area.verticalScrollBar().setValue(
+            self.scroll_area.verticalScrollBar().maximum()
+        )
+        
+    def scroll_to_controls(self):
+        """Scroll to the controls section"""
+        if hasattr(self, 'controls_container'):
+            # Get the position of the controls container
+            controls_pos = self.controls_container.mapTo(self.main_content_widget, self.controls_container.rect().topLeft())
+            # Scroll to show the controls
+            self.scroll_area.ensureVisible(controls_pos.x(), controls_pos.y(), 0, 0)
+            
+    def keyPressEvent(self, event):
+        """Handle keyboard shortcuts for scrolling"""
+        # Handle common scroll shortcuts that work on both Windows and Linux
+        if event.key() == Qt.Key_Home:
+            self.scroll_to_top()
+        elif event.key() == Qt.Key_End:
+            self.scroll_to_bottom()
+        elif event.key() == Qt.Key_PageUp:
+            # Scroll up by one page
+            current_value = self.scroll_area.verticalScrollBar().value()
+            page_step = self.scroll_area.verticalScrollBar().pageStep()
+            self.scroll_area.verticalScrollBar().setValue(current_value - page_step)
+        elif event.key() == Qt.Key_PageDown:
+            # Scroll down by one page
+            current_value = self.scroll_area.verticalScrollBar().value()
+            page_step = self.scroll_area.verticalScrollBar().pageStep()
+            self.scroll_area.verticalScrollBar().setValue(current_value + page_step)
+        else:
+            # Pass other key events to the parent
+            super().keyPressEvent(event)
 
     def closeEvent(self, event):
         """Handle window close event - cleanup all threads in proper order"""

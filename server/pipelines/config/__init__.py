@@ -40,8 +40,8 @@ class LoRACurationConfig:
             "abstract-monochrome": "server/loras/abstract-monochrome-000140.safetensors",
             "abstract-brokenglass-red": "server/loras/abstract_brokenglass_red-000140.safetensors",
             "full-body-glitch-reddish": "server/loras/full_body_glitch_reddish.safetensors",
-            "melier-bw": "server/loras/melies_bw-000012.safetensors", #"server/loras/melier_bw-000052.safetensors",
-            "melier-col": "server/loras/melies_col-000013.safetensors",
+            "melies-bw": "server/loras/melies_bw-000012.safetensors", #"server/loras/melier_bw-000052.safetensors",
+            "melies-col": "server/loras/melies_col-000013.safetensors",
             "nature-water": "server/loras/nature_water-000023.safetensors",
             "nature-fire": "server/loras/nature_fire-000017.safetensors",
             "nature-smoke": "server/loras/nature_smoke-000016.safetensors",
@@ -61,13 +61,13 @@ class LoRACurationConfig:
         }
 
         self.lora_curation = {
-            "test_lcm": ["twisted-bodies", "latent-consistency/lcm-lora-sdv1-5"],
+            # "test_lcm": ["twisted-bodies", "latent-consistency/lcm-lora-sdv1-5"],
+            "robwood_sand": ["robwood", "nature-sand"],
             "twisted_water": ["twisted-bodies", "nature-water"],
-            "sweet_robwood": ["robwood", "nature-sand"],
-            "glitch_pixels": ["glitch", "pixels"],
+            "melies": ["melies-bw", "melies-col"],
+            "glitch_pixels": ["glitch", "pixels-body"],
             "origami_smoke": ["origami", "nature-smoke"],
             "monoblue": ["monoblue", "psychaos"],
-            "melier": ["melier-bw", "melier-col"],
             "liquid_nature": ["nature-bw", "nature-water"],
             "marina_abstract": ["marina-red", "abstract-brokenglass-red"],
             "garance": ["garance", "garance"],
@@ -87,10 +87,6 @@ class LoRACurationConfig:
             ],
             "twisted_water": [
                 [1.0, 0.0],
-                # [0.0, 1.0],
-                # [0.0, 1.0], 
-                # [0.0, 1.0],
-                # [0.0, 1.0],
                 [0.7, 0.3],
                 [0.4, 0.6],
                 [0.2, 0.8],
@@ -103,7 +99,7 @@ class LoRACurationConfig:
                 [0.7, 0.3],
                 [0.6, 0.4]
             ],
-            "melier": [
+            "melies": [
                 [1.0, 0.0],
                 [0.85, 0.15],
                 [0.5, 0.5],
@@ -117,7 +113,7 @@ class LoRACurationConfig:
                 [0.3, 0.9],
                 [0.2, 0.9]
             ],
-            "sweet_robwood": [
+            "robwood_sand": [
                 [0.9, 0.1],
                 [0.7, 0.3],
                 [0.5, 0.5],
@@ -174,11 +170,11 @@ class LoRACurationConfig:
                 [0.0, 1.0]
             ],
             "origami_smoke": [
+                [0.95, 0.05],
+                [0.90, 0.10],
                 [0.85, 0.15],
-                [0.7, 0.3],
-                [0.6, 0.4],
-                [0.5, 0.5],
-                [0.3, 0.7]
+                [0.80, 0.20],
+                [0.75, 0.25]
             ],
             "pixels_body": [
                 [1.0, 0.0],

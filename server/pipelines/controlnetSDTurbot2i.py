@@ -182,7 +182,7 @@ class Pipeline:
             480, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
         )
         guidance_scale: float = Field(
-            1.21,
+            1.00,
             min=0,
             max=10,
             step=0.001,

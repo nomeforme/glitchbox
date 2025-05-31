@@ -84,6 +84,12 @@ class Args(NamedTuple):
     use_pixelate_processor: bool = False
     default_curation_index: int = 0
     lora_model_name: str = "glitch"
+    # Image saver settings
+    use_image_saver: bool = False
+    image_save_dir: str = "server/output"
+    image_save_format: str = "png"
+    image_save_quality: int = 95
+    image_save_queue_size: int = 100
 
     def pretty_print(self):
         print("\n")
@@ -539,7 +545,7 @@ parser.add_argument(
     "--upscaler-scale-factor",
     dest="upscaler_scale_factor",
     type=float,
-    default=2.0,
+    default=4.0,
     help="Scale factor for upscaler (default: 2.0)",
 )
 parser.add_argument(
@@ -559,11 +565,50 @@ parser.add_argument(
     help="Enable LoRA sound controller",
 )
 
+# Image saver arguments
+parser.add_argument(
+    "--use-image-saver",
+    dest="use_image_saver",
+    action="store_true",
+    default=False,
+    help="Enable image saving to disk",
+)
+parser.add_argument(
+    "--image-save-dir",
+    dest="image_save_dir",
+    type=str,
+    default="server/output",
+    help="Directory to save images (default: server/output)",
+)
+parser.add_argument(
+    "--image-save-format",
+    dest="image_save_format",
+    type=str,
+    default="png",
+    choices=["png", "jpg", "jpeg"],
+    help="Image format for saving (default: png)",
+)
+parser.add_argument(
+    "--image-save-quality",
+    dest="image_save_quality",
+    type=int,
+    default=95,
+    help="Image quality for JPEG format (1-100, default: 95)",
+)
+parser.add_argument(
+    "--image-save-queue-size",
+    dest="image_save_queue_size",
+    type=int,
+    default=100,
+    help="Maximum queue size for image saving (default: 100)",
+)
+
+
 parser.add_argument(
     "--default-curation-index",
     dest="default_curation_index",
     type=int,
-    default=11,
+    default=1,
     help="Default index for curation selection",
 )
 

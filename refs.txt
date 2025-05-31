@@ -82,3 +82,6 @@ export CUDA_VISIBLE_DEVICES=1,0
 https://en.wikipedia.org/wiki/Mel_scale#/media/File:Mel-Hz_plot.svg
 https://www.soundgym.co/blog/item?id=seven-frequency-zones-you-must-identify
 https://towardsdatascience.com/audio-deep-learning-made-simple-part-2-why-mel-spectrograms-perform-better-aad889a93505/
+
+/mnt/c/Users/Salim/Documents/Real-Time-Latent-Consistency-Model
+python server/modules/image_saver/create_video.py 
