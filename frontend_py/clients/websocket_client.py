@@ -10,7 +10,7 @@ import time
 
 IS_WINDOWS = os.name == 'nt'
 
-if(!IS_WINDOWS):
+if not IS_WINDOWS:
     import uvloop
 
 class WebSocketClient(QThread):
@@ -286,7 +286,7 @@ class WebSocketClient(QThread):
     def run(self):
         """Start the WebSocket client thread"""
         self.running = True
-        if(IS_WINDOWS):
+        if IS_WINDOWS:
             asyncio.run(self.main_loop())
         else:
             uvloop.install()
@@ -306,7 +306,7 @@ class WebSocketClient(QThread):
         
         # Use a timeout to prevent hanging if the server doesn't respond
         # Create event loop for stop signal with a timeout
-        if(IS_WINDOWS):
+        if IS_WINDOWS:
             loop = asyncio.new_event_loop()
         else:
             loop = uvloop.new_event_loop()
