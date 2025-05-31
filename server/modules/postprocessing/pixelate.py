@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 class PixelateProcessor:
     @staticmethod
-    def apply(tensor, pixel_size=16, noise_strength=0.4, color_shift=0.001, scan_lines=True, add_glitch=False, use_pixelate=True, use_noise=True, use_color_shift=False):
+    def apply(tensor, pixel_size=16, noise_strength=0.2, color_shift=0.001, scan_lines=True, add_glitch=False, use_pixelate=True, use_noise=True, use_color_shift=False):
         """
         Apply artistic glitch pixelation effect to a batch of tensors in range [-1, 1].
         Outputs a 4x larger image with pixelation and glitch effects.
