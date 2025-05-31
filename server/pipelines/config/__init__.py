@@ -50,7 +50,8 @@ class LoRACurationConfig:
             "sweet-vicious": "server/loras/sweet_vicious-000072.safetensors",
             "liquid-love": "server/loras/liquid_love.safetensors",
             "glitch": "server/loras/glitch-000008.safetensors",
-            "pixels": "server/loras/pixels.safetensors",
+            "pixels-body": "server/loras/pixels_bodies.safetensors",
+            "pixels-face": "server/loras/pixels_faces-000023.safetensors",
             "origami": "server/loras/origami-000023.safetensors",
             "twisted-bodies": "server/loras/twistedbodies-000014.safetensors",
             "HAHACards_A2": "server/loras/HAHACards_A2-000015.safetensors",
@@ -70,7 +71,8 @@ class LoRACurationConfig:
             "liquid_nature": ["nature-bw", "nature-water"],
             "marina_abstract": ["marina-red", "abstract-brokenglass-red"],
             "garance": ["garance", "garance"],
-            "hahacards_goldworld": ["goldworld", "HAHACards_A2"]
+            "hahacards_goldworld": ["goldworld", "HAHACards_A2"],
+            "pixels_body": ["pixels-body", "pixels-face"],
         }
 
         self.curation_keys = list(self.lora_curation.keys())
@@ -177,6 +179,13 @@ class LoRACurationConfig:
                 [0.6, 0.4],
                 [0.5, 0.5],
                 [0.3, 0.7]
+            ],
+            "pixels_body": [
+                [1.0, 0.0],
+                [0.8, 0.2],
+                [0.5, 0.5],
+                [0.2, 0.8],
+                [0.0, 1.0]
             ]
         }
 
