@@ -36,6 +36,8 @@ from modules.prompt_scheduler import PromptTravelScheduler
 from modules.bg_removal import get_processor as get_bg_removal_processor
 # Import the depth estimator
 from modules.depth_anything.depth_anything_trt import DepthAnythingTRT as DepthAnything
+# Import the image saver
+from modules.image_saver import get_image_saver
 
 import numpy as np
 import zmq
@@ -251,6 +253,19 @@ class App:
             self.bg_removal_processor = get_bg_removal_processor(device=device.type)
             print("[main.py] Background removal processor initialized")
             
+        # Initialize image saver
+        self.use_image_saver = getattr(self.args, 'use_image_saver', False)
+        if self.use_image_saver:
+            self.image_saver = get_image_saver(
+                base_dir=getattr(self.args, 'image_save_dir', 'server/output'),
+                image_format=getattr(self.args, 'image_save_format', 'png'),
+                quality=getattr(self.args, 'image_save_quality', 95),
+                queue_size=getattr(self.args, 'image_save_queue_size', 100),
+                enabled=True,
+                debug=getattr(self.args, 'debug', False)
+            )
+            print(f"[main.py] Image saver initialized - session: {self.image_saver.session_dir}")
+        
         # Initialize ZMQ context and socket
         self.zmq_context = zmq.Context()
         self.zmq_socket = self.zmq_context.socket(zmq.PUB)
@@ -276,6 +291,11 @@ class App:
         async def startup_event():
             # Startup
             print("Application startup")
+            
+            # Start image saver if enabled
+            if self.use_image_saver:
+                await self.image_saver.start()
+                print("[main.py] Image saver started")
             
             # Initialize depth estimator if enabled
             if self.use_depth_estimator:
@@ -327,6 +347,12 @@ class App:
         async def shutdown_event():
             # Shutdown
             print("Application shutdown")
+            
+            # Stop image saver if enabled
+            if self.use_image_saver:
+                await self.image_saver.stop()
+                print("[main.py] Image saver stopped")
+            
             # No explicit cleanup needed for the async embeddings service
         
         @self.app.websocket("/api/ws/{user_id}")
@@ -601,6 +627,20 @@ class App:
                     image = self.pipeline.predict(params)
                     if self.args.debug:
                         print(f"Img gen time taken: {time.time() - last_img_time}")
+
+                    # Save image if enabled
+                    if self.use_image_saver and image is not None:
+                        # Create metadata for the saved image
+                        metadata = {
+                            'user_id': str(user_id),
+                            'timestamp': time.time(),
+                            'prompt': getattr(params, 'prompt', ''),
+                            'seed': getattr(params, 'seed', ''),
+                            'guidance_scale': getattr(params, 'guidance_scale', ''),
+                            'strength': getattr(params, 'strength', ''),
+                        }
+                        # Queue image for saving (non-blocking)
+                        await self.image_saver.save_image(image, metadata)
 
                     if self.args.safety_checker:
                         image, has_nsfw_concept = self.safety_checker(image)

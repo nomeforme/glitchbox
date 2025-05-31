@@ -24,6 +24,7 @@ server/modules/upscaler/notebooks/*
 frontend_py/frontend_env
 
 server/assets/*
+server/output/*
 
 # Ignore log files
 *.log
