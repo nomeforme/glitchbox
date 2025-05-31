@@ -182,7 +182,7 @@ class Pipeline:
             480, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
         )
         guidance_scale: float = Field(
-            1.21,
+            1.00,
             min=0,
             max=10,
             step=0.001,
@@ -213,7 +213,7 @@ class Pipeline:
         controlnet_scale: float = Field(
             0.55,
             min=0,
-            max=1.0,
+            max=2.0,
             step=0.001,
             title="Controlnet Scale",
             field="range",
@@ -511,7 +511,7 @@ class Pipeline:
 
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
         # Use the pipe index from params
-        self.current_pipe_idx = params.pipe_index
+        self.current_pipe_idx = int(params.pipe_index)
         pipe = self.pipes[self.current_pipe_idx]
         pipe_state = self.pipe_states[self.current_pipe_idx]
         

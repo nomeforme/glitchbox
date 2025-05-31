@@ -49,7 +49,7 @@ class LoRACurationConfig:
             "robwood": "server/loras/robwood.safetensors",
             "sweet-vicious": "server/loras/sweet_vicious-000072.safetensors",
             "liquid-love": "server/loras/liquid_love.safetensors",
-            "glitch": "server/loras/glitch-000008.safetensors",
+            "glitch": "server/loras/glitch-000007.safetensors",
             "pixels": "server/loras/pixels.safetensors",
             "origami": "server/loras/origami-000023.safetensors",
             "twisted-bodies": "server/loras/twistedbodies-000014.safetensors",
