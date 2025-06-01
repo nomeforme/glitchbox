@@ -548,23 +548,53 @@ class Pipeline:
         # if int(steps * strength) < 1:
         #     steps = math.ceil(1 / max(0.10, strength))
 
-        # Use provided prompt embeddings if available - with safer attribute check
-        has_prompt_embeds = hasattr(params, "prompt_embeds") and params.prompt_embeds is not None
+        # Handle prompt travel directly in predict method
+        use_prompt_travel = getattr(params, "use_prompt_travel", False)
+        print("[controlnetSDTurbot2i.py] PIPELINE use_prompt_travel: ", use_prompt_travel)
 
-        print("[controlnetSDTurbot2i.py] PIPELINE has_prompt_embeds: ", has_prompt_embeds)
-
-        if has_prompt_embeds:
-            prompt_embeds = params.prompt_embeds
-            if hasattr(prompt_embeds, 'device') and prompt_embeds.device != pipe.device:
-                prompt_embeds = prompt_embeds.to(pipe.device)
-            prompt = None
+        if use_prompt_travel:
+            # Calculate prompt travel embeddings directly
+            target_prompt = getattr(params, 'target_prompt', params.prompt)
+            prompt_travel_factor = getattr(params, 'prompt_travel_factor', 0.5)
             
-            if hasattr(params, "negative_prompt_embeds") and params.negative_prompt_embeds is not None:
-                negative_prompt_embeds = params.negative_prompt_embeds
-                if hasattr(negative_prompt_embeds, 'device') and negative_prompt_embeds.device != pipe.device:
-                    negative_prompt_embeds = negative_prompt_embeds.to(pipe.device)
-        
+            print(f"[controlnetSDTurbot2i.py] Calculating prompt travel: '{params.prompt}' -> '{target_prompt}' (factor: {prompt_travel_factor})")
+            
+            # Get embeddings for source prompt
+            source_embeds, negative_source_embeds = pipe.prompt_travel.encode_prompt(
+                prompt=params.prompt,
+                device=pipe.device,
+                num_images_per_prompt=1,
+                do_classifier_free_guidance=True,
+            )
+            
+            # Get embeddings for target prompt
+            target_embeds, negative_target_embeds = pipe.prompt_travel.encode_prompt(
+                prompt=target_prompt,
+                device=pipe.device,
+                num_images_per_prompt=1,
+                do_classifier_free_guidance=True,
+            )
+            
+            # Interpolate between the embeddings
+            prompt_embeds = pipe.prompt_travel.interpolate_embeddings(
+                embeds_from=source_embeds,
+                embeds_to=target_embeds,
+                factor=prompt_travel_factor,
+            )
+
+            negative_prompt_embeds = pipe.prompt_travel.interpolate_embeddings(
+                embeds_from=negative_source_embeds,
+                embeds_to=negative_target_embeds,
+                factor=prompt_travel_factor,
+            )
+            
+            # Set prompt to None since we're using embeddings
+            prompt = None
+            negative_prompt = None
+            
+
         elif hasattr(pipe, "compel_proc"):
+            # Use compel for prompt processing
             prompt_embeds = pipe.compel_proc(
                 [params.prompt, "human, humanoid, figurine, face"]
             )
