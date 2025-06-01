@@ -28,8 +28,6 @@ from modules.audio_controller import BeatZoomController, LoraSoundController
 from modules.fft.stream_analyzer import Stream_Analyzer
 # Import test oscillators
 from utils.test_oscillators import ZoomOscillator, ShiftOscillator
-# Import the embeddings service
-from modules.prompt_travel.embeddings_service import router as embeddings_router, embeddings_service, start_background_tasks
 # Import the prompt travel scheduler
 from modules.prompt_scheduler import PromptTravelScheduler
 # Import background removal processor
@@ -282,10 +280,6 @@ class App:
             allow_headers=["*"],
         )
         
-        # Include the embeddings router if prompt travel is enabled
-        if self.use_prompt_travel:
-            self.app.include_router(embeddings_router)
-        
         # Use on_event decorators for startup/shutdown
         @self.app.on_event("startup")
         async def startup_event():
@@ -328,15 +322,15 @@ class App:
                         text_encoder = self.pipeline.pipes[0].text_encoder
                         tokenizer = self.pipeline.pipes[0].tokenizer
                     
-                    # Initialize the embeddings service
-                    await embeddings_service.initialize(
-                        text_encoder=text_encoder,
-                        tokenizer=tokenizer,
-                        device=device.type
-                    )
+                    # # Initialize the embeddings service
+                    # await embeddings_service.initialize(
+                    #     text_encoder=text_encoder,
+                    #     tokenizer=tokenizer,
+                    #     device=device.type
+                    # )
                     
-                    # Start background tasks for the embeddings service
-                    await start_background_tasks()
+                    # # Start background tasks for the embeddings service
+                    # await start_background_tasks()
                     print("[main.py] Prompt travel service initialized and background tasks started")
                 except Exception as e:
                     print(f"[main.py] Error initializing embeddings service: {e}")
@@ -505,28 +499,28 @@ class App:
                                     if self.args.debug:
                                         print(f"[main.py] Using scheduled prompt travel factor: {scheduler_factor:.2f}")
                                 
-                                # Queue the prompt travel request
-                                await embeddings_service.process_prompt_travel(
-                                    user_id=user_id_str,
-                                    prompt=getattr(params, 'prompt', ''),
-                                    target_prompt=getattr(params, 'target_prompt', ''),
-                                    factor=getattr(params, 'prompt_travel_factor', 0.0)
-                                )
+                                # # Queue the prompt travel request
+                                # await embeddings_service.process_prompt_travel(
+                                #     user_id=user_id_str,
+                                #     prompt=getattr(params, 'prompt', ''),
+                                #     target_prompt=getattr(params, 'target_prompt', ''),
+                                #     factor=getattr(params, 'prompt_travel_factor', 0.0)
+                                # )
 
                                 print(f"[main.py] Prompt factor: {getattr(params, 'prompt_travel_factor')}")
                                 
-                                # Get any available embeddings and attach them to the params
-                                embeddings = await embeddings_service.get_embeddings(user_id_str)
-                                if embeddings:
-                                    prompt_embeds, negative_prompt_embeds = embeddings
-                                    print(f"[main.py] Got embeddings - prompt shape: {prompt_embeds.shape}")
+                                # # Get any available embeddings and attach them to the params
+                                # embeddings = await embeddings_service.get_embeddings(user_id_str)
+                                # if embeddings:
+                                #     prompt_embeds, negative_prompt_embeds = embeddings
+                                #     print(f"[main.py] Got embeddings - prompt shape: {prompt_embeds.shape}")
                                     
-                                    # Attach embeddings to params - using setattr for SimpleNamespace compatibility
-                                    setattr(params, 'prompt_embeds', prompt_embeds)
-                                    setattr(params, 'negative_prompt_embeds', negative_prompt_embeds)
-                                    # print(f"[main.py] Attached embeddings to params: {hasattr(params, 'prompt_embeds')}")
-                                else:
-                                    print(f"[main.py] No embeddings available for user {user_id_str}")
+                                #     # Attach embeddings to params - using setattr for SimpleNamespace compatibility
+                                #     setattr(params, 'prompt_embeds', prompt_embeds)
+                                #     setattr(params, 'negative_prompt_embeds', negative_prompt_embeds)
+                                #     # print(f"[main.py] Attached embeddings to params: {hasattr(params, 'prompt_embeds')}")
+                                # else:
+                                #     print(f"[main.py] No embeddings available for user {user_id_str}")
                             except Exception as e:
                                 print(f"Error during prompt travel: {e}")
                                 # Continue without prompt travel embeddings
