@@ -37,6 +37,21 @@ class WebSocketClient(QThread):
         self.retry_delay = initial_retry_delay
         self.connection_successful = False
 
+    def reset_connection_state(self):
+        """Reset connection state for clean reconnection"""
+        print("[WebSocket] Resetting connection state...")
+        self.websocket = None
+        self.running = False
+        self.processing = False
+        self.user_id = str(uuid.uuid4())  # Generate new user ID
+        self.settings = None
+        self.current_frame = None
+        self.params = {}
+        self.retry_count = 0
+        self.retry_delay = self.initial_retry_delay
+        self.connection_successful = False
+        print(f"[WebSocket] New user ID: {self.user_id}")
+
     async def fetch_settings(self):
         """Fetch pipeline settings"""
         import aiohttp
