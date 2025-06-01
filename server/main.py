@@ -703,8 +703,81 @@ class App:
                     "input_params": input_params,
                     "max_queue_size": self.args.max_queue_size,
                     "page_content": page_content if info.page_content else "",
+                    "current_curation_index": getattr(self.args, 'default_curation_index', 0),
                 }
             )
+
+        @self.app.post("/api/update_curation_index")
+        async def update_curation_index(request: Request):
+            """Update the curation index and reinitialize the pipeline with proper cleanup"""
+            try:
+                data = await request.json()
+                new_curation_index = data.get("curation_index", 0)
+                
+                # Update the config
+                old_index = getattr(self.args, 'default_curation_index', 0)
+                # Create new args with updated curation index
+                args_dict = self.args._asdict()
+                args_dict['default_curation_index'] = new_curation_index
+                self.args = Args(**args_dict)
+                
+                print(f"[main.py] Updating curation index from {old_index} to {new_curation_index}")
+                
+                # Properly cleanup the old pipeline before creating new one
+                if hasattr(self, 'pipeline') and self.pipeline is not None:
+                    print("[main.py] Cleaning up old pipeline...")
+                    
+                    # Clear pipeline from GPU memory
+                    if hasattr(self.pipeline, 'pipes'):
+                        # Multiple pipes case
+                        for pipe in self.pipeline.pipes:
+                            if hasattr(pipe, 'to'):
+                                pipe.to('cpu')
+                        del self.pipeline.pipes
+                    elif hasattr(self.pipeline, 'pipe'):
+                        # Single pipe case
+                        if hasattr(self.pipeline.pipe, 'to'):
+                            self.pipeline.pipe.to('cpu')
+                        del self.pipeline.pipe
+                    
+                    # Delete the pipeline object
+                    del self.pipeline
+                    self.pipeline = None
+                    
+                    # Force garbage collection
+                    import gc
+                    gc.collect()
+                    
+                    # Clear GPU cache if using CUDA
+                    if device.type == 'cuda':
+                        import torch
+                        torch.cuda.empty_cache()
+                        torch.cuda.synchronize()
+                        print("[main.py] GPU memory cleared")
+                
+                # Reinitialize the pipeline with new curation index
+                print(f"[main.py] Reinitializing pipeline with curation index {new_curation_index}")
+                global pipeline
+                pipeline_class = get_pipeline_class(self.args.pipeline)
+                pipeline = pipeline_class(self.args, device, torch_dtype)
+                self.pipeline = pipeline
+                
+                print(f"[main.py] Pipeline successfully reinitialized with curation index {new_curation_index}")
+                
+                return JSONResponse({
+                    "status": "success", 
+                    "message": f"Curation index updated to {new_curation_index} and pipeline reinitialized",
+                    "new_curation_index": new_curation_index
+                })
+                
+            except Exception as e:
+                print(f"[main.py] Error updating curation index: {e}")
+                import traceback
+                traceback.print_exc()
+                return JSONResponse({
+                    "status": "error", 
+                    "message": f"Failed to update curation index: {str(e)}"
+                }, status_code=500)
 
         if not os.path.exists("public"):
             os.makedirs("public")

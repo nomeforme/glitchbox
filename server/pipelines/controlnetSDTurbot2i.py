@@ -275,7 +275,7 @@ class Pipeline:
         
         # Initialize LoRACurationConfig
 
-        self.curation_index = getattr(args, 'default_curation_index')
+        self.curation_index = getattr(args, 'default_curation_index', 0)
 
         self.lora_config = LoRACurationConfig(default_curation_index=self.curation_index)
 
