@@ -5,7 +5,7 @@ import os
 import asyncio
 import argparse
 from dotenv import load_dotenv
-from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFrame, QScrollArea
+from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFrame, QScrollArea, QSpinBox
 from PySide6.QtCore import Qt, QTimer
 
 from components import CameraDisplay
@@ -140,6 +140,23 @@ class MainWindow(QMainWindow):
         self.controls_container = QFrame()
         controls_layout = QVBoxLayout(self.controls_container)
         
+        # Curation Index Control - Add before other controls
+        curation_layout = QHBoxLayout()
+        curation_label = QLabel("Curation Index:")
+        self.curation_spinbox = QSpinBox()
+        self.curation_spinbox.setMinimum(0)
+        self.curation_spinbox.setMaximum(10)
+        self.curation_spinbox.setValue(0)  # Default value
+        self.curation_update_button = QPushButton("Update Curation Index")
+        self.curation_update_button.clicked.connect(self.update_curation_index)
+        
+        curation_layout.addWidget(curation_label)
+        curation_layout.addWidget(self.curation_spinbox)
+        curation_layout.addWidget(self.curation_update_button)
+        curation_layout.addStretch()  # Add stretch to keep controls compact
+        
+        controls_layout.addLayout(curation_layout)
+        
         # Create horizontal layout for buttons
         buttons_layout = QHBoxLayout()
         
@@ -241,6 +258,11 @@ class MainWindow(QMainWindow):
         self.start_button.setEnabled(True)
         self.reconnect_button.setEnabled(True)  # Enable after successful settings
         self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
+        
+        # Update curation index from server settings
+        current_curation_index = settings.get('current_curation_index', 0)
+        self.curation_spinbox.setValue(current_curation_index)
+        print(f"[UI] Set curation index to {current_curation_index} from server settings")
 
     def handle_status_change(self, status: str):
         """Handle WebSocket status changes"""
@@ -699,6 +721,54 @@ class MainWindow(QMainWindow):
         finally:
             # Always accept the close event
             event.accept()
+
+    def update_curation_index(self):
+        """Update the curation index on the server"""
+        index = self.curation_spinbox.value()
+        
+        # Disable the button during update
+        self.curation_update_button.setEnabled(False)
+        self.curation_update_button.setText("Updating...")
+        self.status_bar.update_processing_status(f"Updating curation index to {index}...")
+        
+        # Run the async update in a separate event loop
+        import asyncio
+        
+        async def update_async():
+            try:
+                success, message = await self.ws_client.update_curation_index(index)
+                return success, message
+            except Exception as e:
+                return False, str(e)
+        
+        # Execute the async function
+        try:
+            if hasattr(asyncio, 'run'):
+                # Python 3.7+
+                success, message = asyncio.run(update_async())
+            else:
+                # Older Python versions
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    success, message = loop.run_until_complete(update_async())
+                finally:
+                    loop.close()
+            
+            if success:
+                self.status_bar.update_processing_status(f"Curation index updated to {index}: {message}")
+                print(f"[UI] Successfully updated curation index to {index}")
+            else:
+                self.status_bar.update_processing_status(f"Failed to update curation index: {message}")
+                print(f"[UI] Failed to update curation index: {message}")
+                
+        except Exception as e:
+            self.status_bar.update_processing_status(f"Error updating curation index: {str(e)}")
+            print(f"[UI] Error updating curation index: {e}")
+        finally:
+            # Re-enable the button
+            self.curation_update_button.setEnabled(True)
+            self.curation_update_button.setText("Update Curation Index")
 
 def main():
     # Parse command line arguments

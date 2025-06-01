@@ -122,6 +122,28 @@ class WebSocketClient(QThread):
         else:
             print("[WebSocket] Warning: 'prompt' parameter not found in initialized parameters")
 
+    async def update_curation_index(self, curation_index):
+        """Update the curation index on the server"""
+        import aiohttp
+        try:
+            # Extract base URL from WebSocket URI
+            base_url = self.uri.replace('ws://', 'http://').replace('wss://', 'https://')
+            url = f"{base_url}/api/update_curation_index"
+            
+            async with aiohttp.ClientSession() as session:
+                async with session.post(url, json={"curation_index": curation_index}) as response:
+                    if response.status == 200:
+                        result = await response.json()
+                        print(f"[WebSocket] Curation index updated successfully: {result}")
+                        return True, result.get('message', 'Success')
+                    else:
+                        error_text = await response.text()
+                        print(f"[WebSocket] Failed to update curation index: {error_text}")
+                        return False, f"Server error: {response.status}"
+        except Exception as e:
+            print(f"[WebSocket] Error updating curation index: {e}")
+            return False, f"Network error: {str(e)}"
+
     async def _connect(self):
         """Establish WebSocket connection"""
         try:
@@ -294,9 +316,14 @@ class WebSocketClient(QThread):
                         break
         finally:
             # Cleanup if the loop exits for any reason
-            if self.websocket and self.websocket.open:
-                await self.websocket.close()
-                self.websocket = None
+            if self.websocket:
+                try:
+                    if hasattr(self.websocket, 'open') and self.websocket.open:
+                        await self.websocket.close()
+                except Exception as e:
+                    print(f"[WebSocket] Error during cleanup close: {e}")
+                finally:
+                    self.websocket = None
 
     def run(self):
         """Start the WebSocket client thread"""
@@ -342,11 +369,17 @@ class WebSocketClient(QThread):
 
     async def _send_stop_signal(self):
         """Send stop signal to server"""
-        if self.websocket and self.websocket.open:
+        if self.websocket:
             try:
-                await self.websocket.send(json.dumps({"status": "stop"}))
+                # Check if websocket is open using the correct method
+                if hasattr(self.websocket, 'open') and self.websocket.open:
+                    await self.websocket.send(json.dumps({"status": "stop"}))
+                else:
+                    print("[WebSocket] Connection is not open, cannot send stop signal")
             except websockets.exceptions.ConnectionClosed:
                 print("[WebSocket] Connection already closed")
+            except AttributeError as e:
+                print(f"[WebSocket] Websocket object missing expected attribute: {e}")
             except Exception as e:
                 print(f"[WebSocket] Error sending stop signal: {e}")
 
@@ -394,9 +427,13 @@ class WebSocketClient(QThread):
             
     async def _close_websocket(self):
         """Safely close the websocket connection"""
-        if self.websocket and self.websocket.open:
+        if self.websocket:
             try:
-                await self.websocket.close()
+                if hasattr(self.websocket, 'open') and self.websocket.open:
+                    await self.websocket.close()
+                else:
+                    print("[WebSocket] Connection already closed or not open")
             except Exception as e:
                 print(f"[WebSocket] Error closing websocket: {e}")
-        self.websocket = None
+            finally:
+                self.websocket = None
