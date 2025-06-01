@@ -97,20 +97,21 @@ class ImageSaver:
         if self.debug:
             print(f"[ImageSaver] Stopped. Total images saved: {self.image_counter}")
     
-    async def save_image(self, image: Image.Image, metadata: Optional[dict] = None):
+    async def save_image(self, image: Image.Image, metadata: Optional[dict] = None, filename_suffix: str = ""):
         """
         Queue an image for saving.
         
         Args:
             image: PIL Image to save
             metadata: Optional metadata to include in filename or save separately
+            filename_suffix: Optional suffix to add to filename (e.g., '_depth')
         """
         if not self.enabled or not self.save_queue:
             return
             
         try:
             # Put image in queue without blocking
-            self.save_queue.put_nowait((image.copy(), metadata, time.time()))
+            self.save_queue.put_nowait((image.copy(), metadata, time.time(), filename_suffix))
             
             if self.debug:
                 print(f"[ImageSaver] Queued image for saving (queue size: {self.save_queue.qsize()})")
@@ -131,12 +132,19 @@ class ImageSaver:
                 if item is None:
                     break
                 
-                image, metadata, timestamp = item
+                image, metadata, timestamp, filename_suffix = item
                 
                 # Generate filename
                 self.image_counter += 1
                 timestamp_str = datetime.fromtimestamp(timestamp).strftime("%H%M%S_%f")[:-3]  # milliseconds
-                filename = f"image_{self.image_counter:06d}_{timestamp_str}.{self.image_format}"
+                
+                # Build filename with optional suffix
+                base_filename = f"image_{self.image_counter:06d}_{timestamp_str}"
+                if filename_suffix:
+                    filename = f"{base_filename}{filename_suffix}.{self.image_format}"
+                else:
+                    filename = f"{base_filename}.{self.image_format}"
+                
                 filepath = os.path.join(self.session_dir, filename)
                 
                 # Save the image
