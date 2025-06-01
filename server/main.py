@@ -638,10 +638,19 @@ class App:
                             'seed': getattr(params, 'seed', ''),
                             'guidance_scale': getattr(params, 'guidance_scale', ''),
                             'strength': getattr(params, 'strength', ''),
+                            'pipe_index': getattr(params, 'pipe_index', ''),
                         }
                         # Queue image for saving (non-blocking)
                         await self.image_saver.save_image(image, metadata)
 
+                        # Save depth image if depth estimation was used
+                        if self.use_depth_estimator and hasattr(params, 'control_image') and params.control_image is not None:
+                            depth_metadata = metadata.copy()
+                            depth_metadata['image_type'] = 'depth'
+                            # Queue depth image for saving (non-blocking)
+                            await self.image_saver.save_image(params.control_image, depth_metadata, filename_suffix='_depth')
+                        else:
+                            print(f"[main.py] No depth image saved as {params.control_image} is None or depth estimation is not enabled")
                     if self.args.safety_checker:
                         image, has_nsfw_concept = self.safety_checker(image)
                         if has_nsfw_concept:

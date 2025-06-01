@@ -599,8 +599,8 @@ parser.add_argument(
     "--image-save-queue-size",
     dest="image_save_queue_size",
     type=int,
-    default=100,
-    help="Maximum queue size for image saving (default: 100)",
+    default=1000,
+    help="Maximum queue size for image saving (default: 1000)",
 )
 
 
@@ -608,7 +608,7 @@ parser.add_argument(
     "--default-curation-index",
     dest="default_curation_index",
     type=int,
-    default=0,
+    default=3,
     help="Default index for curation selection",
 )
 
