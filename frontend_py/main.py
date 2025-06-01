@@ -149,6 +149,11 @@ class MainWindow(QMainWindow):
         self.start_button.setEnabled(False)  # Disabled until settings are loaded
         buttons_layout.addWidget(self.start_button)
         
+        # Reconnect button
+        self.reconnect_button = QPushButton("Reconnect to Server")
+        self.reconnect_button.clicked.connect(self.reconnect_to_server)
+        buttons_layout.addWidget(self.reconnect_button)
+        
         # STT Toggle button
         self.stt_button = QPushButton("Start Speech Recognition")
         self.stt_button.clicked.connect(self.toggle_stt)
@@ -227,12 +232,14 @@ class MainWindow(QMainWindow):
     def get_initial_settings(self):
         """Start WebSocket client to get initial settings"""
         self.status_bar.update_processing_status("Getting settings...")
+        self.reconnect_button.setEnabled(False)  # Disable during connection
         self.ws_client.start()
 
     def handle_settings(self, settings):
         """Handle received pipeline settings"""
         self.control_panel.setup_pipeline_options(settings)
         self.start_button.setEnabled(True)
+        self.reconnect_button.setEnabled(True)  # Enable after successful settings
         self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
 
     def handle_status_change(self, status: str):
@@ -245,6 +252,8 @@ class MainWindow(QMainWindow):
             self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
             # Start the MJPEG stream when connected
             self.processed_display.start_stream(self.ws_client.user_id, self.server_http_uri)
+            # Re-enable reconnect button on successful connection
+            self.reconnect_button.setEnabled(True)
         elif status == "disconnected":
             self.status_bar.update_connection_status(False)
             # Clear the server info from status bar
@@ -257,7 +266,9 @@ class MainWindow(QMainWindow):
             self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
         elif status == "Connection failed after maximum retries":
             self.status_bar.update_connection_status(False)
-            self.status_bar.update_processing_status("")
+            self.status_bar.update_processing_status("Connection failed - click Reconnect to retry")
+            # Ensure reconnect button is enabled when connection fails
+            self.reconnect_button.setEnabled(True)
 
     def handle_camera_frame(self, frame):
         """Handle new frame from camera"""
@@ -326,6 +337,127 @@ class MainWindow(QMainWindow):
         """Handle connection errors"""
         self.status_bar.update_processing_status(f"Error: {error_msg}")
         self.status_bar.update_connection_status(False)
+
+    def reconnect_to_server(self):
+        """Reconnect to server by cleanly stopping all threads and reestablishing connection"""
+        print("[UI] Manual reconnection initiated...")
+        self.status_bar.update_processing_status("Reconnecting to server...")
+        self.reconnect_button.setEnabled(False)  # Disable button during reconnection
+        
+        try:
+            # Stop all active processes first
+            self._stop_all_threads()
+            
+            # Clear displays
+            self.camera_display.clear_display()
+            self.processed_display.clear_display()
+            
+            # Reset UI state
+            self.start_button.setText("Start Camera")
+            self.start_button.setEnabled(False)
+            self.status_bar.update_connection_status(False)
+            
+            # Reset thread state flags
+            self.stt_active = False
+            self.stt_button.setText("Start Speech Recognition")
+            self.fft_active = False
+            self.fft_button.setText("Start Audio FFT")
+            
+            # Reset WebSocket client state instead of creating new one
+            self.ws_client.reset_connection_state()
+            
+            # Disconnect existing signals and reconnect to avoid duplicates
+            try:
+                self.ws_client.frame_received.disconnect()
+                self.ws_client.connection_error.disconnect()
+                self.ws_client.settings_received.disconnect()
+                self.ws_client.status_changed.disconnect()
+            except TypeError:
+                # Signals might not be connected, ignore the error
+                pass
+            
+            # Connect signals for the reset client
+            self.ws_client.frame_received.connect(self.processed_display.update_frame)
+            self.ws_client.connection_error.connect(self.handle_connection_error)
+            self.ws_client.settings_received.connect(self.handle_settings)
+            self.ws_client.status_changed.connect(self.handle_status_change)
+            
+            # Start the connection process
+            self.get_initial_settings()
+            
+            print("[UI] Reconnection process started")
+            
+        except Exception as e:
+            print(f"[UI] Error during reconnection: {e}")
+            self.status_bar.update_processing_status(f"Reconnection failed: {e}")
+        finally:
+            # Re-enable the reconnect button after a short delay
+            QTimer.singleShot(2000, lambda: self.reconnect_button.setEnabled(True))
+
+    def _stop_all_threads(self):
+        """Stop all active threads cleanly"""
+        print("[UI] Stopping all threads for reconnection...")
+        
+        # Stop frame timer
+        if hasattr(self, 'frame_timer'):
+            self.frame_timer.stop()
+        self.processing_frame = False
+        
+        # Stop STT thread if running
+        if hasattr(self, 'stt_thread') and self.stt_thread is not None:
+            print("[UI] Stopping STT thread...")
+            self.stt_thread.stop()
+            if not self.stt_thread.wait(2000):  # 2 second timeout
+                print("[UI] Force terminating STT thread")
+                self.stt_thread.terminate()
+        
+        # Stop FFT thread if running
+        if hasattr(self, 'fft_thread') and self.fft_thread is not None:
+            print("[UI] Stopping FFT thread...")
+            self.fft_thread.stop()
+            if not self.fft_thread.wait(2000):  # 2 second timeout
+                print("[UI] Force terminating FFT thread")
+                self.fft_thread.terminate()
+        
+        # Stop camera thread
+        if hasattr(self, 'camera_thread') and self.camera_thread is not None:
+            print("[UI] Stopping camera thread...")
+            self.camera_thread.stop()
+            if not self.camera_thread.wait(2000):  # 2 second timeout
+                print("[UI] Force terminating camera thread")
+                self.camera_thread.terminate()
+        
+        # Stop WebSocket client
+        if hasattr(self, 'ws_client') and self.ws_client is not None:
+            print("[UI] Stopping WebSocket client...")
+            # Force stop flags
+            self.ws_client.running = False
+            self.ws_client.processing = False
+            
+            # Stop the stream immediately
+            if hasattr(self, 'processed_display'):
+                self.processed_display.stop_stream()
+            
+            # Stop WebSocket thread
+            self.ws_client.stop()
+            if not self.ws_client.wait(3000):  # 3 second timeout
+                print("[UI] Force terminating WebSocket thread")
+                self.ws_client.terminate()
+        
+        # Recreate threads (except WebSocket which is recreated in reconnect_to_server)
+        print("[UI] Recreating threads...")
+        self.camera_thread = CameraThread()
+        self.camera_thread.frame_ready.connect(self.handle_camera_frame)
+        
+        # Recreate STT thread
+        self.stt_thread = SpeechToTextThread(input_device_index=self.audio_device_index)
+        self.stt_thread.transcription_updated.connect(self.handle_transcription)
+        
+        # Recreate FFT thread
+        self.fft_thread = FFTAnalyzerThread(input_device_index=self.audio_device_index)
+        self.fft_thread.fft_data_updated.connect(self.handle_fft_data)
+        
+        print("[UI] All threads stopped and recreated successfully")
 
     def handle_transcription(self, text):
         """Handle transcribed text from STT and update the prompt"""
