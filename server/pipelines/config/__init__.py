@@ -62,6 +62,8 @@ class LoRACurationConfig:
 
         self.lora_curation = {
             # "test_lcm": ["twisted-bodies", "latent-consistency/lcm-lora-sdv1-5"],
+            "test_lcm": ["radames/sd-21-DPO-LoRA", "radames/sd-21-DPO-LoRA"],
+            "garance": ["garance", "garance"],
             "robwood_sand": ["robwood", "nature-sand"],
             "twisted_water": ["twisted-bodies", "nature-water"],
             "melies": ["melies-bw", "melies-col"],
@@ -70,7 +72,6 @@ class LoRACurationConfig:
             "monoblue": ["monoblue", "psychaos"],
             "liquid_nature": ["nature-bw", "nature-water"],
             "marina_abstract": ["marina-red", "abstract-brokenglass-red"],
-            "garance": ["garance", "garance"],
             "hahacards_goldworld": ["goldworld", "HAHACards_A2"],
             "pixels_body": ["pixels-body", "pixels-face"],
         }
