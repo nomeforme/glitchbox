@@ -86,7 +86,7 @@ class Args(NamedTuple):
     lora_model_name: str = "glitch"
     # Image saver settings
     use_image_saver: bool = False
-    image_save_dir: str = "server/output"
+    image_save_dir: str = "output"
     image_save_format: str = "png"
     image_save_quality: int = 95
     image_save_queue_size: int = 100
@@ -577,8 +577,8 @@ parser.add_argument(
     "--image-save-dir",
     dest="image_save_dir",
     type=str,
-    default="server/output",
-    help="Directory to save images (default: server/output)",
+    default="output",
+    help="Directory to save images (default: output)",
 )
 parser.add_argument(
     "--image-save-format",
@@ -608,7 +608,7 @@ parser.add_argument(
     "--default-curation-index",
     dest="default_curation_index",
     type=int,
-    default=3,
+    default=0,
     help="Default index for curation selection",
 )
 

@@ -23,8 +23,8 @@ from server.pipelines.diffusers_pipelines.pipeline_controlnet_tensorrt import Te
 taesd_model = "madebyollin/taesd"
 base_model = "stabilityai/sd-turbo"
 
-onnx_model_dir = "server/tensorrt_convert/onnx_models"
-unet_engine_path = "server/tensorrt_convert/onnx_models/unet/unet.engine"
+onnx_model_dir = "tensorrt_convert/onnx_models"
+unet_engine_path = "tensorrt_convert/onnx_models/unet/unet.engine"
 
 # LoRA models
 lora_models = {
@@ -37,10 +37,10 @@ lora_models = {
     "ostris/super-cereal-sdxl-lora": "ostris/super-cereal-sdxl-lora",
     "pbarbarant/sd-sonio": "pbarbarant/sd-sonio",
     "artificialguybr/studioghibli-redmond-2-1v-studio-ghibli-lora-for-freedom-redmond-sd-2-1": "artificialguybr/studioghibli-redmond-2-1v-studio-ghibli-lora-for-freedom-redmond-sd-2-1",
-    "style_pi_2": "server/loras/style_pi_2.safetensors",
-    "pytorch_lora_weights": "server/loras/pytorch_lora_weights.safetensors",
-    "FKATwigs_A1-000038": "server/loras/FKATwigs_A1-000038.safetensors",
-    "dark":"server/loras/flowers-000022.safetensors"
+    "style_pi_2": "loras/style_pi_2.safetensors",
+    "pytorch_lora_weights": "loras/pytorch_lora_weights.safetensors",
+    "FKATwigs_A1-000038": "loras/FKATwigs_A1-000038.safetensors",
+    "dark":"loras/flowers-000022.safetensors"
 }
 
 # Default LoRAs to use - can be a single LoRA or a list of LoRAs to fuse
@@ -600,7 +600,7 @@ if __name__ == "__main__":
         print(f"[TIMING] Iteration {i+1} completed in {iteration_time:.4f} seconds")
         
         save_start = time.time()
-        image.save(f"server/assets/output_qr_code_{i}.png")
+        image.save(f"assets/output_qr_code_{i}.png")
         print(f"[TIMING] Image saved: {time.time() - save_start:.4f} seconds")
     
     avg_iteration_time = total_iteration_time / 10

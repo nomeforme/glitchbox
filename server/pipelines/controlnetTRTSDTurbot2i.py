@@ -66,10 +66,10 @@ lora_models = {
     "ostris/super-cereal-sdxl-lora": "ostris/super-cereal-sdxl-lora",
     "pbarbarant/sd-sonio": "pbarbarant/sd-sonio",
     "artificialguybr/studioghibli-redmond-2-1v-studio-ghibli-lora-for-freedom-redmond-sd-2-1": "artificialguybr/studioghibli-redmond-2-1v-studio-ghibli-lora-for-freedom-redmond-sd-2-1",
-    "style_pi_2": "server/loras/style_pi_2.safetensors",
-    "pytorch_lora_weights": "server/loras/pytorch_lora_weights.safetensors",
-    "FKATwigs_A1-000038": "server/loras/FKATwigs_A1-000038.safetensors",
-    "dark":"server/loras/flowers-000022.safetensors"
+    "style_pi_2": "loras/style_pi_2.safetensors",
+    "pytorch_lora_weights": "loras/pytorch_lora_weights.safetensors",
+    "FKATwigs_A1-000038": "loras/FKATwigs_A1-000038.safetensors",
+    "dark":"loras/flowers-000022.safetensors"
 }
 
 # Default LoRAs to use - can be a single LoRA or a list of LoRAs to fuse
@@ -321,14 +321,14 @@ class Pipeline:
             options=["depth", "canny"],
         )
         trt_engine_path: str = Field(
-            "server/tensorrt_convert/onnx_models/unet/unet.engine",
+            "tensorrt_convert/onnx_models/unet/unet.engine",
             title="TensorRT Engine Path",
             field="text",
             id="trt_engine_path",
             hide=True,
         )
         onnx_model_dir: str = Field(
-            "server/tensorrt_convert/onnx_models",
+            "tensorrt_convert/onnx_models",
             title="ONNX Model Directory",
             field="text",
             id="onnx_model_dir",
@@ -364,8 +364,8 @@ class Pipeline:
         workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         
         # Construct absolute paths for TensorRT engine and ONNX models
-        trt_engine_path = getattr(args, "trt_engine_path", os.path.join(workspace_root, "server/tensorrt_convert/onnx_models/unet/unet.engine"))
-        onnx_model_dir = getattr(args, "onnx_model_dir", os.path.join(workspace_root, "server/tensorrt_convert/onnx_models"))
+        trt_engine_path = getattr(args, "trt_engine_path", os.path.join(workspace_root, "tensorrt_convert/onnx_models/unet/unet.engine"))
+        onnx_model_dir = getattr(args, "onnx_model_dir", os.path.join(workspace_root, "tensorrt_convert/onnx_models"))
         
         print(f"[DEBUG] Workspace root: {workspace_root}")
         print(f"[DEBUG] TensorRT engine path: {trt_engine_path}")
@@ -639,7 +639,7 @@ class Pipeline:
             print("latent travel factor: ", getattr(params, "latent_travel_factor", 0.5))
 
         # Get TensorRT engine path from params or use default
-        trt_engine_path = getattr(params, "trt_engine_path", "server/tensorrt_convert/onnx_models/unet/unet.engine")
+        trt_engine_path = getattr(params, "trt_engine_path", "tensorrt_convert/onnx_models/unet/unet.engine")
 
         # print("control image shape: ", control_image.shape)
         print("input height: ", params.height)

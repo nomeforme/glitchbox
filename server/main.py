@@ -257,7 +257,7 @@ class App:
         self.use_image_saver = getattr(self.args, 'use_image_saver', False)
         if self.use_image_saver:
             self.image_saver = get_image_saver(
-                base_dir=getattr(self.args, 'image_save_dir', 'server/output'),
+                base_dir=getattr(self.args, 'image_save_dir', 'output'),
                 image_format=getattr(self.args, 'image_save_format', 'png'),
                 quality=getattr(self.args, 'image_save_quality', 95),
                 queue_size=getattr(self.args, 'image_save_queue_size', 100),
@@ -706,9 +706,9 @@ class App:
         if not os.path.exists("public"):
             os.makedirs("public")
 
-        self.app.mount(
-            "/", StaticFiles(directory="frontend/public", html=True), name="public"
-        )
+        # self.app.mount(
+        #     "/", StaticFiles(directory="frontend/public", html=True), name="public"
+        # )
         
     def _update_acid_settings(self, settings):
         """Update acid processor settings from parameters"""

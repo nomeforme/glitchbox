@@ -52,10 +52,10 @@ lora_models = {
     "ostris/super-cereal-sdxl-lora": "ostris/super-cereal-sdxl-lora",
     "pbarbarant/sd-sonio": "pbarbarant/sd-sonio",
     "artificialguybr/studioghibli-redmond-2-1v-studio-ghibli-lora-for-freedom-redmond-sd-2-1": "artificialguybr/studioghibli-redmond-2-1v-studio-ghibli-lora-for-freedom-redmond-sd-2-1",
-    "style_pi_2": "server/loras/style_pi_2.safetensors",
-    "pytorch_lora_weights": "server/loras/pytorch_lora_weights.safetensors",
-    "FKATwigs_A1-000038": "server/loras/FKATwigs_A1-000038.safetensors",
-    "dark":"server/loras/flowers-000022.safetensors"
+    "style_pi_2": "loras/style_pi_2.safetensors",
+    "pytorch_lora_weights": "loras/pytorch_lora_weights.safetensors",
+    "FKATwigs_A1-000038": "loras/FKATwigs_A1-000038.safetensors",
+    "dark":"loras/flowers-000022.safetensors"
 }
 
 # Default LoRAs to use - can be a single LoRA or a list of LoRAs to fuse

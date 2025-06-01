@@ -30,7 +30,7 @@ pipe.vae = AutoencoderTiny.from_pretrained(
     "madebyollin/taesd", torch_dtype=torch.float16
 ).to("cuda")
 
-pipe.load_lora_weights("../Real-Time-Latent-Consistency-Model/server/loras/FKATwigs_A1-000038.safetensors")
+pipe.load_lora_weights("../Real-Time-Latent-Consistency-Model/loras/FKATwigs_A1-000038.safetensors")
 pipe.fuse_lora()
 pipe.unload_lora_weights()
 

@@ -27,9 +27,9 @@ You need CUDA and Python 3.10, Node > 19, Mac with an M1/M2/M3 chip or Intel Arc
 ```bash
 python -m venv venv
 source venv/bin/activate
-pip3 install -r server/requirements.txt
+pip3 install -r requirements.txt
 cd frontend && npm install && npm run build && cd ..
-python server/main.py --reload --pipeline img2imgSDTurbo 
+python main.py --reload --pipeline img2imgSDTurbo 
  ```
 
 Don't forget to fuild the frontend!!! 
@@ -46,20 +46,20 @@ You can build your own pipeline following examples here [here](pipelines),
 ### Image to Image
 
 ```bash
-python server/main.py --reload --pipeline img2img 
+python main.py --reload --pipeline img2img 
 ```
 
 # LCM
 ### Text to Image
 
 ```bash
-python server/main.py --reload --pipeline txt2img 
+python main.py --reload --pipeline txt2img 
 ```
 
 ### Image to Image ControlNet Canny
 
 ```bash
-python server/main.py --reload --pipeline controlnet 
+python main.py --reload --pipeline controlnet 
 ```
 
 
@@ -71,22 +71,22 @@ Using LCM-LoRA, giving it the super power of doing inference in as little as 4 s
 ### Image to Image ControlNet Canny LoRa
 
 ```bash
-python server/main.py --reload --pipeline controlnetLoraSD15
+python main.py --reload --pipeline controlnetLoraSD15
 ```
 or SDXL, note that SDXL is slower than SD15 since the inference runs on 1024x1024 images
 
 ```bash
-python server/main.py --reload --pipeline controlnetLoraSDXL
+python main.py --reload --pipeline controlnetLoraSDXL
 ```
 
 ### Text to Image
 
 ```bash
-python server/main.py --reload --pipeline txt2imgLora
+python main.py --reload --pipeline txt2imgLora
 ```
 
 ```bash
-python server/main.py --reload --pipeline txt2imgLoraSDXL
+python main.py --reload --pipeline txt2imgLoraSDXL
 ```
 # Available Pipelines
 
@@ -145,14 +145,14 @@ PIPELINE=txt2imgLoraSDXL bash build-run.sh
 and setting environment variables
 
 ```bash
-TIMEOUT=120 SAFETY_CHECKER=True MAX_QUEUE_SIZE=4 python server/main.py --reload --pipeline txt2imgLoraSDXL
+TIMEOUT=120 SAFETY_CHECKER=True MAX_QUEUE_SIZE=4 python main.py --reload --pipeline txt2imgLoraSDXL
 ```
 
 If you're running locally and want to test it on Mobile Safari, the webserver needs to be served over HTTPS, or follow this instruction on my [comment](https://github.com/radames/Real-Time-Latent-Consistency-Model/issues/17#issuecomment-1811957196)
 
 ```bash
 openssl req -newkey rsa:4096 -nodes -keyout key.pem -x509 -days 365 -out certificate.pem
-python server/main.py --reload --ssl-certfile=certificate.pem --ssl-keyfile=key.pem
+python main.py --reload --ssl-certfile=certificate.pem --ssl-keyfile=key.pem
 ```
 
 ## Docker

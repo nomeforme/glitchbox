@@ -21,7 +21,7 @@ This scheduler works similarly to the oscillators for zoom and shift effects but
 The scheduler can be configured through command line arguments when starting the server:
 
 ```bash
-python server/main.py \
+python main.py \
   --use-prompt-travel \
   --use-prompt-travel-scheduler \
   --prompt-travel-min-factor 0.0 \

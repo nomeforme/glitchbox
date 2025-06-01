@@ -217,7 +217,7 @@ class Pipeline:
             safety_checker=None,
             torch_dtype=torch_dtype,
         )
-        self.pipe.load_lora_weights("server/loras/flowers-000022.safetensors")
+        self.pipe.load_lora_weights("loras/flowers-000022.safetensors")
         if args.taesd:
             self.pipe.vae = AutoencoderTiny.from_pretrained(
                 taesd_model, torch_dtype=torch_dtype, use_safetensors=True

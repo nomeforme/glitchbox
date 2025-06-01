@@ -1204,7 +1204,7 @@ if __name__ == "__main__":
         print(f"[TIMING] Iteration {i+1} completed in {iteration_time:.4f} seconds")
         
         save_start = time.time()
-        image.save(f"server/assets/output_qr_code_{i}.png")
+        image.save(f"assets/output_qr_code_{i}.png")
         print(f"[TIMING] Image saved: {time.time() - save_start:.4f} seconds")
     
     avg_iteration_time = total_iteration_time / 10
