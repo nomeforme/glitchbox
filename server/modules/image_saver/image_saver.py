@@ -197,7 +197,7 @@ class ImageSaver:
 
 # Factory function to create image saver instance
 def get_image_saver(
-    base_dir: str = "server/output",
+    base_dir: str = "output",
     image_format: str = "png", 
     quality: int = 95,
     queue_size: int = 100,

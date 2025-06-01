@@ -1,5 +1,5 @@
 [project]
-name = "real-time-latent-consistency-model"
+name = "client"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -29,3 +29,6 @@ dependencies = [
     "uvloop>=0.21.0",
     "websockets==14.2",
 ]
+
+[tool.uv.workspace]
+members = ["server"]

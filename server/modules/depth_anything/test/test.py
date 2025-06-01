@@ -26,9 +26,9 @@ def batch_inference(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Run batch depth estimation with a TensorRT engine.')
-    parser.add_argument('--img', type=str, default='server/assets/mountain.png', help='Path to the input image')
+    parser.add_argument('--img', type=str, default='assets/mountain.png', help='Path to the input image')
     parser.add_argument('--outdir', type=str, default='output', help='Output directory for the depth maps')
-    parser.add_argument('--engine', type=str, default='server/modules/depth_anything/models/depth_anything_v2_vits.trt', help='Path to the TensorRT engine')
+    parser.add_argument('--engine', type=str, default='modules/depth_anything/models/depth_anything_v2_vits.trt', help='Path to the TensorRT engine')
     parser.add_argument('--grayscale', action='store_true', help='Save the depth map in grayscale')
     parser.add_argument('--num_iterations', type=int, default=100, help='Number of iterations to run')
     

@@ -24,7 +24,7 @@ class VideoCreator:
     
     def __init__(
         self,
-        base_dir: str = "server/output",
+        base_dir: str = "output",
         fps: int = 10,
         video_format: str = "mp4",
         video_quality: int = 23,  # CRF value for H.264 (lower = better quality)
@@ -391,8 +391,8 @@ def main():
     parser.add_argument(
         "--base-dir",
         type=str,
-        default="server/output",
-        help="Base directory containing session folders (default: server/output)"
+        default="output",
+        help="Base directory containing session folders (default: output)"
     )
     
     parser.add_argument(

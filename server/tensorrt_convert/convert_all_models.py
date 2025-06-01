@@ -68,7 +68,7 @@ def convert_all_models(base_dir: str, num_controlnet: int, fp16: bool = False, s
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Convert all ONNX models to TensorRT format")
-    parser.add_argument("--base_dir", type=str, default="server/tensorrt_convert/onnx_models",
+    parser.add_argument("--base_dir", type=str, default="tensorrt_convert/onnx_models",
                       help="Base directory containing the ONNX models")
     parser.add_argument("--num_controlnet", type=int, default=1,
                       help="Number of controlnet models")

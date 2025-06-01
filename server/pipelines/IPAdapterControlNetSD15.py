@@ -43,7 +43,7 @@ default_prompt = "Portrait of The Terminator with , glare pose, detailed, intric
 default_negative_prompt = "blurry, low quality, render, 3D, oversaturated"
 
 # Example reference image for IP Adapter
-ip_adapter_reference_image = load_image("/home/dream/Desktop/AI/Real-Time-Latent-Consistency-Model/server/assets/mountain.png").resize((512, 512))
+ip_adapter_reference_image = load_image("/home/dream/Desktop/AI/Real-Time-Latent-Consistency-Model/assets/mountain.png").resize((512, 512))
 
 page_content = """
 <h1 class="text-3xl font-bold">ControlNet + IP-Adapter Combined Pipeline</h1>
