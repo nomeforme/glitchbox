@@ -261,7 +261,7 @@ class Pipeline:
             description="Use pipe index to select prompts from file instead of sequential scheduling",
         )
 
-    def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype):
+    def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype, lora_config=None):
         # Add current_curation_index to track changes
         self.current_curation_index = None
         
@@ -280,11 +280,16 @@ class Pipeline:
         if self.use_pixelate_processor:
             self.pixelate_processor = PixelateProcessor()
         
-        # Initialize LoRACurationConfig
+        # Use provided LoRACurationConfig or create a new one
 
         self.curation_index = getattr(args, 'default_curation_index', 0)
 
-        self.lora_config = LoRACurationConfig(default_curation_index=self.curation_index)
+        if lora_config is not None:
+            self.lora_config = lora_config
+            print(f"[controlnetSDTurbot2i.py] Using provided LoRACurationConfig from app level")
+        else:
+            self.lora_config = LoRACurationConfig(args.lora_config_dir, default_curation_index=self.curation_index)
+            print(f"[controlnetSDTurbot2i.py] Created new LoRACurationConfig")
 
         # Use the LoRACurationConfig instance to replace existing logic
         self.lora_models = self.lora_config.get_lora_models()
@@ -391,10 +396,11 @@ class Pipeline:
             }
             
             # Load default LoRA(s) during initialization with specific adapter weights
-            print(f"Loading default LoRA(s): {self.lora_curation[self.curation_keys[self.curation_index]]} with weights {adapter_weights}")
+            curation_key = self.curation_keys[0]
+            print(f"Loading default LoRA(s): {self.lora_curation[curation_key]} with weights {adapter_weights}")
             # If there's only one LoRA, don't fuse. If there are multiple, fuse them automatically
             should_fuse = True
-            self.load_loras_for_pipe(pipe, pipe_state, self.lora_curation[self.curation_keys[self.curation_index]], fuse_loras=should_fuse, lora_scale=self.default_lora_scale, adapter_weights=adapter_weights)
+            self.load_loras_for_pipe(pipe, pipe_state, self.lora_curation[curation_key], fuse_loras=should_fuse, lora_scale=self.default_lora_scale, adapter_weights=adapter_weights)
             
             # Pass the upscaler processor to the pipeline if enabled
             if self.use_upscaler:
@@ -518,8 +524,9 @@ class Pipeline:
                 pipe_state['current_adapter_weights'] = []
             
             # Now load the new LoRA set
-            default_loras = self.lora_curation[self.curation_keys[curation_index]]
-            adapter_weights = self.adapter_weights_set_curation[self.curation_keys[curation_index]][0]  # Start with first weight set
+            curation_key = self.curation_keys[0]  # Use index 0 since curation_keys only has one element now
+            default_loras = self.lora_curation[curation_key]
+            adapter_weights = self.adapter_weights_set_curation[curation_key][0]  # Start with first weight set
             self.load_loras_for_pipe(pipe, pipe_state, default_loras, fuse_loras=True, lora_scale=1.0, adapter_weights=adapter_weights)
             self.current_curation_index = curation_index
 
@@ -533,7 +540,8 @@ class Pipeline:
         # self.update_lora_set(pipe, pipe_state, self.curation_index)
         
         # Get current adapter weights based on both curation_index and pipe_index
-        adapter_weights = self.adapter_weights_set_curation[self.curation_keys[self.curation_index]][params.pipe_index]
+        curation_key = self.curation_keys[0]  # Use index 0 since curation_keys only has one element now
+        adapter_weights = self.adapter_weights_set_curation[curation_key][params.pipe_index]
         print(f"Using pipe {self.current_pipe_idx} with adapter weights {adapter_weights}")
 
         generator = torch.manual_seed(params.seed)

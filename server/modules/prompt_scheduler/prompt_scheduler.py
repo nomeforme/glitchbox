@@ -23,7 +23,7 @@ class PromptScheduler:
                 debug=False,
                 loop_prompts=True,
                 logging_enabled=False,
-                lora_model_name=None):
+                prompts_file_name=None):
         """
         Initialize the prompt scheduler.
         
@@ -34,7 +34,7 @@ class PromptScheduler:
             debug (bool): Whether to print debug messages (default: False)
             loop_prompts (bool): Whether to loop back to the beginning when reaching the end (default: True)
             logging_enabled (bool): Whether to enable logging (default: False)
-            lora_model_name (str): Name of the LoRA model (default: None)
+            prompts_file_name (str): Name of the prompts file (default: None)
         """
         self.prompts_dir = prompts_dir
         self.prompt_file_pattern = prompt_file_pattern
@@ -42,7 +42,7 @@ class PromptScheduler:
         self.debug = debug
         self.loop_prompts = loop_prompts
         self.logging_enabled = logging_enabled
-        self.lora_model_name = lora_model_name  # Store lora_model_name as instance variable
+        self.prompts_file_name = prompts_file_name  # Store prompts_file_name as instance variable
         
         # Internal state
         self.prompts = []
@@ -140,12 +140,12 @@ class PromptScheduler:
         if self.logging_enabled:
             self.logger.info(f"Looking for prompts in: {prompts_path}")
 
-        # If a LoRA model name is provided, construct the specific file path
-        if self.lora_model_name is not None:
-            print(f"[PromptScheduler] Loading prompts for LoRA model: {self.lora_model_name}")
-            # Look in the lora_prompts subdirectory for LoRA-specific prompts
+        # If a prompts file name is provided, construct the specific file path
+        if self.prompts_file_name is not None:
+            print(f"[PromptScheduler] Loading prompts for prompts file: {self.prompts_file_name}")
+            # Look in the lora_prompts subdirectory for specific prompts
             lora_prompts_path = os.path.join(prompts_path, "lora_prompts")
-            prompt_file = os.path.join(lora_prompts_path, f"prompts_{self.lora_model_name}.txt")
+            prompt_file = os.path.join(lora_prompts_path, f"prompts_{self.prompts_file_name}.txt")
             prompt_files = [prompt_file] if os.path.exists(prompt_file) else []
         else:
             # Find all prompt files matching the pattern
@@ -272,13 +272,30 @@ class PromptScheduler:
             self.logger.info(f"Loop prompts set to: {loop}")
             
     def reload_prompts(self):
-        """Reload prompts from the file"""
-        self.load_prompts()
+        """
+        Reload prompts from the current prompts file.
+        """
         if self.debug:
-            print("[PromptScheduler] Prompts reloaded")
+            print("[PromptScheduler] Reloading prompts")
         if self.logging_enabled:
-            self.logger.info("Prompts reloaded")
-            
+            self.logger.info("Reloading prompts")
+        self.load_prompts()
+        
+    def update_prompts_file_name(self, prompts_file_name):
+        """
+        Update the prompts file name and reload prompts.
+        
+        Args:
+            prompts_file_name (str): New prompts file name
+        """
+        if self.debug:
+            print(f"[PromptScheduler] Updating prompts file name from '{self.prompts_file_name}' to '{prompts_file_name}'")
+        if self.logging_enabled:
+            self.logger.info(f"Updating prompts file name from '{self.prompts_file_name}' to '{prompts_file_name}'")
+        
+        self.prompts_file_name = prompts_file_name
+        self.reload_prompts()
+
     def reset(self):
         """Reset the scheduler to initial state"""
         if len(self.prompts) >= 2:
