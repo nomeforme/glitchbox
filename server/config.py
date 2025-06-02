@@ -83,7 +83,7 @@ class Args(NamedTuple):
     # Add pixelate processor argument
     use_pixelate_processor: bool = False
     default_curation_index: int = 0
-    lora_model_name: str = "glitch"
+    prompts_file_name: str = "glitch"
     # Image saver settings
     use_image_saver: bool = False
     image_save_dir: str = "output"
@@ -92,6 +92,8 @@ class Args(NamedTuple):
     image_save_queue_size: int = 100
     # Warmup settings
     warmup: bool = True
+    # LoRA Configuration Directory
+    lora_config_dir: str = "lora_config"
 
     def pretty_print(self):
         print("\n")
@@ -610,16 +612,16 @@ parser.add_argument(
     "--default-curation-index",
     dest="default_curation_index",
     type=int,
-    default=4,
+    default=3,
     help="Default index for curation selection",
 )
 
 parser.add_argument(
-    "--lora-model-name",
-    dest="lora_model_name",
+    "--prompts-file-name",
+    dest="prompts_file_name",
     type=str,
     default="megamix",
-    help="Name of the LoRA model to use for loading prompts",
+    help="Name of the prompts file to use (without .txt extension), corresponds to a LoRA curation config.",
 )
 
 # Warmup settings
@@ -629,6 +631,15 @@ parser.add_argument(
     action="store_true",
     default=True,
     help="Warmup all pipes during startup to pre-trace computational graphs",
+)
+
+# Add LoRA config directory argument
+parser.add_argument(
+    "--lora-config-dir",
+    dest="lora_config_dir",
+    type=str,
+    default="lora_config",
+    help="Directory containing LoRA curation JSON configuration files.",
 )
 
 parser.set_defaults(taesd=USE_TAESD)

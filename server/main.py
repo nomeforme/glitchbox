@@ -36,6 +36,8 @@ from modules.bg_removal import get_processor as get_bg_removal_processor
 from modules.depth_anything.depth_anything_trt import DepthAnythingTRT as DepthAnything
 # Import the image saver
 from modules.image_saver import get_image_saver
+# Import LoRACurationConfig for curation management
+from pipelines.config import LoRACurationConfig
 
 import numpy as np
 import zmq
@@ -83,13 +85,17 @@ THROTTLE = 1.0 / 120
 
 
 class App:
-    def __init__(self, config: Args, pipeline):
+    def __init__(self, config: Args, pipeline, lora_config):
         self.args = config
         self.pipeline = pipeline
         self.app = FastAPI()
         self.conn_manager = ConnectionManager()
         if self.args.safety_checker:
             self.safety_checker = SafetyChecker(device=device.type)
+        
+        # Use the provided LoRACurationConfig
+        self.lora_config = lora_config
+        print(f"[main.py] Using provided LoRACurationConfig with curation index {getattr(self.args, 'default_curation_index', 0)}")
         
         # Initialize depth estimator if enabled
         self.use_depth_estimator = getattr(self.args, 'use_depth_estimator', False)
@@ -120,6 +126,11 @@ class App:
             print(f"[main.py] Use latent travel: {self.use_latent_travel}")
             # The actual initialization happens in the startup event
             
+            # Get the prompts_file_name from the current curation config
+            current_config = self.lora_config.get_config_for_curation(self.lora_config.default_curation_key)
+            prompts_file_name = current_config.get('prompts_file_name') if current_config else getattr(self.args, 'prompts_file_name', 'glitch')
+            print(f"[main.py] Using prompts_file_name from curation config: {prompts_file_name}")
+            
             # Initialize prompt travel scheduler
             self.prompt_travel_scheduler = PromptTravelScheduler(
                 min_factor=getattr(self.args, 'prompt_travel_min_factor', 0.0),
@@ -133,7 +144,7 @@ class App:
                 prompts_dir=getattr(self.args, 'prompts_dir', "prompts"),
                 prompt_file_pattern=getattr(self.args, 'prompt_file_pattern', "*.txt"),
                 loop_prompts=getattr(self.args, 'loop_prompts', True),
-                lora_model_name=config.lora_model_name  # Pass the LoRA model name from config
+                prompts_file_name=prompts_file_name  # Use prompts_file_name from curation config
             )
         
         # Initialize acid processors
@@ -792,6 +803,21 @@ class App:
                 
                 print(f"[main.py] Updating curation index from {old_index} to {new_curation_index}")
                 
+                # Update the app-level lora_config with new curation index
+                print("[main.py] Updating LoRACurationConfig with new curation index...")
+                self.lora_config = LoRACurationConfig(
+                    self.args.lora_config_dir, 
+                    default_curation_index=new_curation_index
+                )
+                print(f"[main.py] LoRACurationConfig updated with curation index {new_curation_index}")
+                
+                # Update the PromptTravelScheduler's prompts_file_name if it exists
+                if hasattr(self, 'prompt_travel_scheduler') and self.prompt_travel_scheduler is not None:
+                    current_config = self.lora_config.get_config_for_curation(self.lora_config.default_curation_key)
+                    new_prompts_file_name = current_config.get('prompts_file_name') if current_config else getattr(self.args, 'prompts_file_name', 'glitch')
+                    print(f"[main.py] Updating PromptTravelScheduler with new prompts_file_name: {new_prompts_file_name}")
+                    self.prompt_travel_scheduler.update_prompts_file_name(new_prompts_file_name)
+                
                 # Properly cleanup the old pipeline before creating new one
                 if hasattr(self, 'pipeline') and self.pipeline is not None:
                     print("[main.py] Cleaning up old pipeline...")
@@ -828,7 +854,7 @@ class App:
                 print(f"[main.py] Reinitializing pipeline with curation index {new_curation_index}")
                 global pipeline
                 pipeline_class = get_pipeline_class(self.args.pipeline)
-                pipeline = pipeline_class(self.args, device, torch_dtype)
+                pipeline = pipeline_class(self.args, device, torch_dtype, lora_config=self.lora_config)
                 self.pipeline = pipeline
                 
                 print(f"[main.py] Pipeline successfully reinitialized with curation index {new_curation_index}")
@@ -981,9 +1007,21 @@ class App:
 
 print(f"Device: {device}")
 print(f"torch_dtype: {torch_dtype}")
+
+# Create LoRACurationConfig first at module level
+lora_config = LoRACurationConfig(
+    config.lora_config_dir, 
+    default_curation_index=getattr(config, 'default_curation_index', 0)
+)
+print(f"[main.py] LoRACurationConfig created at module level with curation index {getattr(config, 'default_curation_index', 0)}")
+
 pipeline_class = get_pipeline_class(config.pipeline)
-pipeline = pipeline_class(config, device, torch_dtype)
-app_instance = App(config, pipeline)
+
+# Create pipeline with lora_config
+pipeline = pipeline_class(config, device, torch_dtype, lora_config=lora_config)
+
+# Create app_instance with both pipeline and lora_config
+app_instance = App(config, pipeline, lora_config)
 app = app_instance.app
 
 if __name__ == "__main__":

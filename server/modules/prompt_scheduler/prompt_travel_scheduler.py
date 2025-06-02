@@ -29,7 +29,7 @@ class PromptTravelScheduler:
                 prompt_file_pattern="*.txt",
                 loop_prompts=True,
                 logging_enabled=False,
-                lora_model_name=None):
+                prompts_file_name=None):
         """
         Initialize the prompt travel scheduler.
         
@@ -47,7 +47,7 @@ class PromptTravelScheduler:
             prompt_file_pattern (str): Pattern to match prompt files (default: "*.txt")
             loop_prompts (bool): Whether to loop back to the beginning when reaching the end (default: True)
             logging_enabled (bool): Whether to enable logging (default: False)
-            lora_model_name (str): Name of the lora model (default: None)
+            prompts_file_name (str): Name of the prompts file (default: None)
         """
         self.min_factor = min_factor
         self.max_factor = max_factor
@@ -60,7 +60,7 @@ class PromptTravelScheduler:
         self.use_prompt_scheduler = use_prompt_scheduler
         self.logging_enabled = logging_enabled
 
-        self.lora_model_name = lora_model_name
+        self.prompts_file_name = prompts_file_name
         
         # Internal state
         self.factor_value = min_factor
@@ -96,7 +96,7 @@ class PromptTravelScheduler:
                 debug=debug,
                 loop_prompts=loop_prompts,
                 logging_enabled=logging_enabled,
-                lora_model_name=self.lora_model_name
+                prompts_file_name=self.prompts_file_name
             )
             self.prompt_scheduler.load_prompts()
             if self.logging_enabled:
@@ -340,6 +340,24 @@ class PromptTravelScheduler:
             self.prompt_scheduler.reload_prompts()
         if self.logging_enabled:
             self.logger.info("Reloading prompts")
+            
+    def update_prompts_file_name(self, prompts_file_name):
+        """
+        Update the prompts file name and reload prompts.
+        
+        Args:
+            prompts_file_name (str): New prompts file name
+        """
+        if self.logging_enabled:
+            self.logger.info(f"Updating prompts file name from '{self.prompts_file_name}' to '{prompts_file_name}'")
+        
+        self.prompts_file_name = prompts_file_name
+        
+        if self.prompt_scheduler is not None:
+            self.prompt_scheduler.update_prompts_file_name(prompts_file_name)
+        else:
+            if self.logging_enabled:
+                self.logger.warning("Prompt scheduler not initialized, cannot update prompts file name")
             
     def reset(self):
         """Reset the scheduler to initial state"""

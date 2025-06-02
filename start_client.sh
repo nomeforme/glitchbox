@@ -1,1 +1,1 @@
-cd frontend_py && uv run main.py
+cd frontend_py && source .venv/bin/activate && python main.py
