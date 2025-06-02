@@ -301,6 +301,9 @@ class Pipeline:
 
         self.adapter_weights_sets = self.lora_config.get_default_adapter_weights()
 
+        # Override InputParams defaults with values from the JSON configuration
+        self._override_input_params_defaults()
+
         for adapter_weights in self.adapter_weights_sets:
             # Create pipeline with ControlNet model
             pipe = StableDiffusionControlNetPipeline.from_pretrained(
@@ -414,6 +417,33 @@ class Pipeline:
 
         # Store the current pipe index
         self.current_pipe_idx = 0
+
+    def _override_input_params_defaults(self):
+        """Override InputParams field defaults with values from the JSON configuration"""
+        default_input_params = self.lora_config.get_default_curation_input_params()
+        
+        if not default_input_params:
+            print("[controlnetSDTurbot2i.py] No default input params found in curation config")
+            return
+        
+        print(f"[controlnetSDTurbot2i.py] Overriding InputParams defaults with curation config: {default_input_params}")
+        
+        # Get the current InputParams class
+        input_params_class = self.InputParams
+        
+        # Create a mapping of field names to their Field objects
+        for field_name, field_value in default_input_params.items():
+            if hasattr(input_params_class, field_name):
+                # Get the current field info
+                field_info = input_params_class.model_fields.get(field_name)
+                if field_info is not None:
+                    # Update the default value in the field
+                    field_info.default = field_value
+                    print(f"[controlnetSDTurbot2i.py] Overrode {field_name} default to: {field_value}")
+                else:
+                    print(f"[controlnetSDTurbot2i.py] Warning: Field {field_name} not found in model_fields")
+            else:
+                print(f"[controlnetSDTurbot2i.py] Warning: Field {field_name} not found in InputParams class")
 
     def load_loras_for_pipe(self, pipe, pipe_state, lora_models_list: List[str], fuse_loras: bool = False, lora_scale: float = 1.0, adapter_weights: Optional[List[float]] = None) -> None:
         """
