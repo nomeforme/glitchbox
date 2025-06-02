@@ -608,7 +608,7 @@ parser.add_argument(
     "--default-curation-index",
     dest="default_curation_index",
     type=int,
-    default=2,
+    default=4,
     help="Default index for curation selection",
 )
 
@@ -616,7 +616,7 @@ parser.add_argument(
     "--lora-model-name",
     dest="lora_model_name",
     type=str,
-    default="glitch",
+    default="megamix",
     help="Name of the LoRA model to use for loading prompts",
 )
 

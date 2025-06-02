@@ -202,6 +202,9 @@ class ProcessedDisplay(QWidget):
         # Fullscreen window
         self.fullscreen_window = None
         self.is_fullscreen = False
+        
+        # Black frame mode
+        self.black_frame_mode = False
 
     def toggle_fullscreen(self):
         """Toggle fullscreen window"""
@@ -256,6 +259,16 @@ class ProcessedDisplay(QWidget):
         """Update the display with a new frame"""
         if frame is None:
             return
+        
+        # If black frame mode is enabled, show black frame instead
+        if self.black_frame_mode:
+            # Calculate image dimensions from config
+            height = int(DISPLAY_HEIGHT * DISPLAY_SCALE)
+            width = int(DISPLAY_WIDTH * DISPLAY_SCALE)
+            
+            # Create black frame (RGB)
+            black_frame = np.zeros((height, width, 3), dtype=np.uint8)
+            frame = black_frame
             
         height, width = frame.shape[:2]
         bytes_per_line = 3 * width
@@ -285,6 +298,45 @@ class ProcessedDisplay(QWidget):
         self.image_label.clear()
         if self.fullscreen_window:
             self.fullscreen_window.clear_display()
+
+    def clear_zmq_queue(self):
+        """Clear any pending messages in the ZMQ queue"""
+        if self.zmq_thread and self.zmq_thread.running:
+            try:
+                # Clear pending messages by receiving all available data without blocking
+                while self.zmq_thread.socket.poll(timeout=0) > 0:  # 0 timeout = non-blocking
+                    self.zmq_thread.socket.recv(zmq.NOBLOCK)
+                    print("[ZMQ] Cleared pending message from queue")
+            except zmq.error.Again:
+                # No more messages to clear
+                pass
+            except Exception as e:
+                print(f"[ZMQ] Error clearing queue: {e}")
+
+    def display_black_frame(self):
+        """Display a black frame of the expected image size"""
+        try:
+            # Calculate image dimensions from config
+            height = int(DISPLAY_HEIGHT * DISPLAY_SCALE)
+            width = int(DISPLAY_WIDTH * DISPLAY_SCALE)
+            
+            # Create black frame (RGB)
+            black_frame = np.zeros((height, width, 3), dtype=np.uint8)
+            
+            # Display the black frame
+            self.update_frame(black_frame)
+            print(f"[Display] Showing black frame of size {width}x{height}")
+            
+        except Exception as e:
+            print(f"[Display] Error creating black frame: {e}")
+
+    def set_black_frame_mode(self, enabled: bool):
+        """Enable or disable black frame mode"""
+        self.black_frame_mode = enabled
+        if enabled:
+            print("[Display] Black frame mode enabled")
+        else:
+            print("[Display] Black frame mode disabled")
 
     def __del__(self):
         """Cleanup on deletion"""

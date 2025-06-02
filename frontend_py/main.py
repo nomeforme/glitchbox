@@ -4,9 +4,10 @@ import numpy as np
 import os
 import asyncio
 import argparse
+import threading
 from dotenv import load_dotenv
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFrame, QScrollArea, QSpinBox
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, Signal, QObject
 
 from components import CameraDisplay
 from components import ProcessedDisplay
@@ -20,6 +21,10 @@ load_dotenv(override=True)
 # Default server configuration
 DEFAULT_SERVER_HOST = os.getenv("DEFAULT_SERVER_HOST")
 DEFAULT_SERVER_PORT = os.getenv("DEFAULT_SERVER_PORT")
+
+class CurationUpdateSignalHandler(QObject):
+    """Signal handler for curation index updates"""
+    update_completed = Signal(bool, str)  # success, message
 
 class MainWindow(QMainWindow):
     def __init__(self, server_host, server_port):
@@ -202,6 +207,10 @@ class MainWindow(QMainWindow):
         self.toggle_controls_button.clicked.connect(self.toggle_controls)
         presentation_layout.addWidget(self.toggle_controls_button)
         
+        self.toggle_black_frame_button = QPushButton("Enable Black Frame")
+        self.toggle_black_frame_button.clicked.connect(self.toggle_black_frame)
+        presentation_layout.addWidget(self.toggle_black_frame_button)
+        
         self.toggle_presentation_button = QPushButton("Enter Presentation Mode")
         self.toggle_presentation_button.clicked.connect(self.toggle_presentation_mode)
         presentation_layout.addWidget(self.toggle_presentation_button)
@@ -242,6 +251,11 @@ class MainWindow(QMainWindow):
         self.current_frame = None
         self.processing_frame = False
         self.presentation_mode = False
+        self.black_frame_enabled = False
+
+        # Create signal handler for curation updates
+        self.curation_signal_handler = CurationUpdateSignalHandler()
+        self.curation_signal_handler.update_completed.connect(self._handle_curation_update_result)
 
         # Get initial settings
         self.get_initial_settings()
@@ -573,6 +587,7 @@ class MainWindow(QMainWindow):
             self.controls_container.hide()
             self.toggle_input_button.setText("Show Input Feed")
             self.toggle_controls_button.setText("Show Controls")
+            # Keep black frame button text as-is since it's independent of presentation mode
             self.toggle_presentation_button.setText("Exit Presentation Mode")
             
             # Hide status bar and connection label for cleaner look
@@ -602,6 +617,7 @@ class MainWindow(QMainWindow):
             self.controls_container.show()
             self.toggle_input_button.setText("Hide Input Feed")
             self.toggle_controls_button.setText("Hide Controls")
+            # Keep black frame button text as-is since it's independent of presentation mode
             self.toggle_presentation_button.setText("Enter Presentation Mode")
             
             # Show status bar and connection label
@@ -642,6 +658,21 @@ class MainWindow(QMainWindow):
                 self.toggle_fullscreen_button.setText("Close Output Window")
             else:
                 self.toggle_fullscreen_button.setText("Detach Output")
+
+    def toggle_black_frame(self):
+        """Toggle black frame mode for the processed display"""
+        self.black_frame_enabled = not self.black_frame_enabled
+        
+        # Update the processed display
+        self.processed_display.set_black_frame_mode(self.black_frame_enabled)
+        
+        # Update button text
+        if self.black_frame_enabled:
+            self.toggle_black_frame_button.setText("Disable Black Frame")
+            self.status_bar.update_processing_status("Black frame mode enabled")
+        else:
+            self.toggle_black_frame_button.setText("Enable Black Frame")
+            self.status_bar.update_processing_status("Black frame mode disabled")
 
     def scroll_to_top(self):
         """Scroll to the top of the content"""
@@ -734,49 +765,110 @@ class MainWindow(QMainWindow):
         """Update the curation index on the server"""
         index = self.curation_spinbox.value()
         
+        # Enable black frame mode before updating curation index
+        if not self.black_frame_enabled:
+            print(f"[UI] Enabling black frame mode for curation index update")
+            self.black_frame_enabled = True
+            self.processed_display.set_black_frame_mode(True)
+            self.toggle_black_frame_button.setText("Disable Black Frame")
+        
+        # Clear ZMQ queue and display black frame immediately
+        print(f"[UI] Clearing ZMQ queue and displaying black frame for curation index update")
+        self.processed_display.clear_zmq_queue()
+        
         # Disable the button during update
         self.curation_update_button.setEnabled(False)
         self.curation_update_button.setText("Updating...")
         self.status_bar.update_processing_status(f"Updating curation index to {index}...")
+        print("[UI] updating curation index", index)
+
         
-        # Run the async update in a separate event loop
-        import asyncio
-        
-        async def update_async():
+        # Use QTimer to perform the update without blocking the UI
+        def perform_update():
             try:
-                success, message = await self.ws_client.update_curation_index(index)
-                return success, message
+                # This will be called in the main thread but we'll use the WebSocket client's
+                # built-in async handling which should be non-blocking
+                print(f"[UI] Sending curation index update request for index {index}")
+                
+                # Store the update parameters for the success/failure callbacks
+                self._pending_curation_index = index
+                
+                # Call the WebSocket client's update method (this should be non-blocking)
+                # We'll assume the WebSocket client handles this asynchronously
+                import asyncio
+                import threading
+                
+                def run_async_update():
+                    success = False
+                    message = "Unknown error"
+                    try:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        success, message = loop.run_until_complete(
+                            self.ws_client.update_curation_index(index)
+                        )
+                        loop.close()
+                        print(f"[UI] Async update completed: success={success}, message={message}")
+                        
+                    except Exception as e:
+                        success = False
+                        message = str(e)
+                        print(f"[UI] Async update failed with exception: {e}")
+                    finally:
+                        # Use Qt signal to communicate back to main thread (this works from any thread)
+                        print(f"[UI] Emitting signal with success={success}, message={message}")
+                        self.curation_signal_handler.update_completed.emit(success, message)
+                
+                # Run the async operation in a separate thread
+                thread = threading.Thread(target=run_async_update)
+                thread.daemon = True
+                thread.start()
+                
             except Exception as e:
-                return False, str(e)
+                print(f"[UI] Error in perform_update: {e}")
+                # Use signal for error case too
+                self.curation_signal_handler.update_completed.emit(False, str(e))
         
-        # Execute the async function
+        # Use QTimer with 0 delay to run the update in the next event loop iteration
+        QTimer.singleShot(50, perform_update)  # Small delay to ensure UI updates are processed
+    
+    def _handle_curation_update_result(self, success, message):
+        """Handle the result of curation index update (called from main thread)"""
         try:
-            if hasattr(asyncio, 'run'):
-                # Python 3.7+
-                success, message = asyncio.run(update_async())
-            else:
-                # Older Python versions
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                try:
-                    success, message = loop.run_until_complete(update_async())
-                finally:
-                    loop.close()
+            print(f"[UI] Handling curation update result: success={success}, message={message}")
+            index = getattr(self, '_pending_curation_index', 'unknown')
             
             if success:
                 self.status_bar.update_processing_status(f"Curation index updated to {index}: {message}")
                 print(f"[UI] Successfully updated curation index to {index}")
+                
+                # Automatically disable black frame mode on successful update
+                if self.black_frame_enabled:
+                    print(f"[UI] Disabling black frame mode after successful curation index update")
+                    self.black_frame_enabled = False
+                    self.processed_display.set_black_frame_mode(False)
+                    self.toggle_black_frame_button.setText("Enable Black Frame")
+                    
             else:
                 self.status_bar.update_processing_status(f"Failed to update curation index: {message}")
                 print(f"[UI] Failed to update curation index: {message}")
                 
         except Exception as e:
             self.status_bar.update_processing_status(f"Error updating curation index: {str(e)}")
-            print(f"[UI] Error updating curation index: {e}")
+            print(f"[UI] Error in _handle_curation_update_result: {e}")
         finally:
-            # Re-enable the button
-            self.curation_update_button.setEnabled(True)
-            self.curation_update_button.setText("Update Curation Index")
+            # Always re-enable the button, no matter what happens
+            try:
+                print(f"[UI] Re-enabling curation update button")
+                self.curation_update_button.setEnabled(True)
+                self.curation_update_button.setText("Update Curation Index")
+                
+                # Clean up the pending index
+                if hasattr(self, '_pending_curation_index'):
+                    delattr(self, '_pending_curation_index')
+                    print(f"[UI] Cleaned up pending curation index")
+            except Exception as e:
+                print(f"[UI] Error re-enabling button: {e}")
 
 def main():
     # Parse command line arguments
