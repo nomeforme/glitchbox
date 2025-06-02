@@ -19897,3 +19897,834 @@ Traceback (most recent call last):
   File "/home/karana/.local/share/uv/python/cpython-3.11.11-linux-x86_64-gnu/lib/python3.11/multiprocessing/connection.py", line 137, in _check_closed
     raise OSError("handle is closed")
 OSError: handle is closed
+2025-06-01 22:21:50.170 - RealTimeSTT: root - INFO - Starting RealTimeSTT
+2025-06-01 22:21:50.175 - RealTimeSTT: root - INFO - Initializing faster_whisper main transcription model tiny
+2025-06-01 22:21:50.175 - RealTimeSTT: root - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2025-06-01 22:21:50.177 - RealTimeSTT: root - WARNING - Failed to get highest sample rate: [Errno -9996] Invalid device info
+2025-06-01 22:21:50.177 - RealTimeSTT: root - INFO - Initializing WebRTC voice with Sensitivity 3
+2025-06-01 22:21:50.177 - RealTimeSTT: root - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2025-06-01 22:23:09.740 - RealTimeSTT: root - INFO - Starting RealTimeSTT
+2025-06-01 22:23:09.744 - RealTimeSTT: root - INFO - Initializing faster_whisper main transcription model tiny
+2025-06-01 22:23:09.744 - RealTimeSTT: root - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2025-06-01 22:23:09.754 - RealTimeSTT: root - INFO - Initializing WebRTC voice with Sensitivity 3
+2025-06-01 22:23:09.755 - RealTimeSTT: root - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2025-06-01 22:23:09.934 - RealTimeSTT: root - DEBUG - Device validation failed: [Errno -9997] Invalid sample rate
+2025-06-01 22:23:09.934 - RealTimeSTT: root - ERROR - Microphone connection failed: Selected device validation failed. Retrying...
+Traceback (most recent call last):
+  File "/home/nirodha/Desktop/AI/Glitch/frontend/Real-Time-Latent-Consistency-Model/frontend_py/.venv/lib/python3.10/site-packages/RealtimeSTT/audio_recorder.py", line 1078, in initialize_audio_stream
+    raise Exception("Selected device validation failed")
+Exception: Selected device validation failed
+2025-06-01 22:23:10.411 - RealTimeSTT: urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): huggingface.co:443
+2025-06-01 22:23:10.518 - RealTimeSTT: torio._extension.utils - DEBUG - Loading FFmpeg6
+2025-06-01 22:23:10.683 - RealTimeSTT: urllib3.connectionpool - DEBUG - https://huggingface.co:443 "GET /api/models/Systran/faster-whisper-tiny/revision/main HTTP/1.1" 200 1919
+2025-06-01 22:23:10.860 - RealTimeSTT: torio._extension.utils - DEBUG - Successfully loaded FFmpeg6
+2025-06-01 22:23:11.479 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.620
+2025-06-01 22:23:11.620 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.000 of audio
+2025-06-01 22:23:11.858 - RealTimeSTT: root - DEBUG - Silero VAD voice activity detection engine initialized successfully
+2025-06-01 22:23:11.861 - RealTimeSTT: root - DEBUG - Starting realtime worker
+2025-06-01 22:23:11.861 - RealTimeSTT: root - DEBUG - Waiting for main transcription model to start
+2025-06-01 22:23:12.436 - RealTimeSTT: root - DEBUG - Faster_whisper main speech to text transcription model initialized successfully
+2025-06-01 22:23:12.436 - RealTimeSTT: root - DEBUG - Main transcription model ready
+2025-06-01 22:23:12.438 - RealTimeSTT: root - DEBUG - RealtimeSTT initialization completed successfully
+2025-06-01 22:23:12.439 - RealTimeSTT: root - INFO - Setting listen time
+2025-06-01 22:23:12.439 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'listening'
+2025-06-01 22:23:12.439 - RealTimeSTT: root - DEBUG - Waiting for recording start
+2025-06-01 22:23:13.312 - RealTimeSTT: root - INFO - Microphone connected and validated (input_device_index: 15)
+2025-06-01 22:23:13.312 - RealTimeSTT: root - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2025-06-01 22:23:13.331 - RealTimeSTT: websockets.client - DEBUG - % sending keepalive ping
+2025-06-01 22:23:13.410 - RealTimeSTT: websockets.client - DEBUG - % received keepalive pong
+2025-06-01 22:23:14.405 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:15.428 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:15.771 - RealTimeSTT: root - INFO - voice activity detected
+2025-06-01 22:23:15.771 - RealTimeSTT: root - INFO - recording started
+2025-06-01 22:23:15.771 - RealTimeSTT: root - INFO - State changed from 'listening' to 'recording'
+2025-06-01 22:23:15.772 - RealTimeSTT: root - DEBUG - Waiting for recording stop
+2025-06-01 22:23:15.974 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 19968
+2025-06-01 22:23:15.985 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:23:15.985 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.248
+2025-06-01 22:23:16.004 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.176 of audio
+2025-06-01 22:23:16.452 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:16.863 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.73
+2025-06-01 22:23:16.922 - RealTimeSTT: root - INFO - recording stopped
+2025-06-01 22:23:16.924 - RealTimeSTT: root - DEBUG - No samples removed, final audio length: 34816
+2025-06-01 22:23:16.924 - RealTimeSTT: root - INFO - State changed from 'recording' to 'inactive'
+2025-06-01 22:23:16.958 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'transcribing'
+2025-06-01 22:23:17.476 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:17.581 - RealTimeSTT: root - DEBUG - Final text detected with main model: Hello?
+2025-06-01 22:23:17.581 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:23:17.582 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Hello?
+2025-06-01 22:23:17.586 - RealTimeSTT: root - DEBUG - Adding transcription request, no early transcription started
+2025-06-01 22:23:17.587 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:17.599 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:23:17.599 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:02.176
+2025-06-01 22:23:17.619 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.704 of audio
+2025-06-01 22:23:17.687 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:17.788 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:17.888 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:17.990 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:18.090 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:18.191 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:18.291 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:18.392 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:18.425 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.70
+2025-06-01 22:23:18.492 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:18.500 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:18.593 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:18.693 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:18.794 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:18.894 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:18.995 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:19.095 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:19.196 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:19.225 - RealTimeSTT: root - DEBUG - Final text detected with main model: Hello?
+2025-06-01 22:23:19.227 - RealTimeSTT: root - INFO - State changed from 'transcribing' to 'inactive'
+2025-06-01 22:23:19.229 - RealTimeSTT: root - INFO - Setting listen time
+2025-06-01 22:23:19.229 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'listening'
+2025-06-01 22:23:19.230 - RealTimeSTT: root - DEBUG - Waiting for recording start
+2025-06-01 22:23:19.524 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:20.548 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:21.573 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:22.596 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:23.620 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:24.644 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:25.668 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:26.693 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:26.780 - RealTimeSTT: root - INFO - voice activity detected
+2025-06-01 22:23:26.780 - RealTimeSTT: root - INFO - recording started
+2025-06-01 22:23:26.780 - RealTimeSTT: root - INFO - State changed from 'listening' to 'recording'
+2025-06-01 22:23:26.781 - RealTimeSTT: root - DEBUG - Waiting for recording stop
+2025-06-01 22:23:26.999 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 19968
+2025-06-01 22:23:27.013 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:23:27.014 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.248
+2025-06-01 22:23:27.023 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.496 of audio
+2025-06-01 22:23:27.716 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:27.903 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.62
+2025-06-01 22:23:28.485 - RealTimeSTT: root - INFO - recording stopped
+2025-06-01 22:23:28.486 - RealTimeSTT: root - DEBUG - No samples removed, final audio length: 44032
+2025-06-01 22:23:28.487 - RealTimeSTT: root - INFO - State changed from 'recording' to 'inactive'
+2025-06-01 22:23:28.535 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'transcribing'
+2025-06-01 22:23:28.740 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:28.741 - RealTimeSTT: root - DEBUG - Final text detected with main model: Hello.
+2025-06-01 22:23:28.741 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:23:28.741 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Hello.
+2025-06-01 22:23:28.743 - RealTimeSTT: root - DEBUG - Adding transcription request, no early transcription started
+2025-06-01 22:23:28.743 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:28.758 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:23:28.758 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:02.752
+2025-06-01 22:23:28.788 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.640 of audio
+2025-06-01 22:23:28.845 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:28.947 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:29.048 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:29.149 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:29.249 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:29.350 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:29.450 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:29.551 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:29.652 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:29.752 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:29.764 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:29.834 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.55
+2025-06-01 22:23:29.853 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:29.954 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:30.055 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:30.155 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:30.256 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:30.356 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:30.457 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:30.557 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:30.658 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:23:30.703 - RealTimeSTT: root - DEBUG - Final text detected with main model: Allah, hello.
+2025-06-01 22:23:30.704 - RealTimeSTT: root - INFO - State changed from 'transcribing' to 'inactive'
+2025-06-01 22:23:30.719 - RealTimeSTT: root - INFO - Setting listen time
+2025-06-01 22:23:30.719 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'listening'
+2025-06-01 22:23:30.721 - RealTimeSTT: root - DEBUG - Waiting for recording start
+2025-06-01 22:23:30.789 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:31.813 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:32.837 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:33.333 - RealTimeSTT: websockets.client - DEBUG - % sending keepalive ping
+2025-06-01 22:23:33.523 - RealTimeSTT: websockets.client - DEBUG - % received keepalive pong
+2025-06-01 22:23:33.861 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:34.885 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:35.908 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:36.933 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:37.957 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:38.981 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:40.005 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:41.028 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:42.053 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:43.077 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:44.101 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:45.125 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:46.149 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:47.172 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:48.197 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:49.221 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:50.245 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:51.268 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:52.293 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:53.318 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:53.385 - RealTimeSTT: websockets.client - DEBUG - % sending keepalive ping
+2025-06-01 22:23:53.529 - RealTimeSTT: websockets.client - DEBUG - % received keepalive pong
+2025-06-01 22:23:54.341 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:55.365 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:56.389 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:57.413 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:58.437 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:23:59.461 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:00.485 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:01.509 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:02.533 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:03.557 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:04.581 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:05.605 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:06.629 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:07.653 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:08.677 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:09.701 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:10.725 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:11.749 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:12.773 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:13.424 - RealTimeSTT: websockets.client - DEBUG - % sending keepalive ping
+2025-06-01 22:24:13.550 - RealTimeSTT: websockets.client - DEBUG - % received keepalive pong
+2025-06-01 22:24:13.797 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:14.821 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:15.845 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:16.869 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:17.893 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:18.917 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:19.941 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:20.965 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:21.989 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:23.013 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:24.037 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:24.806 - RealTimeSTT: root - INFO - voice activity detected
+2025-06-01 22:24:24.806 - RealTimeSTT: root - INFO - recording started
+2025-06-01 22:24:24.807 - RealTimeSTT: root - INFO - State changed from 'listening' to 'recording'
+2025-06-01 22:24:25.024 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 19968
+2025-06-01 22:24:25.026 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:25.027 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.248
+2025-06-01 22:24:25.050 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.528 of audio
+2025-06-01 22:24:25.061 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:25.734 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.39
+2025-06-01 22:24:26.085 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:26.497 - RealTimeSTT: root - DEBUG - Final text detected with main model: Good luck!
+2025-06-01 22:24:26.498 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:26.498 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: Good luck!
+2025-06-01 22:24:26.699 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 46592
+2025-06-01 22:24:26.702 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:26.703 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:02.912
+2025-06-01 22:24:26.737 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:01.152 of audio
+2025-06-01 22:24:27.109 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:27.577 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.28
+2025-06-01 22:24:28.133 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:28.409 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah
+2025-06-01 22:24:28.410 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:28.410 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah
+2025-06-01 22:24:28.611 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 77312
+2025-06-01 22:24:28.642 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:28.642 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:04.832
+2025-06-01 22:24:28.696 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:03.072 of audio
+2025-06-01 22:24:29.157 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:29.363 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.28
+2025-06-01 22:24:30.100 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah
+2025-06-01 22:24:30.101 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:30.101 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah
+2025-06-01 22:24:30.181 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:30.303 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 103936
+2025-06-01 22:24:30.322 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:30.322 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:06.496
+2025-06-01 22:24:30.421 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:04.736 of audio
+2025-06-01 22:24:31.205 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:31.302 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.28
+2025-06-01 22:24:32.006 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah
+2025-06-01 22:24:32.007 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:32.007 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah
+2025-06-01 22:24:32.208 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 134656
+2025-06-01 22:24:32.215 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:32.215 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:08.416
+2025-06-01 22:24:32.229 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:32.323 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:06.656 of audio
+2025-06-01 22:24:33.142 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.28
+2025-06-01 22:24:33.253 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:33.449 - RealTimeSTT: websockets.client - DEBUG - % sending keepalive ping
+2025-06-01 22:24:33.545 - RealTimeSTT: websockets.client - DEBUG - % received keepalive pong
+2025-06-01 22:24:33.972 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah
+2025-06-01 22:24:33.972 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:33.973 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah
+2025-06-01 22:24:34.173 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 166400
+2025-06-01 22:24:34.177 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:34.178 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:10.400
+2025-06-01 22:24:34.248 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:08.640 of audio
+2025-06-01 22:24:34.277 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:35.022 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.28
+2025-06-01 22:24:35.301 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:35.665 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah
+2025-06-01 22:24:35.666 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:35.666 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah
+2025-06-01 22:24:35.867 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 193024
+2025-06-01 22:24:35.886 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:35.886 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:12.064
+2025-06-01 22:24:35.997 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:10.304 of audio
+2025-06-01 22:24:36.325 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:36.848 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.28
+2025-06-01 22:24:37.349 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:37.695 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah
+2025-06-01 22:24:37.695 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:37.696 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah
+2025-06-01 22:24:37.897 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 225792
+2025-06-01 22:24:37.900 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:37.901 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:14.112
+2025-06-01 22:24:37.982 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.992 of audio
+2025-06-01 22:24:38.373 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:39.014 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.66
+2025-06-01 22:24:39.397 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:39.849 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah blah a blue dog
+2025-06-01 22:24:39.849 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:39.850 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah blah a blue dog
+2025-06-01 22:24:40.050 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 260608
+2025-06-01 22:24:40.075 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:40.075 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:16.288
+2025-06-01 22:24:40.268 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:03.168 of audio
+2025-06-01 22:24:40.421 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:41.170 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.66
+2025-06-01 22:24:41.445 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:41.990 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah blah a blue dog
+2025-06-01 22:24:41.991 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:41.991 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah blah a blue dog
+2025-06-01 22:24:42.192 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 294400
+2025-06-01 22:24:42.211 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:42.211 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:18.400
+2025-06-01 22:24:42.328 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:05.280 of audio
+2025-06-01 22:24:42.469 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:43.114 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.66
+2025-06-01 22:24:43.493 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:43.954 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah blah a blue dog
+2025-06-01 22:24:43.955 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:43.955 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah blah a blue dog
+2025-06-01 22:24:44.156 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 326144
+2025-06-01 22:24:44.170 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:44.171 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:20.384
+2025-06-01 22:24:44.423 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:07.264 of audio
+2025-06-01 22:24:44.517 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:45.204 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.66
+2025-06-01 22:24:45.541 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:46.099 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah blah a blue dog
+2025-06-01 22:24:46.100 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:46.100 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah blah a blue dog
+2025-06-01 22:24:46.301 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 359936
+2025-06-01 22:24:46.314 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:46.314 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:22.496
+2025-06-01 22:24:46.565 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:46.611 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:09.376 of audio
+2025-06-01 22:24:47.493 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.66
+2025-06-01 22:24:47.589 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:48.223 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah blah a blue dog
+2025-06-01 22:24:48.223 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:48.224 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah blah a blue dog
+2025-06-01 22:24:48.425 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 393728
+2025-06-01 22:24:48.448 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:48.448 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:24.608
+2025-06-01 22:24:48.613 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:48.730 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.528 of audio
+2025-06-01 22:24:49.460 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.81
+2025-06-01 22:24:49.637 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:50.121 - RealTimeSTT: root - INFO - Starting RealTimeSTT
+2025-06-01 22:24:50.123 - RealTimeSTT: root - INFO - Initializing faster_whisper main transcription model tiny
+2025-06-01 22:24:50.124 - RealTimeSTT: root - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2025-06-01 22:24:50.127 - RealTimeSTT: urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): huggingface.co:443
+2025-06-01 22:24:50.128 - RealTimeSTT: root - DEBUG - Device validation failed: [Errno -9997] Invalid sample rate
+2025-06-01 22:24:50.128 - RealTimeSTT: root - INFO - Initializing WebRTC voice with Sensitivity 3
+2025-06-01 22:24:50.129 - RealTimeSTT: root - ERROR - Microphone connection failed: Selected device validation failed. Retrying...
+Traceback (most recent call last):
+  File "/home/nirodha/Desktop/AI/Glitch/frontend/Real-Time-Latent-Consistency-Model/frontend_py/.venv/lib/python3.10/site-packages/RealtimeSTT/audio_recorder.py", line 1078, in initialize_audio_stream
+    raise Exception("Selected device validation failed")
+Exception: Selected device validation failed
+2025-06-01 22:24:50.129 - RealTimeSTT: root - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2025-06-01 22:24:50.367 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey
+2025-06-01 22:24:50.367 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:50.367 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey
+2025-06-01 22:24:50.568 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 428544
+2025-06-01 22:24:50.585 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:50.585 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:26.784
+2025-06-01 22:24:50.661 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:50.701 - RealTimeSTT: urllib3.connectionpool - DEBUG - https://huggingface.co:443 "GET /api/models/Systran/faster-whisper-tiny/revision/main HTTP/1.1" 200 1919
+2025-06-01 22:24:50.815 - RealTimeSTT: root - DEBUG - Silero VAD voice activity detection engine initialized successfully
+2025-06-01 22:24:50.817 - RealTimeSTT: root - DEBUG - Starting realtime worker
+2025-06-01 22:24:50.818 - RealTimeSTT: root - DEBUG - Waiting for main transcription model to start
+2025-06-01 22:24:50.889 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:02.336 of audio
+2025-06-01 22:24:51.080 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.620
+2025-06-01 22:24:51.090 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.000 of audio
+2025-06-01 22:24:51.685 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:51.860 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.82
+2025-06-01 22:24:52.039 - RealTimeSTT: root - DEBUG - Faster_whisper main speech to text transcription model initialized successfully
+2025-06-01 22:24:52.039 - RealTimeSTT: root - DEBUG - Main transcription model ready
+2025-06-01 22:24:52.040 - RealTimeSTT: root - DEBUG - RealtimeSTT initialization completed successfully
+2025-06-01 22:24:52.040 - RealTimeSTT: root - INFO - Setting listen time
+2025-06-01 22:24:52.041 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'listening'
+2025-06-01 22:24:52.043 - RealTimeSTT: root - DEBUG - Waiting for recording start
+2025-06-01 22:24:52.709 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:52.805 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey
+2025-06-01 22:24:52.806 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:52.807 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey
+2025-06-01 22:24:53.008 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 467456
+2025-06-01 22:24:53.025 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:53.026 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:29.216
+2025-06-01 22:24:53.336 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:04.768 of audio
+2025-06-01 22:24:53.448 - RealTimeSTT: root - INFO - Microphone connected and validated (input_device_index: 15)
+2025-06-01 22:24:53.448 - RealTimeSTT: root - DEBUG - Audio recording initialized successfully at 16000 Hz, reading 1024 frames at a time
+2025-06-01 22:24:53.473 - RealTimeSTT: websockets.client - DEBUG - % sending keepalive ping
+2025-06-01 22:24:53.576 - RealTimeSTT: websockets.client - DEBUG - % received keepalive pong
+2025-06-01 22:24:53.735 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:54.230 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.82
+2025-06-01 22:24:54.546 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:54.757 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:55.014 - RealTimeSTT: root - INFO - voice activity detected
+2025-06-01 22:24:55.014 - RealTimeSTT: root - INFO - recording started
+2025-06-01 22:24:55.015 - RealTimeSTT: root - INFO - State changed from 'listening' to 'recording'
+2025-06-01 22:24:55.015 - RealTimeSTT: root - DEBUG - Waiting for recording stop
+2025-06-01 22:24:55.109 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey
+2025-06-01 22:24:55.109 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:55.110 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey
+2025-06-01 22:24:55.227 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 19968
+2025-06-01 22:24:55.230 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:55.231 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.248
+2025-06-01 22:24:55.256 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.528 of audio
+2025-06-01 22:24:55.311 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 504320
+2025-06-01 22:24:55.348 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:55.353 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:31.520
+2025-06-01 22:24:55.517 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:06.320 of audio
+2025-06-01 22:24:55.568 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:55.781 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:56.222 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.41
+2025-06-01 22:24:56.422 - RealTimeSTT: root - INFO - recording stopped
+2025-06-01 22:24:56.423 - RealTimeSTT: root - DEBUG - No samples removed, final audio length: 38912
+2025-06-01 22:24:56.423 - RealTimeSTT: root - INFO - State changed from 'recording' to 'inactive'
+2025-06-01 22:24:56.436 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.78
+2025-06-01 22:24:56.456 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'transcribing'
+2025-06-01 22:24:56.592 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:56.805 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:57.067 - RealTimeSTT: root - DEBUG - Final text detected with main model: a blue
+2025-06-01 22:24:57.068 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:57.068 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: a blue
+2025-06-01 22:24:57.068 - RealTimeSTT: root - DEBUG - Adding transcription request, no early transcription started
+2025-06-01 22:24:57.085 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:57.085 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:57.086 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:02.432
+2025-06-01 22:24:57.111 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.736 of audio
+2025-06-01 22:24:57.186 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:57.287 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:57.388 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:57.488 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:57.589 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:57.616 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:57.690 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:57.790 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:57.829 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:57.891 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:57.991 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:58.015 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.86
+2025-06-01 22:24:58.092 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:58.160 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  a blue
+2025-06-01 22:24:58.161 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:24:58.161 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  a blue
+2025-06-01 22:24:58.193 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:58.293 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:58.365 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 553472
+2025-06-01 22:24:58.392 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:24:58.392 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:34.592
+2025-06-01 22:24:58.395 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:58.495 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:58.599 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:08.544 of audio
+2025-06-01 22:24:58.600 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:58.642 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:58.704 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:58.804 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:58.853 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:58.905 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:59.005 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:24:59.006 - RealTimeSTT: root - DEBUG - Final text detected with main model: a blue dog
+2025-06-01 22:24:59.007 - RealTimeSTT: root - INFO - State changed from 'transcribing' to 'inactive'
+2025-06-01 22:24:59.057 - RealTimeSTT: root - INFO - Setting listen time
+2025-06-01 22:24:59.057 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'listening'
+2025-06-01 22:24:59.058 - RealTimeSTT: root - DEBUG - Waiting for recording start
+2025-06-01 22:24:59.478 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.84
+2025-06-01 22:24:59.664 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:24:59.877 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:00.688 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:00.901 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:01.062 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  a blue dog
+2025-06-01 22:25:01.063 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:01.063 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  a blue dog
+2025-06-01 22:25:01.265 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 599552
+2025-06-01 22:25:01.288 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:01.290 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:37.472
+2025-06-01 22:25:01.592 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:11.424 of audio
+2025-06-01 22:25:01.717 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:01.925 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:02.551 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.84
+2025-06-01 22:25:02.736 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:02.949 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:03.760 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:03.974 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:04.125 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  a blue dog
+2025-06-01 22:25:04.125 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:04.126 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  a blue dog
+2025-06-01 22:25:04.327 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 648704
+2025-06-01 22:25:04.342 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:04.342 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:40.544
+2025-06-01 22:25:04.778 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:14.496 of audio
+2025-06-01 22:25:04.784 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:04.997 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:05.598 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.84
+2025-06-01 22:25:05.808 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:06.021 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:06.832 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:07.045 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:07.168 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  a blue dog
+2025-06-01 22:25:07.169 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:07.169 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  a blue dog
+2025-06-01 22:25:07.371 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 696832
+2025-06-01 22:25:07.398 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:07.399 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:43.552
+2025-06-01 22:25:07.856 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:07.923 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:17.504 of audio
+2025-06-01 22:25:08.070 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:08.810 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.84
+2025-06-01 22:25:08.880 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:09.093 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:09.904 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:10.117 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:10.455 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  a blue dog
+2025-06-01 22:25:10.455 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:10.456 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  a blue dog
+2025-06-01 22:25:10.658 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 750080
+2025-06-01 22:25:10.684 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:10.684 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:46.880
+2025-06-01 22:25:10.928 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:11.036 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:20.832 of audio
+2025-06-01 22:25:11.142 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:11.943 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.84
+2025-06-01 22:25:11.952 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:12.166 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:12.976 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:13.189 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:13.462 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  a blue dog
+2025-06-01 22:25:13.463 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:13.463 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  a blue dog
+2025-06-01 22:25:13.476 - RealTimeSTT: websockets.client - DEBUG - % sending keepalive ping
+2025-06-01 22:25:13.664 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 798208
+2025-06-01 22:25:13.679 - RealTimeSTT: websockets.client - DEBUG - % received keepalive pong
+2025-06-01 22:25:13.686 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:13.687 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:49.888
+2025-06-01 22:25:13.958 - RealTimeSTT: root - INFO - voice activity detected
+2025-06-01 22:25:13.958 - RealTimeSTT: root - INFO - recording started
+2025-06-01 22:25:13.959 - RealTimeSTT: root - INFO - State changed from 'listening' to 'recording'
+2025-06-01 22:25:13.959 - RealTimeSTT: root - DEBUG - Waiting for recording stop
+2025-06-01 22:25:14.001 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:14.113 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:23.840 of audio
+2025-06-01 22:25:14.160 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 19968
+2025-06-01 22:25:14.178 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:14.178 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.248
+2025-06-01 22:25:14.215 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.528 of audio
+2025-06-01 22:25:14.216 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:15.024 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:15.094 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.84
+2025-06-01 22:25:15.108 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.77
+2025-06-01 22:25:15.237 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:15.664 - RealTimeSTT: root - INFO - recording stopped
+2025-06-01 22:25:15.686 - RealTimeSTT: root - DEBUG - No samples removed, final audio length: 44032
+2025-06-01 22:25:15.686 - RealTimeSTT: root - INFO - State changed from 'recording' to 'inactive'
+2025-06-01 22:25:15.687 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'transcribing'
+2025-06-01 22:25:15.955 - RealTimeSTT: root - DEBUG - Final text detected with main model: I agree.
+2025-06-01 22:25:15.955 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:15.956 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: I agree.
+2025-06-01 22:25:15.956 - RealTimeSTT: root - DEBUG - Adding transcription request, no early transcription started
+2025-06-01 22:25:15.956 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:15.957 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:15.957 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:02.752
+2025-06-01 22:25:15.984 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.704 of audio
+2025-06-01 22:25:16.048 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:16.057 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:16.158 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:16.259 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:16.261 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:16.359 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:16.460 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:16.561 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:16.662 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:16.750 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  a blue dog
+2025-06-01 22:25:16.750 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:16.751 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  a blue dog
+2025-06-01 22:25:16.762 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:16.863 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:16.902 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.97
+2025-06-01 22:25:16.952 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 850432
+2025-06-01 22:25:16.965 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:16.976 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:16.976 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:53.152
+2025-06-01 22:25:17.065 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:17.072 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:17.166 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:17.267 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:17.286 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:07.776 of audio
+2025-06-01 22:25:17.286 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:17.367 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:17.469 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:17.571 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:17.671 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:17.772 - RealTimeSTT: root - DEBUG - Receive from parent_transcription_pipe after sendiung transcription request, transcribe_count: 1
+2025-06-01 22:25:17.839 - RealTimeSTT: root - DEBUG - Final text detected with main model: A green panda.
+2025-06-01 22:25:17.840 - RealTimeSTT: root - INFO - State changed from 'transcribing' to 'inactive'
+2025-06-01 22:25:17.873 - RealTimeSTT: root - INFO - Setting listen time
+2025-06-01 22:25:17.875 - RealTimeSTT: root - INFO - State changed from 'inactive' to 'listening'
+2025-06-01 22:25:17.877 - RealTimeSTT: root - DEBUG - Waiting for recording start
+2025-06-01 22:25:18.096 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:18.114 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-06-01 22:25:18.309 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:19.120 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:19.333 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:19.694 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:19.695 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:19.695 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:19.897 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 897536
+2025-06-01 22:25:19.919 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:19.919 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:56.096
+2025-06-01 22:25:20.144 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:20.167 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:10.720 of audio
+2025-06-01 22:25:20.357 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:21.007 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-06-01 22:25:21.168 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:21.381 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:22.192 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:22.405 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:22.554 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:22.554 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:22.555 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:22.756 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 943616
+2025-06-01 22:25:22.796 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:22.797 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:58.976
+2025-06-01 22:25:23.121 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:13.600 of audio
+2025-06-01 22:25:23.216 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:23.429 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:24.027 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-06-01 22:25:24.240 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:24.453 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:25.264 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:25.477 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:25.595 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:25.595 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:25.596 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:25.798 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 991744
+2025-06-01 22:25:25.822 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:25.822 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 01:01.984
+2025-06-01 22:25:26.289 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:26.375 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:16.608 of audio
+2025-06-01 22:25:26.501 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:27.312 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:27.345 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-06-01 22:25:27.526 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:28.336 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:28.550 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:29.031 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:29.032 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:29.032 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:29.234 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 1047040
+2025-06-01 22:25:29.261 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:29.261 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 01:05.440
+2025-06-01 22:25:29.360 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:29.573 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:29.732 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:20.064 of audio
+2025-06-01 22:25:30.384 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:30.597 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:30.794 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-06-01 22:25:31.408 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:31.621 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:32.432 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:32.466 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:32.466 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:32.467 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:32.646 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:32.669 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 1102336
+2025-06-01 22:25:32.700 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:32.700 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 01:08.896
+2025-06-01 22:25:33.320 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:23.520 of audio
+2025-06-01 22:25:33.459 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:33.541 - RealTimeSTT: websockets.client - DEBUG - % sending keepalive ping
+2025-06-01 22:25:33.669 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:33.684 - RealTimeSTT: websockets.client - DEBUG - % received keepalive pong
+2025-06-01 22:25:34.401 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-06-01 22:25:34.480 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:34.693 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:35.504 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:35.717 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:35.953 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:35.954 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:35.955 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:36.157 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 1157632
+2025-06-01 22:25:36.197 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:36.198 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 01:12.352
+2025-06-01 22:25:36.528 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:36.621 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:26.976 of audio
+2025-06-01 22:25:36.744 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:37.552 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:37.600 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-06-01 22:25:37.765 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:38.576 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:38.789 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:39.170 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:39.170 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:39.171 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:39.373 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 1208832
+2025-06-01 22:25:39.404 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:39.404 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 01:15.552
+2025-06-01 22:25:39.601 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:39.814 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:40.493 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:30.176 of audio
+2025-06-01 22:25:40.641 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:40.850 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:41.555 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-06-01 22:25:41.693 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:41.906 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:42.717 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:42.931 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:43.297 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:43.299 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:43.300 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:43.503 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 1275392
+2025-06-01 22:25:43.557 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:43.558 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 01:19.712
+2025-06-01 22:25:43.741 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:43.954 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:44.766 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:44.832 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:34.336 of audio
+2025-06-01 22:25:44.978 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:45.789 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:45.912 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-06-01 22:25:46.002 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:46.814 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:47.026 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:47.658 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:47.659 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:47.659 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:47.838 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:47.861 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 1345024
+2025-06-01 22:25:47.896 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:47.896 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 01:24.064
+2025-06-01 22:25:48.050 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:48.862 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:49.026 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:38.688 of audio
+2025-06-01 22:25:49.102 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:49.885 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:50.068 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-06-01 22:25:50.163 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:50.909 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:51.188 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:51.652 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:51.653 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:51.653 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:51.855 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 1409536
+2025-06-01 22:25:51.871 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:51.872 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 01:28.096
+2025-06-01 22:25:51.933 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:52.211 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:52.708 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:42.720 of audio
+2025-06-01 22:25:52.957 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:53.234 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:53.563 - RealTimeSTT: websockets.client - DEBUG - % sending keepalive ping
+2025-06-01 22:25:53.653 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-06-01 22:25:53.709 - RealTimeSTT: websockets.client - DEBUG - % received keepalive pong
+2025-06-01 22:25:53.981 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:54.258 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:55.005 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:55.282 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:55.307 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:55.308 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:55.308 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:55.511 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 1467904
+2025-06-01 22:25:55.567 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:55.568 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 01:31.744
+2025-06-01 22:25:56.029 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:56.307 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:56.793 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:46.368 of audio
+2025-06-01 22:25:57.053 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:57.330 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:57.829 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-06-01 22:25:58.077 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:58.354 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:59.101 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:59.379 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:25:59.454 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:59.454 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:25:59.455 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:25:59.658 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 1534464
+2025-06-01 22:25:59.694 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:25:59.695 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 01:35.904
+2025-06-01 22:26:00.126 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:00.405 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:01.063 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:50.528 of audio
+2025-06-01 22:26:01.154 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:01.426 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:02.048 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-06-01 22:26:02.173 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:02.450 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:03.197 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:03.474 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:03.631 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:26:03.632 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:26:03.632 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:26:03.834 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 1601024
+2025-06-01 22:26:03.897 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:26:03.898 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 01:40.064
+2025-06-01 22:26:04.221 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:04.499 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:04.853 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:54.688 of audio
+2025-06-01 22:26:05.245 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:05.523 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:05.773 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-06-01 22:26:06.269 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:06.546 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:07.293 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:07.314 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:26:07.315 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:26:07.316 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:26:07.519 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 1660416
+2025-06-01 22:26:07.559 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:26:07.559 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 01:43.776
+2025-06-01 22:26:07.574 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:08.320 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:08.340 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:58.400 of audio
+2025-06-01 22:26:08.597 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:09.254 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-06-01 22:26:09.344 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:09.621 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:10.368 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:10.645 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:10.846 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:26:10.846 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:26:10.847 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:26:11.049 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 1716736
+2025-06-01 22:26:11.088 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:26:11.089 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 01:47.296
+2025-06-01 22:26:11.392 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:11.670 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:12.204 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 01:01.920 of audio
+2025-06-01 22:26:12.416 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:12.693 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:13.106 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-06-01 22:26:13.440 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:13.587 - RealTimeSTT: websockets.client - DEBUG - % sending keepalive ping
+2025-06-01 22:26:13.667 - RealTimeSTT: websockets.client - DEBUG - % received keepalive pong
+2025-06-01 22:26:13.717 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:14.464 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:14.704 - RealTimeSTT: root - DEBUG - Final text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:26:14.704 - RealTimeSTT: root - DEBUG - Receive from realtime worker after transcription request to main model
+2025-06-01 22:26:14.705 - RealTimeSTT: root - DEBUG - Realtime text detected with main model: blah blah blah a blue dog a red monkey  A blue dog. A green panda.
+2025-06-01 22:26:14.741 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:14.909 - RealTimeSTT: root - DEBUG - Current realtime buffer size: 1778176
+2025-06-01 22:26:14.963 - RealTimeSTT: root - DEBUG - Transcribing audio with language 
+2025-06-01 22:26:14.964 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 01:51.136
+2025-06-01 22:26:15.488 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:15.597 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 01:05.760 of audio
+2025-06-01 22:26:15.766 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:16.512 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
+2025-06-01 22:26:16.613 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
