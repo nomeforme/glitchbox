@@ -503,6 +503,10 @@ class MainWindow(QMainWindow):
             self.stt_active = False
             self.stt_button.setText("Start Speech Recognition")
             self.status_bar.update_processing_status("Speech recognition stopped")
+            
+            # Recreate the STT thread for next use (QThread cannot be restarted)
+            self.stt_thread = SpeechToTextThread(input_device_index=self.audio_device_index)
+            self.stt_thread.transcription_updated.connect(self.handle_transcription)
 
     def toggle_fft(self):
         """Toggle FFT audio analysis"""
@@ -518,6 +522,10 @@ class MainWindow(QMainWindow):
             self.fft_active = False
             self.fft_button.setText("Start Audio FFT")
             self.status_bar.update_processing_status("FFT audio analysis stopped")
+            
+            # Recreate the FFT thread for next use (QThread cannot be restarted)
+            self.fft_thread = FFTAnalyzerThread(input_device_index=self.audio_device_index)
+            self.fft_thread.fft_data_updated.connect(self.handle_fft_data)
             
     def toggle_input_feed(self):
         """Toggle visibility of the input camera feed"""
