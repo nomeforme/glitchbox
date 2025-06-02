@@ -62,8 +62,9 @@ class LoRACurationConfig:
 
         self.lora_curation = {
             # "test_lcm": ["twisted-bodies", "latent-consistency/lcm-lora-sdv1-5"],
-            "test_lcm": ["radames/sd-21-DPO-LoRA", "radames/sd-21-DPO-LoRA"],
-            "garance": ["garance", "garance"],
+            "test_lcm": ["radames/sd-21-DPO-LoRA", "garance"],
+            "garance": ["garance", "radames/sd-21-DPO-LoRA"],
+            "garance_2": ["radames/sd-21-DPO-LoRA"],
             "robwood_sand": ["robwood", "nature-sand"],
             "twisted_water": ["twisted-bodies", "nature-water"],
             "melies": ["melies-bw", "melies-col"],
@@ -80,11 +81,14 @@ class LoRACurationConfig:
 
         self.adapter_weights_set_curation = {
             "test_lcm": [
-                [1.0, 1.0],
-                [1.0, 1.0],
-                [1.0, 1.0],
-                [1.0, 1.0],
-                [1.0, 1.0], 
+                [1.0, 0.0],
+                [0.8, 0.2],
+                [0.5, 0.5],
+                [0.2, 0.8],
+                [0.0, 1.0]
+            ],
+            "garance_2": [
+                [1.0],
             ],
             "twisted_water": [
                 [1.0, 0.0],

@@ -18,6 +18,7 @@ class LoraSoundController:
     
     def __init__(self, 
                  num_pipes=2,  # Number of available pipes in the pipeline
+                 num_prompts=2,  # Number of available prompts in the pipeline
                  enabled=True,
                  debug=False,
                  freq_start_idx=0,  # Start index for frequency range
@@ -37,6 +38,7 @@ class LoraSoundController:
         
         Args:
             num_pipes (int): Number of available pipes in the pipeline
+            num_prompts (int): Number of available prompts in the pipeline
             enabled (bool): Whether the controller is active
             debug (bool): Enable debug printing
             freq_start_idx (int): Start index for frequency range
@@ -55,6 +57,7 @@ class LoraSoundController:
         """
         # Store configuration parameters
         self.num_pipes = num_pipes
+        self.num_prompts = num_prompts
         self.enabled = enabled
         self.debug = debug
         self.freq_start_idx = freq_start_idx
@@ -75,6 +78,7 @@ class LoraSoundController:
         
         # Current pipe index value
         self.current_pipe_index = 0
+        self.current_prompt_index = 0
         
         # Store previous averaged bins for rolling window percentage change calculation (used for linear frequency backup)
         self.rolling_window = deque(maxlen=self.rolling_window_size)
@@ -83,7 +87,7 @@ class LoraSoundController:
         """Enable or disable debug printing"""
         self.debug = enabled
         
-    def _apply_smoothing(self, target_pipe_index):
+    def _apply_smoothing(self, current_index, target_index, max_indices=None):
         """
         Apply smoothing to pipe index transitions, limiting changes to ±1 per frame.
         
@@ -93,8 +97,8 @@ class LoraSoundController:
         Returns:
             int: The smoothed pipe index (limited to ±1 change from current)
         """
-        current = self.current_pipe_index
-        target = target_pipe_index
+        current = current_index
+        target = target_index
         
         # Calculate the difference
         diff = target - current
@@ -108,14 +112,22 @@ class LoraSoundController:
             smoothed_index = target
         
         # Ensure the index stays within valid bounds
-        smoothed_index = max(0, min(self.num_pipes - 1, smoothed_index))
+        if max_indices is not None:
+            max_indices = max_indices
+        else:
+            max_indices = self.num_pipes
+
+        if self.debug:
+            print(f"[LoraSoundController] Smoothing: using max indices - {max_indices}")
+
+        smoothed_index = max(0, min(max_indices - 1, smoothed_index))
         
         if self.debug and smoothed_index != target:
             print(f"[LoraSoundController] Smoothing applied: target={target}, current={current}, smoothed={smoothed_index}")
         
         return smoothed_index
 
-    def process_frequency_bins(self, normalized_energies, debug=True):
+    def process_frequency_bins(self, normalized_energies, debug=True, num_pipes_override=None):
         """
         Process frequency bins to adjust pipe index based on audio input.
         Uses mel-frequency analysis by default with linear frequency analysis as backup.
@@ -123,24 +135,22 @@ class LoraSoundController:
         Args:
             normalized_energies: List containing the normalized energies
             debug (bool): Enable debug output for this call
+            num_pipes_override (int): Override the default num_pipes value for this call
             
         Returns:
-            int: Selected pipe index (0-4)
+            int: Selected pipe index (0 to num_pipes-1)
         """
         # Validate input
         if not self.enabled:
             if self.debug:
                 print("Controller is disabled, returning current pipe index.")
-            return self.current_pipe_index
+            return self.current_pipe_index, self.current_prompt_index
 
-        if normalized_energies is None or (isinstance(normalized_energies, (list, tuple, np.ndarray)) and len(normalized_energies) < 26):
+        if normalized_energies is None or len(normalized_energies) == 0:
             if self.debug:
                 print(f"Invalid frequency bins, returning current pipe index: {self.current_pipe_index}")
-            return self.current_pipe_index
-        
-        # Calculate current volume from frequency data for debug output
-        self.current_volume = get_volume_from_ft(normalized_energies, method='rms', debug=self.debug)
-        self.current_perceived_loudness = get_perceived_loudness(normalized_energies, debug=self.debug)
+            return self.current_pipe_index, self.current_prompt_index
+    
 
         # Use frequency analysis method (mel-frequency by default, linear as backup)
         if self.mel_mode:
@@ -182,14 +192,12 @@ class LoraSoundController:
                 boosted_bins = processing_bins * self.treble_boost_factors[:len(processing_bins)]
             
             # Select bin with highest value (correctly boosted in appropriate space)
-            raw_pipe_index = np.argmax(boosted_bins)
+            raw_audio_index = np.argmax(boosted_bins)
             
             if self.debug or debug:
                 print(f"[LoraSoundController] Mel-frequency analysis mode (default)")
                 print(f"[LoraSoundController] Using {'decibel' if self.use_decibel_scale else 'linear'} scale for bin selection")
                 print(f"[LoraSoundController] Pipe index mode: {'smoothed' if self.smoothed_mode else 'instant'}")
-                print(f"[LoraSoundController] Current volume (RMS): {self.current_volume:.4f}")
-                print(f"[LoraSoundController] Perceived loudness: {self.current_perceived_loudness:.4f}")
                 print(f"[LoraSoundController] Mel bin centers (Hz): {[f'{freq:.0f}' for freq in mel_centers]}")
                 print(f"[LoraSoundController] Raw mel energies: {original_mel_bins}")
                 
@@ -201,13 +209,13 @@ class LoraSoundController:
                     print(f"[LoraSoundController] Treble boost factors: {self.treble_boost_factors[:len(processing_bins)]}")
                     print(f"[LoraSoundController] Boosted mel energies: {boosted_bins}")
                 
-                print(f"[LoraSoundController] Raw selected pipe index: {raw_pipe_index}")
+                print(f"[LoraSoundController] Raw selected audio index: {raw_audio_index}")
                 
                 # Show perceptual frequency ranges
                 freq_ranges = get_perceptual_frequency_ranges()
                 range_names = ['bass', 'low_mids', 'mids', 'high_mids', 'treble']
                 for i, (name, value) in enumerate(zip(range_names[:len(boosted_bins)], boosted_bins)):
-                    status = "🔥" if i == raw_pipe_index else "  "
+                    status = "🔥" if i == raw_audio_index else "  "
                     unit = "dB" if self.use_decibel_scale else ""
                     print(f"  {status} Bin {i} ({name}): {value:.2f} {unit}")
                 
@@ -219,7 +227,7 @@ class LoraSoundController:
                 self.rolling_window,
                 debug=self.debug or debug
             )
-            raw_pipe_index = np.argmax(averaged_energies)
+            raw_audio_index = np.argmax(averaged_energies)
 
             # Store current values for next iteration
             self.rolling_window.append(averaged_energies.copy())
@@ -227,27 +235,28 @@ class LoraSoundController:
             if self.debug or debug:
                 print(f"[LoraSoundController] Linear frequency analysis mode (backup)")
                 print(f"[LoraSoundController] Pipe index mode: {'smoothed' if self.smoothed_mode else 'instant'}")
-                print(f"[LoraSoundController] Current volume (RMS): {self.current_volume:.4f}")
-                print(f"[LoraSoundController] Perceived loudness: {self.current_perceived_loudness:.4f}")
                 print(f"[LoraSoundController] Averaged energies: {averaged_energies}, length: {len(averaged_energies)}")
-                print(f"[LoraSoundController] Raw selected pipe index: {raw_pipe_index}")
+                print(f"[LoraSoundController] Raw selected audio index: {raw_audio_index}")
             
         # Store the new pipe index for next iteration
         if self.smoothed_mode:
             # Apply smoothing: limit changes to ±1 per frame
-            current_pipe_index = self._apply_smoothing(raw_pipe_index)
+            current_pipe_index = self._apply_smoothing(self.current_pipe_index, raw_audio_index, max_indices=self.num_pipes)
+            current_prompt_index = self._apply_smoothing(self.current_prompt_index, raw_audio_index, max_indices=self.num_prompts)
         else:
             # Instant mode: use the raw selected index directly
-            current_pipe_index = raw_pipe_index
+            current_pipe_index = raw_audio_index
+            current_prompt_index = raw_audio_index
         
         self.current_pipe_index = current_pipe_index
-        
+        self.current_prompt_index = current_prompt_index
+
         # Show final pipe index in debug output
         if self.debug or debug:
             print(f"[LoraSoundController] Using pipe index: {current_pipe_index}")
-            print(f"[LoraSoundController] Raw pipe index: {raw_pipe_index}")
+            print(f"[LoraSoundController] Raw audio index: {raw_audio_index}")
 
-        return self.current_pipe_index
+        return self.current_pipe_index, self.current_prompt_index
     
     def get_pipe_index(self):
         """
