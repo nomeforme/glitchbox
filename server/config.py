@@ -90,6 +90,8 @@ class Args(NamedTuple):
     image_save_format: str = "png"
     image_save_quality: int = 95
     image_save_queue_size: int = 100
+    # Warmup settings
+    warmup: bool = True
 
     def pretty_print(self):
         print("\n")
@@ -618,6 +620,15 @@ parser.add_argument(
     type=str,
     default="megamix",
     help="Name of the LoRA model to use for loading prompts",
+)
+
+# Warmup settings
+parser.add_argument(
+    "--warmup",
+    dest="warmup",
+    action="store_true",
+    default=True,
+    help="Warmup all pipes during startup to pre-trace computational graphs",
 )
 
 parser.set_defaults(taesd=USE_TAESD)

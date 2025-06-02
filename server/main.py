@@ -274,6 +274,46 @@ class App:
         
         self.init_app()
 
+    async def warmup_all_pipes(self):
+        """Warmup all pipes by making dummy predictions to pre-trace computational graphs"""
+        if not hasattr(self.pipeline, 'pipes'):
+            return
+            
+        num_pipes = len(self.pipeline.pipes)
+        print(f"[main.py] Warming up {num_pipes} pipes...")
+        
+        # Get runtime defaults from pipeline
+        default_instance = self.pipeline.InputParams()
+        dummy_image = Image.new('RGB', (default_instance.width, default_instance.height), color='black')
+        
+        # Create base parameters using runtime defaults
+        base_params = vars(default_instance)
+        base_params['width'] = default_instance.width
+        base_params['height'] = default_instance.height
+        
+        start_time = time.time()
+        for pipe_idx in range(num_pipes):
+            try:
+                params = base_params.copy()
+                params['pipe_index'] = pipe_idx
+                params = SimpleNamespace(**self.pipeline.InputParams(**params).__dict__)
+                
+                if self.pipeline.Info().input_mode == "image":
+                    params.image = dummy_image
+                    if self.use_depth_estimator and hasattr(self, 'depth_estimator'):
+                        try:
+                            params.control_image = self.depth_estimator.get_depth(dummy_image)
+                        except:
+                            pass
+                
+                self.pipeline.predict(params)
+                
+            except Exception as e:
+                print(f"[main.py] Error warming up pipe {pipe_idx}: {e}")
+                continue
+        
+        print(f"[main.py] Warmup completed in {time.time() - start_time:.2f}s")
+
     def init_app(self):
         self.app.add_middleware(
             CORSMiddleware,
@@ -289,12 +329,7 @@ class App:
             # Startup
             print("Application startup")
             
-            # Start image saver if enabled
-            if self.use_image_saver:
-                await self.image_saver.start()
-                print("[main.py] Image saver started")
-            
-            # Initialize depth estimator if enabled
+            # Initialize depth estimator first (before warmup) if enabled
             if self.use_depth_estimator:
                 try:
                     print("[main.py] Initializing depth estimator")
@@ -308,6 +343,17 @@ class App:
                     print(f"[main.py] Error initializing depth estimator: {e}")
                     print("[main.py] Running without depth estimation")
                     self.use_depth_estimator = False
+            
+            # Warmup all pipes if enabled (after depth estimator is ready)
+            if getattr(self.args, 'warmup', True):
+                await self.warmup_all_pipes()
+            else:
+                print("[main.py] Pipe warmup disabled")
+            
+            # Start image saver if enabled
+            if self.use_image_saver:
+                await self.image_saver.start()
+                print("[main.py] Image saver started")
             
             # Initialize embeddings service if prompt travel is enabled
             print(f"[main.py] Use prompt travel: {self.use_prompt_travel}")
