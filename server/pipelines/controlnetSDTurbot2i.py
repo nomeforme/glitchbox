@@ -253,6 +253,13 @@ class Pipeline:
             field="checkbox",
             id="use_output_bg_removal",
         )
+        use_prompt_indexing: bool = Field(
+            False,
+            title="Use Prompt Indexing",
+            field="checkbox",
+            id="use_prompt_indexing",
+            description="Use pipe index to select prompts from file instead of sequential scheduling",
+        )
 
     def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype):
         # Add current_curation_index to track changes
@@ -557,7 +564,10 @@ class Pipeline:
             target_prompt = getattr(params, 'target_prompt', params.prompt)
             prompt_travel_factor = getattr(params, 'prompt_travel_factor', 0.5)
             
-            print(f"[controlnetSDTurbot2i.py] Calculating prompt travel: '{params.prompt}' -> '{target_prompt}' (factor: {prompt_travel_factor})")
+            print(f"[controlnetSDTurbot2i.py] Calculating prompt travel")
+            print(f"[controlnetSDTurbot2i.py] source: {params.prompt}")
+            print(f"[controlnetSDTurbot2i.py] target: {target_prompt}")
+            print(f"[controlnetSDTurbot2i.py] factor: {prompt_travel_factor}")
             
             # Get embeddings for source prompt
             source_embeds, negative_source_embeds = pipe.prompt_travel.encode_prompt(

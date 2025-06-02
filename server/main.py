@@ -218,8 +218,11 @@ class App:
             self.frequency_zoom_controller.enable_debug(getattr(self.args, 'debug', False))
             
             # Initialize the LoRA sound controller
+            # Determine num_pipes based on whether prompt indexing is enabled
+
             self.lora_sound_controller = LoraSoundController(
-                num_pipes=len(self.pipeline.pipes),  # Get number of pipes from pipeline
+                num_pipes=len(self.pipeline.pipes),
+                num_prompts=len(self.prompt_travel_scheduler.prompt_scheduler.prompts),
                 enabled=self.use_lora_sound_control,
                 debug=getattr(self.args, 'debug', False)
             )
@@ -445,11 +448,19 @@ class App:
                                 if normalized_energies is not None:
                                     # Process frequency bins for LoRA pipe selection if enabled
                                     if self.use_lora_sound_control:
-                                        new_pipe_index = self.lora_sound_controller.process_frequency_bins(normalized_energies)
+                                        new_pipe_index, new_prompt_index = self.lora_sound_controller.process_frequency_bins(
+                                            normalized_energies,
+                                            debug=self.args.debug,
+                                        )
+
                                         if self.args.debug:
                                             print(f"[main.py] Updated pipe index from frequency analysis: {new_pipe_index}")
+                                            print(f"[main.py] Updated prompt index from frequency analysis: {new_prompt_index}")
                                         # Update the pipe index in params
                                         setattr(params, 'pipe_index', new_pipe_index)
+                                        setattr(params, 'prompt_index', new_prompt_index)
+                                        
+
                             if self.args.debug:
                                 print(f"Time to process acid settings: {time.time() - acid_settings_start:.4f}s")
                         
@@ -487,14 +498,26 @@ class App:
                                     
                                     # Use scheduled prompts if prompt scheduler is enabled
                                     if self.prompt_travel_scheduler.use_prompt_scheduler:
-                                        current_prompt, next_prompt = self.prompt_travel_scheduler.get_prompts()
-                                        if current_prompt is not None and next_prompt is not None:
-                                            setattr(params, 'prompt', current_prompt)
-                                            setattr(params, 'target_prompt', next_prompt)
-                                            if self.args.debug:
-                                                print(f"[main.py] Using scheduled prompts:")
-                                                print(f"source: {current_prompt}")
-                                                print(f"target: {next_prompt}")
+                                        # Check if prompt indexing is enabled
+                                        if getattr(params, 'use_prompt_indexing', False):
+                                            # Use pipe index to select prompts
+                                            prompt_index = getattr(params, 'prompt_index', 0)
+                                            indexed_prompt = self.prompt_travel_scheduler.get_prompt_by_index(prompt_index)
+                                            if indexed_prompt is not None:
+                                                setattr(params, 'prompt', indexed_prompt)
+                                                setattr(params, 'target_prompt', indexed_prompt)  # Same prompt for both
+                                                if self.args.debug:
+                                                    print(f"[main.py] Using indexed prompt for prompt index {prompt_index}: {indexed_prompt}")
+                                        else:
+                                            # Use sequential prompt scheduling
+                                            current_prompt, next_prompt = self.prompt_travel_scheduler.get_prompts()
+                                            if current_prompt is not None and next_prompt is not None:
+                                                setattr(params, 'prompt', current_prompt)
+                                                setattr(params, 'target_prompt', next_prompt)
+                                                if self.args.debug:
+                                                    print(f"[main.py] Using scheduled prompts:")
+                                                    print(f"source: {current_prompt}")
+                                                    print(f"target: {next_prompt}")
                                     
                                     if self.args.debug:
                                         print(f"[main.py] Using scheduled prompt travel factor: {scheduler_factor:.2f}")
@@ -870,7 +893,7 @@ class App:
             # Reload prompts
             if "reload_prompts" in settings and settings["reload_prompts"]:
                 self.prompt_travel_scheduler.reload_prompts()
-                
+
     def _apply_acid_processing(self, pil_image):
         """Process image with acid processor and return processed PIL image"""
 

@@ -255,6 +255,35 @@ class PromptTravelScheduler:
             self.logger.info("Prompt scheduler not enabled, returning None, None")
         return None, None
         
+    def get_prompt_by_index(self, pipe_index):
+        """
+        Get a prompt by pipe index from the loaded prompts.
+        
+        Args:
+            pipe_index (int): The index of the pipe to get the prompt for
+            
+        Returns:
+            str: The prompt at the given index, or None if no prompts are loaded or index is out of range
+        """
+        if self.use_prompt_scheduler and self.prompt_scheduler is not None and self.prompt_scheduler.prompts:
+            # Ensure pipe_index is within bounds
+            if 0 <= pipe_index < len(self.prompt_scheduler.prompts):
+                prompt = self.prompt_scheduler.prompts[pipe_index]
+                if self.logging_enabled:
+                    self.logger.info(f"Got prompt by index {pipe_index}: {prompt}")
+                return prompt
+            else:
+                # Use modulo to wrap around if index is out of bounds
+                wrapped_index = pipe_index % len(self.prompt_scheduler.prompts)
+                prompt = self.prompt_scheduler.prompts[wrapped_index]
+                if self.logging_enabled:
+                    self.logger.info(f"Wrapped pipe_index {pipe_index} to {wrapped_index}, got prompt: {prompt}")
+                return prompt
+        
+        if self.logging_enabled:
+            self.logger.info(f"No prompts available for pipe_index {pipe_index}, returning None")
+        return None
+        
     def set_enabled(self, enabled):
         """Enable or disable the scheduler"""
         self.enabled = enabled
