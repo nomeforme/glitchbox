@@ -62,19 +62,20 @@ class LoRACurationConfig:
 
         self.lora_curation = {
             # "test_lcm": ["twisted-bodies", "latent-consistency/lcm-lora-sdv1-5"],
-            "test_lcm": ["radames/sd-21-DPO-LoRA", "garance"],
-            "garance": ["garance", "radames/sd-21-DPO-LoRA"],
-            "garance_2": ["radames/sd-21-DPO-LoRA"],
+            # "test_lcm": ["radames/sd-21-DPO-LoRA", "garance"],
+            # "garance": ["garance", "radames/sd-21-DPO-LoRA"],
+            # "garance_2": ["radames/sd-21-DPO-LoRA"],
             "robwood_sand": ["robwood", "nature-sand"],
             "twisted_water": ["twisted-bodies", "nature-water"],
             "melies": ["melies-bw", "melies-col"],
-            "glitch_pixels": ["glitch", "glitch"],
             "origami_smoke": ["origami", "nature-smoke"],
-            "monoblue": ["monoblue", "psychaos"],
-            "liquid_nature": ["nature-bw", "nature-water"],
-            "marina_abstract": ["marina-red", "abstract-brokenglass-red"],
-            "hahacards_goldworld": ["goldworld", "HAHACards_A2"],
-            "pixels_body": ["pixels-body", "pixels-face"],
+            "glitch_pixels": ["glitch", "glitch"],
+            "megamix": ["robwood", "twisted-bodies", "origami", "nature-sand"],
+            # "monoblue": ["monoblue", "psychaos"],
+            # "liquid_nature": ["nature-bw", "nature-water"],
+            # # "marina_abstract": ["marina-red", "abstract-brokenglass-red"],
+            # "hahacards_goldworld": ["goldworld", "HAHACards_A2"],
+            # "pixels_body": ["pixels-body", "pixels-face"],
         }
 
         self.curation_keys = list(self.lora_curation.keys())
@@ -187,6 +188,13 @@ class LoRACurationConfig:
                 [0.5, 0.5],
                 [0.2, 0.8],
                 [0.0, 1.0]
+            ],
+            "megamix": [ #0x16
+                [1.0, 0.5, 0.2, 0.0],
+                [0.6, 0.9, 0.7, 0.2],
+                [0.4, 0.5, 1.0, 0.5],
+                [0.3, 0.5, 0.9, 0.6],
+                [0.3, 0.6, 0.8, 0.6],
             ]
         }
 
