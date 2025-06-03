@@ -230,12 +230,24 @@ class App:
             
             # Initialize the LoRA sound controller
             # Determine num_pipes based on whether prompt indexing is enabled
+            
+            # Parse treble boost factors from config string
+            treble_boost_factors = None
+            try:
+                treble_boost_str = getattr(self.args, 'lora_treble_boost_factors', "1.0,1.0,1.5,2.0,2.5")
+                treble_boost_factors = [float(x.strip()) for x in treble_boost_str.split(',')]
+                print(f"[main.py] Using treble boost factors: {treble_boost_factors}")
+            except (ValueError, AttributeError) as e:
+                print(f"[main.py] Error parsing treble boost factors from config: {e}")
+                print("[main.py] Using default treble boost factors")
+                treble_boost_factors = None
 
             self.lora_sound_controller = LoraSoundController(
                 num_pipes=len(self.pipeline.pipes),
                 num_prompts=len(self.prompt_travel_scheduler.prompt_scheduler.prompts),
                 enabled=self.use_lora_sound_control,
-                debug=getattr(self.args, 'debug', False)
+                debug=getattr(self.args, 'debug', False),
+                treble_boost_factors=treble_boost_factors
             )
             # Enable debug output if in debug mode
             self.lora_sound_controller.enable_debug(getattr(self.args, 'debug', False))
@@ -293,11 +305,25 @@ class App:
         num_pipes = len(self.pipeline.pipes)
         print(f"[main.py] Warming up {num_pipes} pipes...")
         
-        # Get runtime defaults from pipeline
-        default_instance = self.pipeline.InputParams()
+        # Get default input params from curation config, similar to how predict method works
+        default_input_params = self.lora_config.get_default_curation_input_params()
+        
+        if default_input_params:
+            print(f"[main.py] Using curation config defaults for warmup: {default_input_params}")
+            # Create InputParams instance with curation config defaults
+            try:
+                default_instance = self.pipeline.InputParams(**default_input_params)
+            except Exception as e:
+                print(f"[main.py] Error creating InputParams with curation config: {e}")
+                print("[main.py] Falling back to pipeline defaults")
+                default_instance = self.pipeline.InputParams()
+        else:
+            print("[main.py] No curation config defaults found, using pipeline defaults")
+            default_instance = self.pipeline.InputParams()
+        
         dummy_image = Image.new('RGB', (default_instance.width, default_instance.height), color='black')
         
-        # Create base parameters using runtime defaults
+        # Create base parameters using the configured defaults
         base_params = vars(default_instance)
         base_params['width'] = default_instance.width
         base_params['height'] = default_instance.height
@@ -637,11 +663,15 @@ class App:
                                 if self.args.debug:
                                     print(f"Time for background removal: {time.time() - bg_removal_start:.4f}s")
                             
-                            # NOTE: Hack to set control image equal to input image
-                            # setattr(params, 'control_image', params.image)
-
-                            # Apply depth estimation if enabled
-                            if self.use_depth_estimator and params.image and getattr(params, 'use_depth_estimation', True):
+                            # Use camera image directly as control image if enabled
+                            if getattr(self.args, 'use_camera_as_control', False):
+                                camera_control_start = time.time()
+                                print("[main.py] Using camera image directly as control image")
+                                setattr(params, 'control_image', params.image)
+                                if self.args.debug:
+                                    print(f"Time for setting camera as control: {time.time() - camera_control_start:.4f}s")
+                            # Apply depth estimation if enabled and not using camera as control
+                            elif self.use_depth_estimator and params.image and getattr(params, 'use_depth_estimation', True):
                                 depth_start = time.time()
                                 try:
                                     print("[main.py] Applying depth estimation")
@@ -853,11 +883,34 @@ class App:
                 # Reinitialize the pipeline with new curation index
                 print(f"[main.py] Reinitializing pipeline with curation index {new_curation_index}")
                 global pipeline
+
+            
                 pipeline_class = get_pipeline_class(self.args.pipeline)
                 pipeline = pipeline_class(self.args, device, torch_dtype, lora_config=self.lora_config)
                 self.pipeline = pipeline
                 
-                print(f"[main.py] Pipeline successfully reinitialized with curation index {new_curation_index}")
+                # Get default input params from curation config, similar to how predict method works
+                default_input_params = self.lora_config.get_default_curation_input_params()
+                
+                if default_input_params:
+                    print(f"[main.py] Pipeline reinitialized with curation config defaults: {default_input_params}")
+                else:
+                    print("[main.py] Pipeline reinitialized with no curation config defaults found")
+                
+                # Apply the curation config defaults to the pipeline's InputParams class
+                if default_input_params:
+                    try:
+                        # Dynamically update the default values in the InputParams model
+                        for param_name, param_value in default_input_params.items():
+                            if hasattr(self.pipeline.InputParams, '__fields__') and param_name in self.pipeline.InputParams.__fields__:
+                                # Update the default value in the field
+                                field = self.pipeline.InputParams.__fields__[param_name]
+                                field.default = param_value
+                                print(f"[main.py] Updated {param_name} default to: {param_value}")
+                        print(f"[main.py] Successfully applied {len(default_input_params)} curation config defaults to pipeline")
+                    except Exception as e:
+                        print(f"[main.py] Error applying curation config defaults: {e}")
+                        print("[main.py] Pipeline will use original defaults")
                 
                 return JSONResponse({
                     "status": "success", 

@@ -25,8 +25,6 @@ class Args(NamedTuple):
     use_depth_estimator: bool = False
     depth_engine_path: str = "modules/depth_anything/depth_anything_small.engine"
     depth_grayscale: bool = False
-    # Use camera as control image
-    use_camera_as_control: bool = False
     # Enable prompt travel
     use_prompt_travel: bool = False
     use_latent_travel: bool = False
@@ -65,8 +63,6 @@ class Args(NamedTuple):
     mic_index: int = 0
     # Enable LoRA sound controller
     use_lora_sound_control: bool = False
-    # LoRA sound controller treble boost factors for mel bins [bass, low_mids, mids, high_mids, treble]
-    lora_treble_boost_factors: str = "1.0,1.0,1.5,2.0,2.5"
     # Test oscillator settings
     use_test_zoom: bool = False
     use_test_shift: bool = False
@@ -401,7 +397,7 @@ parser.add_argument(
     "--use-backround-removal",
     dest="use_background_removal",
     action="store_true",
-    default=False,
+    default=True,
     help="Remove the background from the image feed"
 )
 # Add prompt travel argument
@@ -514,7 +510,7 @@ parser.add_argument(
     "--use-depth-estimator",
     dest="use_depth_estimator",
     action="store_true",
-    default=False,
+    default=True,
     help="Enable depth estimation using DepthAnything TensorRT",
 )
 parser.add_argument(
@@ -523,13 +519,6 @@ parser.add_argument(
     action="store_true",
     default=False,
     help="Save depth maps in grayscale",
-)
-parser.add_argument(
-    "--use-camera-as-control",
-    dest="use_camera_as_control",
-    action="store_true",
-    default=True,
-    help="Use camera image directly as control image, bypassing depth estimation (useful for depth cameras)",
 )
 
 # Add pixelate processor argument
@@ -580,14 +569,6 @@ parser.add_argument(
     help="Enable LoRA sound controller",
 )
 
-parser.add_argument(
-    "--lora-treble-boost-factors",
-    dest="lora_treble_boost_factors",
-    type=str,
-    default="1.0,1.0,1.0,1.25,1.5",
-    help="Comma-separated list of treble boost factors for LoRA sound controller mel bins [bass, low_mids, mids, high_mids, treble]. Default: 1.0,1.0,1.5,2.0,2.5",
-)
-
 # Image saver arguments
 parser.add_argument(
     "--use-image-saver",
@@ -631,7 +612,7 @@ parser.add_argument(
     "--default-curation-index",
     dest="default_curation_index",
     type=int,
-    default=0,
+    default=4,
     help="Default index for curation selection",
 )
 

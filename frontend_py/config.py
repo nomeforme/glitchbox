@@ -5,8 +5,8 @@ Configuration settings for the Glitch Machine Engine.
 # Display and camera dimensions
 DISPLAY_WIDTH = 640
 DISPLAY_HEIGHT = 480 
-DISPLAY_SCALE = 1.0
-CAMERA_DEVICE_INDEX = 0
+DISPLAY_SCALE = 4.0
+CAMERA_DEVICE_INDEX = 42 #0 #42
 MIC_DEVICE_INDEX = 16
 
 # Audio settings
@@ -19,3 +19,6 @@ ROLLING_STATS_WINDOW_S = 20
 # FFT frequency range settings
 FFT_FREQ_START_IDX = 0  # Starting index for frequency range
 FFT_FREQ_END_IDX = None  # Ending index for frequency range (None means use all bins)
+
+# UI behavior settings
+AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE = False  # Automatically disable black frame mode after successful curation index update
