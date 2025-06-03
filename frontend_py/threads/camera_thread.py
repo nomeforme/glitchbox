@@ -40,6 +40,7 @@ class CameraThread(QThread):
                 # frame = cv2.resize(frame, (854, 480))
                     
                 # Convert BGR to RGB for display
+                # TODO: Remove this once we have a working RGB frame
                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 self.frame_ready.emit(rgb_frame)
                     

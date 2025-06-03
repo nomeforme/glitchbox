@@ -15,7 +15,7 @@ from components import ControlPanel
 from components import StatusBar
 from clients import WebSocketClient
 from threads import CameraThread, SpeechToTextThread, FFTAnalyzerThread
-from config import MIC_DEVICE_INDEX
+from config import MIC_DEVICE_INDEX, AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE
 load_dotenv(override=True)
 
 # Default server configuration
@@ -38,6 +38,9 @@ class MainWindow(QMainWindow):
         self.server_http_uri = f"http://{server_host}:{server_port}"
 
         self.audio_device_index = MIC_DEVICE_INDEX
+        
+        # Import and set UI behavior config
+        self.auto_disable_black_frame_after_curation_update = AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE
         
         # Create scroll area as the central widget
         self.scroll_area = QScrollArea()
@@ -842,13 +845,12 @@ class MainWindow(QMainWindow):
                 self.status_bar.update_processing_status(f"Curation index updated to {index}: {message}")
                 print(f"[UI] Successfully updated curation index to {index}")
                 
-                # Automatically disable black frame mode on successful update
-                if self.black_frame_enabled:
-                    print(f"[UI] Disabling black frame mode after successful curation index update")
+                # Automatically disable black frame mode on successful update (if configured)
+                if self.black_frame_enabled and self.auto_disable_black_frame_after_curation_update:
+                    print(f"[UI] Automatically disabling black frame mode after successful curation index update")
                     self.black_frame_enabled = False
                     self.processed_display.set_black_frame_mode(False)
                     self.toggle_black_frame_button.setText("Enable Black Frame")
-                    
             else:
                 self.status_bar.update_processing_status(f"Failed to update curation index: {message}")
                 print(f"[UI] Failed to update curation index: {message}")

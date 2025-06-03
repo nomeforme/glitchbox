@@ -9,8 +9,9 @@ class FullscreenWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Output Display")
-        # Remove WindowStaysOnTopHint and add normal window flags
-        self.setWindowFlags(Qt.Window)
+        # Store original window flags for toggling
+        self.normal_flags = Qt.Window
+        self.setWindowFlags(self.normal_flags)
         
         # Set minimum size to prevent window from becoming too small
         self.setMinimumSize(480, 360)
@@ -31,6 +32,9 @@ class FullscreenWindow(QMainWindow):
         # Set initial size
         self.resize(854, 480)
         
+        # Store normal geometry for fullscreen toggle
+        self.normal_geometry = None
+        
     def update_frame(self, frame: np.ndarray):
         """Update the display with a new frame"""
         if frame is None:
@@ -50,15 +54,36 @@ class FullscreenWindow(QMainWindow):
         """Clear the display"""
         self.image_label.clear()
         
+    def toggle_fullscreen(self):
+        """Toggle between fullscreen and normal window mode"""
+        if self.isFullScreen():
+            # Exit fullscreen
+            self.setWindowFlags(self.normal_flags)
+            if self.normal_geometry:
+                self.setGeometry(self.normal_geometry)
+            else:
+                self.resize(854, 480)
+            self.showNormal()
+        else:
+            # Enter fullscreen - store current geometry first
+            self.normal_geometry = self.geometry()
+            
+            # Set frameless window flags for true borderless fullscreen on Linux
+            fullscreen_flags = Qt.Window | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint
+            self.setWindowFlags(fullscreen_flags)
+            
+            # Show fullscreen
+            self.showFullScreen()
+        
     def keyPressEvent(self, event):
         """Handle key press events"""
         if event.key() == Qt.Key_Escape:
-            self.close()
-        elif event.key() == Qt.Key_F11 or event.key() == Qt.Key_F:
             if self.isFullScreen():
-                self.showNormal()
+                self.toggle_fullscreen()
             else:
-                self.showFullScreen()
+                self.close()
+        elif event.key() == Qt.Key_F11 or event.key() == Qt.Key_F:
+            self.toggle_fullscreen()
         super().keyPressEvent(event)
         
     def resizeEvent(self, event):

@@ -1,11 +1,1 @@
-Geometric human figure in motion, crafted from angular, faceted surfaces against a black background.
-Abstract polygonal figures in motion against a dark background, creating a dynamic and surreal scene.
-Abstract geometric face composed of angular, translucent shards on a dark background.
-Abstract geometric figure in grayscale, composed of faceted triangular shapes, set against a dark background.
-Human silhouette formed by vibrant origami birds in flight against a dark background.
-Abstract sculpture of figures emerging from darkness, crafted with faceted geometric shapes, conveying unity and motion.
-
-# we are discovering prompt additivty!!
 mrnabrmv style,Ethereal face shrouded in swirling smoke and particles, emerging from darkness. black background, Human silhouette formed by vibrant origami birds in flight against a dark background.
-
-mrnabrmv, Ethereal silhouette emerges from swirling smoke, blending mystery and art in a captivating dance. Human silhouette formed by vibrant origami birds in flight against a dark background.

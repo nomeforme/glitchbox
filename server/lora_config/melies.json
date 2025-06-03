@@ -9,10 +9,10 @@
         [0.1, 0.9]
     ],
     "input_params": {
-        "prompt": "two figures in a dynamic, abstract dance, forming a surreal, interconnected sculpture against a black background.",
-        "target_prompt": "a blue dog",
+        "prompt": "a blue dog",
+        "target_prompt": "a red dog",
         "pipe_index": 0,
-        "use_prompt_travel": false,
+        "use_prompt_travel": true,
         "prompt_travel_factor": 0.5,
         "use_latent_travel": true,
         "latent_travel_method": "slerp",

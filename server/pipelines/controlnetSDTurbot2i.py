@@ -117,7 +117,7 @@ class Pipeline:
             description="Select which weight combination to use for the selected LoRA pair"
         )
         use_prompt_travel: bool = Field(
-            False,
+            True,
             title="Use Prompt Travel",
             field="checkbox",
             id="use_prompt_travel",
@@ -173,7 +173,7 @@ class Pipeline:
             None, min=0, title="Target Seed", field="seed", hide=True, id="target_seed"
         )
         steps: int = Field(
-            1, min=1, max=15, title="Steps", field="range", hide=True, id="steps"
+            4, min=1, max=15, title="Steps", field="range", hide=True, id="steps"
         )
         width: int = Field(
             640, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
@@ -211,7 +211,7 @@ class Pipeline:
             id="lora_scale",
         )
         controlnet_scale: float = Field(
-            0.55,
+            0.75,
             min=0,
             max=2.0,
             step=0.001,
@@ -300,9 +300,6 @@ class Pipeline:
         self.adapter_weights_set_curation = self.lora_config.get_adapter_weights_set_curation()
 
         self.adapter_weights_sets = self.lora_config.get_default_adapter_weights()
-
-        # Override InputParams defaults with values from the JSON configuration
-        self._override_input_params_defaults()
 
         for adapter_weights in self.adapter_weights_sets:
             # Create pipeline with ControlNet model
@@ -417,33 +414,6 @@ class Pipeline:
 
         # Store the current pipe index
         self.current_pipe_idx = 0
-
-    def _override_input_params_defaults(self):
-        """Override InputParams field defaults with values from the JSON configuration"""
-        default_input_params = self.lora_config.get_default_curation_input_params()
-        
-        if not default_input_params:
-            print("[controlnetSDTurbot2i.py] No default input params found in curation config")
-            return
-        
-        print(f"[controlnetSDTurbot2i.py] Overriding InputParams defaults with curation config: {default_input_params}")
-        
-        # Get the current InputParams class
-        input_params_class = self.InputParams
-        
-        # Create a mapping of field names to their Field objects
-        for field_name, field_value in default_input_params.items():
-            if hasattr(input_params_class, field_name):
-                # Get the current field info
-                field_info = input_params_class.model_fields.get(field_name)
-                if field_info is not None:
-                    # Update the default value in the field
-                    field_info.default = field_value
-                    print(f"[controlnetSDTurbot2i.py] Overrode {field_name} default to: {field_value}")
-                else:
-                    print(f"[controlnetSDTurbot2i.py] Warning: Field {field_name} not found in model_fields")
-            else:
-                print(f"[controlnetSDTurbot2i.py] Warning: Field {field_name} not found in InputParams class")
 
     def load_loras_for_pipe(self, pipe, pipe_state, lora_models_list: List[str], fuse_loras: bool = False, lora_scale: float = 1.0, adapter_weights: Optional[List[float]] = None) -> None:
         """
@@ -732,6 +702,9 @@ class Pipeline:
                 scale_factor = 4
             else:
                 scale_factor = 1
+
+            scale_factor = 4
+
 
             w0, h0 = (scale_factor * 200, scale_factor * 200)
             control_image = control_image.resize((w0, h0))
