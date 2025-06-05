@@ -690,12 +690,12 @@ class MainWindow(QMainWindow):
     def toggle_mirror(self):
         """Toggle mirror mode for the processed display"""
         if hasattr(self, 'processed_display'):
-            self.processed_display.toggle_mirror()Add commentMore actions
+            self.processed_display.toggle_mirror()
             if self.processed_display.is_mirrored:
                 self.toggle_mirror_button.setText("Disable Mirror")
             else:
                 self.toggle_mirror_button.setText("Enable Mirror")
-                
+
     def scroll_to_top(self):
         """Scroll to the top of the content"""
         self.scroll_area.verticalScrollBar().setValue(0)

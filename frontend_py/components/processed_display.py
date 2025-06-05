@@ -206,7 +206,7 @@ class ProcessedDisplay(QWidget):
         # Black frame mode
         self.black_frame_mode = False
 
-        # Mirror modeAdd commentMore actions
+        # Mirror mode
         self.mirrored = False
         self.is_mirrored = False
         
@@ -370,7 +370,7 @@ class ProcessedDisplay(QWidget):
         """Enable or disable mirror mode"""
         self.mirrored = enabled
         self.is_mirrored = enabled
-        if enabled:Add commentMore actions
+        if enabled:
             print("[Display] Mirror mode enabled")
         else:
             print("[Display] Mirror mode disabled")
