@@ -1,3 +1,5 @@
+# server/util.py
+
 from importlib import import_module
 from types import ModuleType
 from PIL import Image
@@ -6,7 +8,13 @@ import io
 
 def get_pipeline_class(pipeline_name: str) -> ModuleType:
     try:
-        module = import_module(f"pipelines.{pipeline_name}")
+        # Add mapping for the new pipeline
+        if pipeline_name == "txt2imgSDTurboLoraStory":
+            module = import_module("pipelines.txt2imgSDTurboLoraStory")
+        else:
+            # Fallback to existing pipeline names
+            module = import_module(f"pipelines.{pipeline_name}")
+            
     except ModuleNotFoundError:
         raise ValueError(f"Pipeline {pipeline_name} module not found")
 
