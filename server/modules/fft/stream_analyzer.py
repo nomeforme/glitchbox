@@ -189,3 +189,18 @@ class Stream_Analyzer:
                 self.visualizer.update()
 
         return self.fftx, self.fft, self.frequency_bin_centres, self.frequency_bin_energies
+
+    def stop(self):
+        """Stop the stream reader and release audio resources"""
+        try:
+            if hasattr(self, 'stream_reader') and self.stream_reader is not None:
+                self.stream_reader.terminate()
+                
+            if hasattr(self, 'visualizer') and self.visualizer is not None and hasattr(self.visualizer, '_is_running') and self.visualizer._is_running:
+                self.visualizer.stop()
+                
+            print("[FFT] Audio analyzer stopped successfully")
+        except Exception as e:
+            print(f"[FFT] Error stopping audio analyzer: {e}")
+            
+        return True

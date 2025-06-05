@@ -575,10 +575,16 @@ class PromptTravel:
         if latents is None:
             latents = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
         else:
-            # latents = latents.to(device)
+            # Resize stored latents to match new dimensions if needed
+            if latents.shape[2:] != shape[2:] and int(height) < 480:
+                latents = torch.nn.functional.interpolate(
+                    latents,
+                    size=shape[2:],
+                    mode='bilinear',
+                    align_corners=False
+                ).to(device)
             noise = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
             latents = latent_blend_factor * noise + (1 - latent_blend_factor) * latents
-
 
         # scale the initial noise by the standard deviation required by the scheduler
         latents = latents * scheduler.init_noise_sigma

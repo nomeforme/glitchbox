@@ -12,7 +12,7 @@ from config import DISPLAY_WIDTH, DISPLAY_HEIGHT
 class CameraDisplay(QLabel):
     """Widget to display camera feed"""
     
-    def __init__(self, min_size=(640, 480)):
+    def __init__(self, min_size=(640, 360)):
         super().__init__()
         self.setMinimumSize(*min_size)
         self.setAlignment(Qt.AlignCenter)

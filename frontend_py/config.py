@@ -4,9 +4,9 @@ Configuration settings for the Glitch Machine Engine.
 
 # Display and camera dimensions
 DISPLAY_WIDTH = 640
-DISPLAY_HEIGHT = 480 
+DISPLAY_HEIGHT = 360 
 DISPLAY_SCALE = 4.0
-CAMERA_DEVICE_INDEX = 42 #0 #42
+CAMERA_DEVICE_INDEX = 1 #0 #42
 MIC_DEVICE_INDEX = 16
 
 # Audio settings
