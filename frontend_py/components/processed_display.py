@@ -164,7 +164,7 @@ class ZMQThread(QThread):
 class ProcessedDisplay(QWidget):
     """Widget to display processed image output"""
     
-    def __init__(self, min_size=(640, 480)):
+    def __init__(self, min_size=(640, 360)):
         super().__init__()
         self.layout = QVBoxLayout()
         self.setLayout(self.layout)
@@ -247,13 +247,23 @@ class ProcessedDisplay(QWidget):
 
     def stop_stream(self):
         """Stop the stream threads"""
+        print("[Display] Stopping stream threads...")
         if self.stream_thread:
+            print("[Display] Stopping stream thread...")
             self.stream_thread.stop()
             self.stream_thread = None
             
         if self.zmq_thread:
+            print("[Display] Stopping ZMQ thread...")
             self.zmq_thread.stop()
+            # Wait for ZMQ thread to finish
+            if self.zmq_thread.wait(2000):  # Wait up to 2 seconds
+                print("[Display] ZMQ thread stopped gracefully")
+            else:
+                print("[Display] Force terminating ZMQ thread")
+                self.zmq_thread.terminate()
             self.zmq_thread = None
+            print("[Display] ZMQ thread cleanup completed")
 
     def update_frame(self, frame: np.ndarray):
         """Update the display with a new frame"""
@@ -338,9 +348,16 @@ class ProcessedDisplay(QWidget):
         else:
             print("[Display] Black frame mode disabled")
 
-    def __del__(self):
-        """Cleanup on deletion"""
+    def cleanup(self):
+        """Clean up all resources"""
+        print("[Display] Starting cleanup...")
         self.stop_stream()
         if self.fullscreen_window:
+            print("[Display] Closing fullscreen window...")
             self.fullscreen_window.close()
             self.fullscreen_window = None
+        print("[Display] Cleanup completed")
+
+    def __del__(self):
+        """Cleanup on deletion"""
+        self.cleanup()

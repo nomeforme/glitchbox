@@ -514,7 +514,7 @@ parser.add_argument(
     "--use-depth-estimator",
     dest="use_depth_estimator",
     action="store_true",
-    default=False,
+    default=True,
     help="Enable depth estimation using DepthAnything TensorRT",
 )
 parser.add_argument(
@@ -528,7 +528,7 @@ parser.add_argument(
     "--use-camera-as-control",
     dest="use_camera_as_control",
     action="store_true",
-    default=True,
+    default=False,
     help="Use camera image directly as control image, bypassing depth estimation (useful for depth cameras)",
 )
 

@@ -9,6 +9,7 @@ from .utils import (
     get_perceptual_frequency_ranges,
     convert_to_decibels
 )
+from typing import List, Tuple
 
 class LoraSoundController:
     """
@@ -31,7 +32,7 @@ class LoraSoundController:
                  max_freq=10000,  # Maximum frequency for mel conversion
                  min_freq=201,  # Minimum frequency for mel conversion
                  use_decibel_scale=True,  # Convert mel bins to decibel scale for perceptual analysis
-                 treble_boost_factors=None,  # Array of boost factors for mel bins [bass, low_mids, mids, high_mids, treble]
+                 frequency_bin_boost_factors=None,  # Array of boost factors for mel bins [bass, low_mids, mids, high_mids, treble]
                  smoothed_mode=True):  # Enable smoothed pipe index transitions (max ±1 change per frame)
         """
         Initialize the sound-reactive LoRA controller.
@@ -52,7 +53,7 @@ class LoraSoundController:
             max_freq (int): Maximum frequency for mel conversion
             min_freq (int): Minimum frequency for mel conversion
             use_decibel_scale (bool): Convert mel bins to decibel scale for perceptual analysis
-            treble_boost_factors (list): Array of boost factors for mel bins [bass, low_mids, mids, high_mids, treble]
+            frequency_bin_boost_factors (list): Array of boost factors for mel bins [bass, low_mids, mids, high_mids, treble]
             smoothed_mode (bool): Enable smoothed pipe index transitions (max ±1 change per frame)
         """
         # Store configuration parameters
@@ -70,7 +71,7 @@ class LoraSoundController:
         self.max_freq = max_freq
         self.min_freq = min_freq
         self.use_decibel_scale = use_decibel_scale
-        self.treble_boost_factors = treble_boost_factors or [1.0, 1.0, 1.5, 2.0, 2.5]
+        self.frequency_bin_boost_factors = frequency_bin_boost_factors or [1.0, 1.0, 1.5, 2.0, 2.5]
 
         # self.treble_boost_factors = treble_boost_factors or [1.2, 1.1, 1.0, 1.0, 1.0]
         self.smoothed_mode = smoothed_mode
@@ -83,10 +84,19 @@ class LoraSoundController:
         # Store previous averaged bins for rolling window percentage change calculation (used for linear frequency backup)
         self.rolling_window = deque(maxlen=self.rolling_window_size)
 
-    def enable_debug(self, enabled=True):
-        """Enable or disable debug printing"""
+    def enable_debug(self, enabled: bool = True) -> None:
+        """Enable or disable debug output"""
         self.debug = enabled
-        
+        if self.debug:
+            print(f"[LoraSoundController] Debug mode enabled")
+            print(f"[LoraSoundController] Current frequency bin boost factors: {self.frequency_bin_boost_factors}")
+
+    def update_frequency_bin_boost_factors(self, bass_boost: float, low_mids_boost: float, mids_boost: float, high_mids_boost: float, treble_boost: float) -> None:
+        """Update the frequency bin boost factors"""
+        self.frequency_bin_boost_factors = [bass_boost, low_mids_boost, mids_boost, high_mids_boost, treble_boost]
+        if self.debug:
+            print(f"[LoraSoundController] Updated frequency bin boost factors: {self.frequency_bin_boost_factors}")
+
     def _apply_smoothing(self, current_index, target_index, max_indices=None):
         """
         Apply smoothing to pipe index transitions, limiting changes to ±1 per frame.
@@ -127,7 +137,7 @@ class LoraSoundController:
         
         return smoothed_index
 
-    def process_frequency_bins(self, normalized_energies, debug=True, num_pipes_override=None):
+    def process_frequency_bins(self, normalized_energies: List[float], debug=True, num_pipes_override=None) -> Tuple[int, int]:
         """
         Process frequency bins to adjust pipe index based on audio input.
         Uses mel-frequency analysis by default with linear frequency analysis as backup.
@@ -185,11 +195,11 @@ class LoraSoundController:
             # Apply treble boost to higher frequency bins
             if self.use_decibel_scale:
                 # In dB space: add boost in dB (10*log10(boost_factor))
-                boost_factors_db = 10 * np.log10(np.array(self.treble_boost_factors[:len(processing_bins)]))
+                boost_factors_db = 10 * np.log10(np.array(self.frequency_bin_boost_factors[:len(processing_bins)]))
                 boosted_bins = processing_bins + boost_factors_db
             else:
                 # In linear energy space: multiply by boost factor
-                boosted_bins = processing_bins * self.treble_boost_factors[:len(processing_bins)]
+                boosted_bins = processing_bins * self.frequency_bin_boost_factors[:len(processing_bins)]
             
             # Select bin with highest value (correctly boosted in appropriate space)
             raw_audio_index = np.argmax(boosted_bins)
@@ -203,10 +213,10 @@ class LoraSoundController:
                 
                 if self.use_decibel_scale:
                     print(f"[LoraSoundController] Mel energies (dB): {mel_bins_db}")
-                    print(f"[LoraSoundController] Treble boost factors (dB): {boost_factors_db}")
+                    print(f"[LoraSoundController] Frequency bin boost factors (dB): {boost_factors_db}")
                     print(f"[LoraSoundController] Boosted mel bins (dB): {boosted_bins}")
                 else:
-                    print(f"[LoraSoundController] Treble boost factors: {self.treble_boost_factors[:len(processing_bins)]}")
+                    print(f"[LoraSoundController] Frequency bin boost factors: {self.frequency_bin_boost_factors[:len(processing_bins)]}")
                     print(f"[LoraSoundController] Boosted mel energies: {boosted_bins}")
                 
                 print(f"[LoraSoundController] Raw selected audio index: {raw_audio_index}")

@@ -236,10 +236,10 @@ class App:
             try:
                 treble_boost_str = getattr(self.args, 'lora_treble_boost_factors', "1.0,1.0,1.5,2.0,2.5")
                 treble_boost_factors = [float(x.strip()) for x in treble_boost_str.split(',')]
-                print(f"[main.py] Using treble boost factors: {treble_boost_factors}")
+                print(f"[main.py] Using frequency bin boost factors: {treble_boost_factors}")
             except (ValueError, AttributeError) as e:
-                print(f"[main.py] Error parsing treble boost factors from config: {e}")
-                print("[main.py] Using default treble boost factors")
+                print(f"[main.py] Error parsing frequency bin boost factors from config: {e}")
+                print("[main.py] Using default frequency bin boost factors")
                 treble_boost_factors = None
 
             self.lora_sound_controller = LoraSoundController(
@@ -247,7 +247,7 @@ class App:
                 num_prompts=len(self.prompt_travel_scheduler.prompt_scheduler.prompts),
                 enabled=self.use_lora_sound_control,
                 debug=getattr(self.args, 'debug', False),
-                treble_boost_factors=treble_boost_factors
+                frequency_bin_boost_factors=treble_boost_factors
             )
             # Enable debug output if in debug mode
             self.lora_sound_controller.enable_debug(getattr(self.args, 'debug', False))
@@ -531,6 +531,17 @@ class App:
                                 if normalized_energies is not None:
                                     # Process frequency bins for LoRA pipe selection if enabled
                                     if self.use_lora_sound_control:
+                                        # Update treble boost factors with current parameters
+                                        self.lora_sound_controller.update_frequency_bin_boost_factors(
+                                            bass_boost=params.boost_factor_bass,
+                                            low_mids_boost=params.boost_factor_low_mids,
+                                            mids_boost=params.boost_factor_mids,
+                                            high_mids_boost=params.boost_factor_high_mids,
+                                            treble_boost=params.boost_factor_treble
+                                        )
+
+                                        print(f"[main.py] Updated frequency bin boost factors: {self.lora_sound_controller.frequency_bin_boost_factors}")
+                                        
                                         new_pipe_index, new_prompt_index = self.lora_sound_controller.process_frequency_bins(
                                             normalized_energies,
                                             debug=self.args.debug,

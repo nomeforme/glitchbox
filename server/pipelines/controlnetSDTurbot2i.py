@@ -179,7 +179,7 @@ class Pipeline:
             640, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
         )
         height: int = Field(
-            480, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
+            360, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
         )
         guidance_scale: float = Field(
             1.00,
@@ -201,15 +201,6 @@ class Pipeline:
             hide=True,
             id="strength",
         )
-        lora_scale: float = Field(
-            0.5,
-            min=0.0,
-            max=1.0,
-            step=0.01,
-            title="LoRA Scale",
-            field="range",
-            id="lora_scale",
-        )
         controlnet_scale: float = Field(
             0.75,
             min=0,
@@ -219,6 +210,52 @@ class Pipeline:
             field="range",
             hide=True,
             id="controlnet_scale",
+        )
+        # Add boost factor parameters
+        boost_factor_bass: float = Field(
+            1.0,
+            min=0.0,
+            max=3.0,
+            step=0.1,
+            title="Boost - Bass",
+            field="range",
+            id="boost_factor_bass",
+        )
+        boost_factor_low_mids: float = Field(
+            1.0,
+            min=0.0,
+            max=3.0,
+            step=0.1,
+            title="Boost - Low Mids",
+            field="range",
+            id="boost_factor_low_mids",
+        )
+        boost_factor_mids: float = Field(
+            1.5,
+            min=0.0,
+            max=3.0,
+            step=0.1,
+            title="Boost - Mids",
+            field="range",
+            id="boost_factor_mids",
+        )
+        boost_factor_high_mids: float = Field(
+            2.0,
+            min=0.0,
+            max=3.0,
+            step=0.1,
+            title="Boost - High Mids",
+            field="range",
+            id="boost_factor_high_mids",
+        )
+        boost_factor_treble: float = Field(
+            2.5,
+            min=0.0,
+            max=3.0,
+            step=0.1,
+            title="Boost - Treble",
+            field="range",
+            id="boost_factor_treble",
         )
         controlnet_start: float = Field(
             0.0,

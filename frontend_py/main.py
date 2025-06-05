@@ -222,6 +222,12 @@ class MainWindow(QMainWindow):
         self.toggle_fullscreen_button.clicked.connect(self.toggle_fullscreen)
         presentation_layout.addWidget(self.toggle_fullscreen_button)
         
+        # Add force terminate button
+        self.force_terminate_button = QPushButton("Exit")
+        self.force_terminate_button.setStyleSheet("background-color: #ff4444; color: white;")
+        self.force_terminate_button.clicked.connect(self.force_terminate)
+        presentation_layout.addWidget(self.force_terminate_button)
+        
         layout.addLayout(presentation_layout)
         
         # Initialize threads
@@ -726,43 +732,51 @@ class MainWindow(QMainWindow):
             # Stop the STT thread if it's running
             if hasattr(self, 'stt_thread') and self.stt_thread is not None:
                 self.stt_thread.stop()
+                self.stt_thread.wait(1000)  # Wait up to 1 second
+                if self.stt_thread.isRunning():
+                    self.stt_thread.terminate()
             
             # Stop the FFT thread if it's running
             if hasattr(self, 'fft_thread') and self.fft_thread is not None:
                 self.fft_thread.stop()
+                self.fft_thread.wait(1000)  # Wait up to 1 second
+                if self.fft_thread.isRunning():
+                    self.fft_thread.terminate()
             
             # Stop the stream immediately to prevent further network activity
-            self.processed_display.stop_stream()
+            if hasattr(self, 'processed_display'):
+                print("[UI] Cleaning up processed display...")
+                self.processed_display.cleanup()
             
             # Force flag changes to prevent new operations
-            if self.ws_client is not None:
+            if hasattr(self, 'ws_client') and self.ws_client is not None:
                 self.ws_client.running = False
                 self.ws_client.processing = False
-            
-            # Stop camera thread with short timeout
-            if self.camera_thread is not None:
-                self.camera_thread.stop()
-                if not self.camera_thread.wait(1000):  # 1 second timeout
-                    print("[UI] Force terminating camera thread")
-                    self.camera_thread.terminate()
-            
-            # Stop WebSocket client with short timeout to avoid blocking
-            if self.ws_client is not None:
-                self.ws_client.stop()
-                if not self.ws_client.wait(1000):  # 1 second timeout
-                    print("[UI] Force terminating WebSocket thread")
+                # Force close the WebSocket connection
+                self.ws_client.close()
+                self.ws_client.wait(1000)  # Wait up to 1 second
+                if self.ws_client.isRunning():
                     self.ws_client.terminate()
             
+            # Stop camera thread with short timeout
+            if hasattr(self, 'camera_thread') and self.camera_thread is not None:
+                self.camera_thread.stop()
+                self.camera_thread.wait(1000)  # Wait up to 1 second
+                if self.camera_thread.isRunning():
+                    self.camera_thread.terminate()
+            
             # Clear displays
-            self.camera_display.clear_display()
-            self.processed_display.clear_display()
+            if hasattr(self, 'camera_display'):
+                self.camera_display.clear_display()
             
             print("[UI] Cleanup completed successfully")
         except Exception as e:
             print(f"[UI] Error during cleanup: {e}")
         finally:
-            # Always accept the close event
+            # Always accept the close event to ensure the window closes
             event.accept()
+            # Force quit the application if it's still running
+            QApplication.quit()
 
     def update_curation_index(self):
         """Update the curation index on the server"""
@@ -871,6 +885,19 @@ class MainWindow(QMainWindow):
                     print(f"[UI] Cleaned up pending curation index")
             except Exception as e:
                 print(f"[UI] Error re-enabling button: {e}")
+
+    def force_terminate(self):
+        """Force terminate the application at the OS level"""
+        print("[UI] Force terminating application...")
+        try:
+            # Get the current process ID
+            pid = os.getpid()
+            # Use os.kill to forcefully terminate the process
+            os.kill(pid, 9)  # SIGKILL signal
+        except Exception as e:
+            print(f"[UI] Error during force termination: {e}")
+            # If os.kill fails, try sys.exit as a fallback
+            sys.exit(1)
 
 def main():
     # Parse command line arguments
