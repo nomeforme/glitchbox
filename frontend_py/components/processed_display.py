@@ -206,6 +206,10 @@ class ProcessedDisplay(QWidget):
         # Black frame mode
         self.black_frame_mode = False
 
+        # Mirror mode
+        self.mirrored = False
+        self.is_mirrored = False
+        
     def toggle_fullscreen(self):
         """Toggle fullscreen window"""
         if not self.is_fullscreen:
@@ -279,6 +283,10 @@ class ProcessedDisplay(QWidget):
             # Create black frame (RGB)
             black_frame = np.zeros((height, width, 3), dtype=np.uint8)
             frame = black_frame
+        
+        # Apply mirroring if enabled
+        if self.mirrored:
+            frame = cv2.flip(frame, 1)
             
         height, width = frame.shape[:2]
         bytes_per_line = 3 * width
@@ -358,6 +366,19 @@ class ProcessedDisplay(QWidget):
             self.fullscreen_window = None
         print("[Display] Cleanup completed")
 
+    def set_mirror_mode(self, enabled: bool):
+        """Enable or disable mirror mode"""
+        self.mirrored = enabled
+        self.is_mirrored = enabled
+        if enabled:
+            print("[Display] Mirror mode enabled")
+        else:
+            print("[Display] Mirror mode disabled")
+
+    def toggle_mirror(self):
+        """Toggle mirror mode"""
+        self.set_mirror_mode(not self.mirrored)
+        
     def __del__(self):
         """Cleanup on deletion"""
         self.cleanup()
