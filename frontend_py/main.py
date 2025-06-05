@@ -214,6 +214,10 @@ class MainWindow(QMainWindow):
         self.toggle_black_frame_button.clicked.connect(self.toggle_black_frame)
         presentation_layout.addWidget(self.toggle_black_frame_button)
         
+        self.toggle_mirror_button = QPushButton("Enable Mirror")
+        self.toggle_mirror_button.clicked.connect(self.toggle_mirror)
+        presentation_layout.addWidget(self.toggle_mirror_button)
+        
         self.toggle_presentation_button = QPushButton("Enter Presentation Mode")
         self.toggle_presentation_button.clicked.connect(self.toggle_presentation_mode)
         presentation_layout.addWidget(self.toggle_presentation_button)
@@ -676,6 +680,15 @@ class MainWindow(QMainWindow):
         else:
             self.toggle_black_frame_button.setText("Enable Black Frame")
             self.status_bar.update_processing_status("Black frame mode disabled")
+
+    def toggle_mirror(self):
+        """Toggle mirror mode for the processed display"""
+        if hasattr(self, 'processed_display'):
+            self.processed_display.toggle_mirror()
+            if self.processed_display.is_mirrored:
+                self.toggle_mirror_button.setText("Disable Mirror")
+            else:
+                self.toggle_mirror_button.setText("Enable Mirror")
 
     def scroll_to_top(self):
         """Scroll to the top of the content"""
