@@ -6,6 +6,24 @@ import re
 import sys
 import os
 from typing import List, Dict, Tuple
+import pyaudio
+
+def list_audio_devices():
+    p = pyaudio.PyAudio()
+    info = []
+    
+    print("\nAvailable Audio Devices:")
+    print("-----------------------")
+    
+    for i in range(p.get_device_count()):
+        device_info = p.get_device_info_by_index(i)
+        print(f"Device {device_info['index']}: {device_info['name']}")
+        print(f"    Input Channels: {device_info['maxInputChannels']}")
+        print(f"    Output Channels: {device_info['maxOutputChannels']}")
+        print(f"    Default Sample Rate: {device_info['defaultSampleRate']}")
+        print()
+    
+    p.terminate()
 
 def get_video_devices() -> List[str]:
     """
@@ -128,5 +146,9 @@ def main():
                         if cap.strip():
                             print(f"  {cap.strip()}")
 
+    list_audio_devices()
+
+
+
 if __name__ == "__main__":
-    main() 
+    main()

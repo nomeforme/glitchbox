@@ -1,6 +1,7 @@
 from diffusers import (
     ControlNetModel,
     LCMScheduler,
+    DDPMScheduler,
     AutoencoderTiny,
 )
 from pipelines.diffusers_pipelines.pipeline_controlnet import StableDiffusionControlNetPipeline
@@ -38,6 +39,7 @@ from modules.postprocessing.pixelate import PixelateProcessor
 taesd_model = "madebyollin/taesd"
 controlnet_model = "thibaud/controlnet-sd21-depth-diffusers"
 base_model = "stabilityai/sd-turbo"
+# base_model = "stabilityai/stable-diffusion-2-1-base"
 
 # Function to read prompt prefix from .txt files
 def get_prompt_prefix():
@@ -340,14 +342,21 @@ class Pipeline:
 
         for adapter_weights in self.adapter_weights_sets:
             # Create pipeline with ControlNet model
+            scheduler = DDPMScheduler.from_pretrained(base_model, subfolder="scheduler")
+
             pipe = StableDiffusionControlNetPipeline.from_pretrained(
                 base_model,
+                # scheduler=scheduler,
                 controlnet=ControlNetModel.from_pretrained(
                     controlnet_model, torch_dtype=torch_dtype
                 ).to(device),
                 safety_checker=None,
                 torch_dtype=torch_dtype,
             )
+
+            # ckpt_path = 'sd_checkpoints/nitro-1-sd.bin'
+            # unet_state_dict = torch.load(ckpt_path)
+            # pipe.unet.load_state_dict(unet_state_dict)
 
             if args.taesd:
                 pipe.vae = AutoencoderTiny.from_pretrained(
@@ -724,6 +733,7 @@ class Pipeline:
             control_guidance_start=params.controlnet_start,
             control_guidance_end=params.controlnet_end,
             latents=latents,
+            # timesteps=[999]
         )
         result_image = results[0][0]
         result_latents = results[1]
