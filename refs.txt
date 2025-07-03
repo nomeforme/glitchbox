@@ -83,3 +83,9 @@ https://towardsdatascience.com/audio-deep-learning-made-simple-part-2-why-mel-sp
 
 /mnt/c/Users/Salim/Documents/Real-Time-Latent-Consistency-Model
 python modules/image_saver/create_video.py 
+
+# Virtual audio device (combine webcam mic and soundcard)
+cd server
+./utils/find_audio_sources.sh
+./utils/create_virtual_audio_device.sh 118 151
+./utils/create_virtual_audio_device.sh --remove Virtual_Mixed_Audio
