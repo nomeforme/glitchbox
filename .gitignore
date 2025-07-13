@@ -26,6 +26,7 @@ frontend_py/frontend_env
 server/assets/*
 server/input/*
 server/output/*
+server/sd_checkpoints/*
 
 # Ignore log files
 *.log

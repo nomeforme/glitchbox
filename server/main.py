@@ -373,7 +373,10 @@ class App:
                     self.depth_estimator = DepthAnything(
                         engine_path=self.depth_engine_path,
                         device=device.type,
-                        grayscale=getattr(self.args, 'depth_grayscale', False)
+                        grayscale=getattr(self.args, 'depth_grayscale', False),
+                        normalized_distance_threshold=getattr(self.args, 'depth_normalized_distance_threshold', 0.225),
+                        absolute_min=getattr(self.args, 'depth_absolute_min', 0.0),
+                        absolute_max=getattr(self.args, 'depth_absolute_max', 18.0)
                     )
                     print("[main.py] Depth estimator initialized")
                 except Exception as e:
