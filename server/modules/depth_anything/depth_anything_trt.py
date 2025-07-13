@@ -16,7 +16,7 @@ class DepthAnythingTRT:
     for use in the pipeline within generate() in main.py.
     """
     
-    def __init__(self, engine_path, device="cuda", grayscale=False):
+    def __init__(self, engine_path, device="cuda", grayscale=False, normalized_distance_threshold=0.225, absolute_min=0.0, absolute_max=18.0):
         """
         Initialize the Depth Anything TensorRT model.
         
@@ -24,10 +24,19 @@ class DepthAnythingTRT:
             engine_path (str): Path to the TensorRT engine file
             device (str): Device to run inference on (cuda or cpu)
             grayscale (bool): Whether to return grayscale depth maps
+            normalized_distance_threshold (float): Default threshold from 0.0 (closest) to 1.0 (farthest)
+                for background removal. Defaults to 0.225.
+            absolute_min (float): Default absolute minimum raw depth value for normalization.
+                Defaults to 0.0.
+            absolute_max (float): Default absolute maximum raw depth value for normalization.
+                Defaults to 18.0.
         """
         self.engine_path = engine_path
         self.device = device
         self.grayscale = grayscale
+        self.normalized_distance_threshold = normalized_distance_threshold
+        self.absolute_min = absolute_min
+        self.absolute_max = absolute_max
         
         logger = trt.Logger(trt.Logger.WARNING)
         with open(engine_path, 'rb') as f, trt.Runtime(logger) as runtime:
@@ -53,23 +62,31 @@ class DepthAnythingTRT:
         
         print(f"Depth Anything TensorRT model initialized with engine: {engine_path}")
     
-    def get_depth(self, image, normalized_distance_threshold: Optional[float] = 0.225, absolute_min: Optional[float] = 0, absolute_max: Optional[float] = 18):
+    def get_depth(self, image, normalized_distance_threshold: Optional[float] = None, absolute_min: Optional[float] = None, absolute_max: Optional[float] = None):
         """
         Get depth map from an image with advanced thresholding.
         
         Args:
             image (PIL.Image): Input image.
             normalized_distance_threshold (float, optional): Threshold from 0.0 (closest) to 1.0 (farthest)
-                for background removal. Defaults to None.
+                for background removal. If None, uses the instance default.
             absolute_min (float, optional): The absolute minimum raw depth value for normalization.
                 Providing this and absolute_max ensures consistent depth mapping across images.
-                If None, the minimum is calculated from the current image. Defaults to None.
+                If None, uses the instance default.
             absolute_max (float, optional): The absolute maximum raw depth value for normalization.
-                If None, the maximum is calculated from the current image. Defaults to None.
+                If None, uses the instance default.
             
         Returns:
             PIL.Image: Depth map as a PIL image.
         """
+        # Use instance defaults if parameters are None
+        if normalized_distance_threshold is None:
+            normalized_distance_threshold = self.normalized_distance_threshold
+        if absolute_min is None:
+            absolute_min = self.absolute_min
+        if absolute_max is None:
+            absolute_max = self.absolute_max
+        
         # --- Image Preprocessing ---
         if isinstance(image, Image.Image):
             orig_w, orig_h = image.size

@@ -25,6 +25,10 @@ class Args(NamedTuple):
     use_depth_estimator: bool = False
     depth_engine_path: str = "modules/depth_anything/depth_anything_small.engine"
     depth_grayscale: bool = False
+    # Depth threshold parameters
+    depth_normalized_distance_threshold: float = 0.225
+    depth_absolute_min: float = 0.0
+    depth_absolute_max: float = 18.0
     # Use camera as control image
     use_camera_as_control: bool = False
     # Enable prompt travel
@@ -530,6 +534,29 @@ parser.add_argument(
     action="store_true",
     default=False,
     help="Use camera image directly as control image, bypassing depth estimation (useful for depth cameras)",
+)
+
+# Add depth threshold arguments
+parser.add_argument(
+    "--depth-normalized-distance-threshold",
+    dest="depth_normalized_distance_threshold",
+    type=float,
+    default=0.225,
+    help="Normalized distance threshold for depth estimation (0.0-1.0, default: 0.225)",
+)
+parser.add_argument(
+    "--depth-absolute-min",
+    dest="depth_absolute_min",
+    type=float,
+    default=0.0,
+    help="Absolute minimum depth value for normalization (default: 0.0)",
+)
+parser.add_argument(
+    "--depth-absolute-max",
+    dest="depth_absolute_max",
+    type=float,
+    default=18.0,
+    help="Absolute maximum depth value for normalization (default: 18.0)",
 )
 
 # Add pixelate processor argument
