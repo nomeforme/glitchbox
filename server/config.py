@@ -532,7 +532,7 @@ parser.add_argument(
     "--use-camera-as-control",
     dest="use_camera_as_control",
     action="store_true",
-    default=False,
+    default=True,
     help="Use camera image directly as control image, bypassing depth estimation (useful for depth cameras)",
 )
 
