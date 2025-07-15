@@ -316,17 +316,17 @@ class MainWindow(QMainWindow):
         self.disconnect_button.setEnabled(False)  # Only enabled when connected
         buttons_layout.addWidget(self.disconnect_button)
         
-        # Start/Stop Camera button
-        self.start_button = QPushButton("Start Camera")
-        self.start_button.clicked.connect(self.toggle_camera)
-        # Camera button is now always enabled
-        buttons_layout.addWidget(self.start_button)
-        
         # Reconnect button (renamed for clarity)
         self.reconnect_button = QPushButton("Reconnect to Server")
         self.reconnect_button.clicked.connect(self.reconnect_to_server)
         self.reconnect_button.setEnabled(False)  # Only enabled when connected
         buttons_layout.addWidget(self.reconnect_button)
+        
+        # Start/Stop Camera button
+        self.start_button = QPushButton("Start Camera")
+        self.start_button.clicked.connect(self.toggle_camera)
+        # Camera button is now always enabled
+        buttons_layout.addWidget(self.start_button)
         
         # STT Toggle button
         self.stt_button = QPushButton("Start Speech Recognition")
@@ -433,12 +433,25 @@ class MainWindow(QMainWindow):
 
     def get_initial_settings(self):
         """Start WebSocket client to get initial settings"""
+        print("[UI] get_initial_settings called - starting WebSocket client...")
         self.status_bar.update_processing_status("Connecting to server...")
         # Disable all connection buttons during connection
         self.connect_button.setEnabled(False)
         self.disconnect_button.setEnabled(False)
         self.reconnect_button.setEnabled(False)
-        self.ws_client.start()
+        
+        try:
+            print(f"[UI] Starting WebSocket client with URI: {self.ws_client.uri}")
+            print(f"[UI] WebSocket client user_id: {self.ws_client.user_id}")
+            self.ws_client.start()
+            print("[UI] WebSocket client start() called successfully")
+        except Exception as e:
+            print(f"[UI] Error starting WebSocket client: {e}")
+            self.status_bar.update_processing_status(f"Failed to start connection: {e}")
+            # Re-enable buttons on error - allow connect and reconnect attempts
+            self.connect_button.setEnabled(True)
+            self.disconnect_button.setEnabled(False)
+            self.reconnect_button.setEnabled(True)  # Enable reconnect on connection error
 
     def connect_to_server(self):
         """Connect to server"""
@@ -530,7 +543,7 @@ class MainWindow(QMainWindow):
                 # Always update UI state regardless of errors
                 self.connect_button.setEnabled(True)
                 self.disconnect_button.setEnabled(False)
-                self.reconnect_button.setEnabled(False)
+                self.reconnect_button.setEnabled(True)  # Enable reconnect when disconnected
                 
                 # Update status based on camera state
                 if self.camera_running:
@@ -546,16 +559,30 @@ class MainWindow(QMainWindow):
         self.control_panel.setup_pipeline_options(settings)
         self.server_connected = True
         
-        # Update UI state
-        self.connect_button.setEnabled(True)
+        # Update UI state - when connected, disable connect and reconnect buttons
+        self.connect_button.setEnabled(False)  # Disable connect when already connected
         self.disconnect_button.setEnabled(True)  # Enable disconnect button when connected
-        self.reconnect_button.setEnabled(True)  # Enable after successful settings
+        self.reconnect_button.setEnabled(False)  # Disable reconnect when already connected
         self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
+        
+        # Ensure ProcessedDisplay streaming is started (important for reconnection)
+        print("[UI] Starting ProcessedDisplay streaming...")
+        try:
+            # Stop any existing streams first
+            self.processed_display.stop_stream()
+            # Start fresh streaming
+            self.processed_display.start_stream(self.ws_client.user_id, self.server_http_uri)
+            print("[UI] ProcessedDisplay streaming started successfully")
+        except Exception as e:
+            print(f"[UI] Error starting ProcessedDisplay streaming: {e}")
         
         # If camera is already running, start streaming automatically
         if self.camera_running:
             self.ws_client.start_camera()
             self.status_bar.update_processing_status("Streaming frames to server...")
+        
+        # Restart streaming components
+        self._restart_streaming_components()
         
         # Update curation index from server settings
         current_curation_index = settings.get('current_curation_index', 0)
@@ -572,16 +599,17 @@ class MainWindow(QMainWindow):
             self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
             # Start the MJPEG stream when connected
             self.processed_display.start_stream(self.ws_client.user_id, self.server_http_uri)
-            # Re-enable buttons on successful connection
-            self.connect_button.setEnabled(True)
-            self.disconnect_button.setEnabled(True)
+            # Update buttons on successful connection - disable connect and reconnect when connected
+            self.connect_button.setEnabled(False)  # Disable connect when already connected
+            self.disconnect_button.setEnabled(True)  # Enable disconnect when connected
+            self.reconnect_button.setEnabled(False)  # Disable reconnect when already connected
         elif status == "disconnected":
             self.server_connected = False
             self.status_bar.update_connection_status(False)
             # Update button states
             self.connect_button.setEnabled(True)
             self.disconnect_button.setEnabled(False)
-            self.reconnect_button.setEnabled(False)
+            self.reconnect_button.setEnabled(True)  # Enable reconnect when disconnected
             # Clear the server info from status bar
             if self.camera_running:
                 self.status_bar.update_processing_status("Camera running (not streaming - disconnected)")
@@ -598,11 +626,11 @@ class MainWindow(QMainWindow):
         elif status == "Connection failed after maximum retries":
             self.server_connected = False
             self.status_bar.update_connection_status(False)
-            self.status_bar.update_processing_status("Connection failed - click Connect to retry")
+            self.status_bar.update_processing_status("Connection failed - click Connect or Reconnect to retry")
             # Ensure buttons are in correct state when connection fails
             self.connect_button.setEnabled(True)
             self.disconnect_button.setEnabled(False)
-            self.reconnect_button.setEnabled(False)
+            self.reconnect_button.setEnabled(True)  # Enable reconnect when connection fails
 
     def handle_camera_frame(self, frame):
         """Handle new frame from camera"""
@@ -709,7 +737,7 @@ class MainWindow(QMainWindow):
         # Update button states
         self.connect_button.setEnabled(True)
         self.disconnect_button.setEnabled(False)
-        self.reconnect_button.setEnabled(False)
+        self.reconnect_button.setEnabled(True)  # Enable reconnect after connection error
         
         # Update status message based on camera state
         if self.camera_running:
@@ -718,7 +746,7 @@ class MainWindow(QMainWindow):
             self.status_bar.update_processing_status(f"Connection error: {error_msg}")
 
     def reconnect_to_server(self):
-        """Reconnect to server by cleanly stopping connection and reestablishing it"""
+        """Reconnect to server by completely recreating all network components"""
         print("[UI] Manual reconnection initiated...")
         self.status_bar.update_processing_status("Reconnecting to server...")
         # Disable all connection buttons during reconnection
@@ -726,71 +754,145 @@ class MainWindow(QMainWindow):
         self.connect_button.setEnabled(False)
         self.disconnect_button.setEnabled(False)
         
+        # Store camera state to restore later
+        was_camera_running = self.camera_running
+        
         try:
-            # Stop server connection but keep camera running
-            was_camera_running = self.camera_running
+            # Phase 1: Complete shutdown of all network components
+            print("[UI] Phase 1: Shutting down all network components...")
             
-            # Stop server streaming if connected
-            if self.server_connected:
-                self.ws_client.stop_camera()
+            # Stop frame processing immediately
+            self.frame_timer.stop()
+            self.processing_frame = False
             
-            # Stop processed display
-            self.processed_display.clear_display()
-            self.processed_display.stop_stream()
-            
-            # Reset server connection state
+            # Update connection state immediately
             self.server_connected = False
             self.status_bar.update_connection_status(False)
             
-            # Reset WebSocket client state instead of creating new one
-            self.ws_client.reset_connection_state()
+            # Stop and cleanup processed display completely
+            print("[UI] Stopping processed display...")
+            self.processed_display.clear_zmq_queue()
+            self.processed_display.stop_stream()
+            self.processed_display.clear_display()
             
-            # Disconnect existing signals and reconnect to avoid duplicates
-            try:
-                self.ws_client.frame_received.disconnect()
-                self.ws_client.connection_error.disconnect()
-                self.ws_client.settings_received.disconnect()
-                self.ws_client.status_changed.disconnect()
-            except TypeError:
-                # Signals might not be connected, ignore the error
-                pass
+            # Stop and recreate WebSocket client completely
+            print("[UI] Stopping WebSocket client...")
+            if hasattr(self, 'ws_client') and self.ws_client is not None:
+                # Force stop the WebSocket client
+                self.ws_client.running = False
+                self.ws_client.processing = False
+                self.ws_client.close()
+                # Give it a moment to stop
+                if self.ws_client.isRunning():
+                    self.ws_client.terminate()
+                    self.ws_client.wait(500)  # Wait up to 500ms
+                
+                # Disconnect all signals to prevent issues
+                try:
+                    self.ws_client.frame_received.disconnect()
+                    self.ws_client.connection_error.disconnect()
+                    self.ws_client.settings_received.disconnect()
+                    self.ws_client.status_changed.disconnect()
+                except:
+                    pass  # Ignore if signals weren't connected
             
-            # Connect signals for the reset client
-            self.ws_client.frame_received.connect(self.processed_display.update_frame)
-            self.ws_client.connection_error.connect(self.handle_connection_error)
-            self.ws_client.settings_received.connect(self.handle_settings)
-            self.ws_client.status_changed.connect(self.handle_status_change)
+            print("[UI] Phase 1 complete - all components stopped")
             
-            # Update status based on camera state
-            if was_camera_running:
-                self.status_bar.update_processing_status("Camera running (not streaming - reconnecting)")
+            # Phase 2: Recreate all components from scratch
+            def recreate_components():
+                try:
+                    print("[UI] Phase 2: Recreating all network components...")
+                    
+                    # Import the WebSocket client class
+                    from clients import WebSocketClient
+                    
+                    # Create completely new WebSocket client
+                    print("[UI] Creating new WebSocket client...")
+                    self.ws_client = WebSocketClient(uri=self.server_ws_uri, max_retries=10, initial_retry_delay=1.0)
+                    
+                    # Connect signals for the new client
+                    self.ws_client.frame_received.connect(self.processed_display.update_frame)
+                    self.ws_client.connection_error.connect(self.handle_connection_error)
+                    self.ws_client.settings_received.connect(self.handle_settings)
+                    self.ws_client.status_changed.connect(self.handle_status_change)
+                    
+                    print("[UI] New WebSocket client created and connected")
+                    
+                    # Update status
+                    if was_camera_running:
+                        self.status_bar.update_processing_status("Camera running (not streaming - reconnecting)")
+                    else:
+                        self.status_bar.update_processing_status("Reconnecting to server...")
+                    
+                    # Phase 3: Start the connection process
+                    def start_connection():
+                        try:
+                            print("[UI] Phase 3: Starting connection process...")
+                            print(f"[UI] Server URI: {self.server_ws_uri}")
+                            print(f"[UI] WebSocket client user_id: {self.ws_client.user_id}")
+                            self.get_initial_settings()
+                            print("[UI] Reconnection process initiated successfully")
+                        except Exception as e:
+                            print(f"[UI] Error starting connection: {e}")
+                            self.status_bar.update_processing_status(f"Reconnection failed: {e}")
+                            self._update_button_states_after_reconnect()
+                    
+                    # Start connection with a small delay
+                    QTimer.singleShot(200, start_connection)
+                    
+                except Exception as e:
+                    print(f"[UI] Error recreating components: {e}")
+                    self.status_bar.update_processing_status(f"Reconnection failed: {e}")
+                    self._update_button_states_after_reconnect()
             
-            # Start the connection process
-            self.get_initial_settings()
-            
-            print("[UI] Reconnection process started")
+            # Start recreation process with a small delay to ensure cleanup is complete
+            QTimer.singleShot(300, recreate_components)
             
         except Exception as e:
             print(f"[UI] Error during reconnection: {e}")
             self.status_bar.update_processing_status(f"Reconnection failed: {e}")
             self.server_connected = False
-        finally:
-            # Re-enable buttons after a short delay based on connection state
-            QTimer.singleShot(2000, lambda: self._update_button_states_after_reconnect())
+            # Re-enable buttons on error
+            QTimer.singleShot(1000, lambda: self._update_button_states_after_reconnect())
+        
+        # Fallback: Re-enable buttons after reasonable time regardless
+        QTimer.singleShot(10000, lambda: self._update_button_states_after_reconnect())
+
+    def _restart_streaming_components(self):
+        """Restart all streaming components for reconnection"""
+        print("[UI] Restarting streaming components...")
+        
+        # The ProcessedDisplay will automatically restart its streaming when start_stream is called
+        # This happens in handle_settings when the server connection is established
+        # For now, just ensure it's ready to receive new streams
+        
+        # Restart frame timer if camera is running
+        if self.camera_running:
+            print("[UI] Restarting frame timer for camera...")
+            if not self.frame_timer.isActive():
+                self.frame_timer.start()
+        
+        print("[UI] Streaming components restart completed")
 
     def _update_button_states_after_reconnect(self):
         """Update button states after reconnection attempt"""
         try:
             if self.server_connected:
-                self.connect_button.setEnabled(True)
-                self.disconnect_button.setEnabled(True)
-                self.reconnect_button.setEnabled(True)
+                self.connect_button.setEnabled(False)  # Disable connect when connected
+                self.disconnect_button.setEnabled(True)  # Enable disconnect when connected
+                self.reconnect_button.setEnabled(False)  # Disable reconnect when connected
+                print("[UI] Reconnection successful - only disconnect button enabled")
             else:
-                self.connect_button.setEnabled(True)
-                self.disconnect_button.setEnabled(False)
-                self.reconnect_button.setEnabled(False)
+                self.connect_button.setEnabled(True)  # Enable connect when disconnected
+                self.disconnect_button.setEnabled(False)  # Disable disconnect when disconnected
+                self.reconnect_button.setEnabled(True)  # Enable reconnect when disconnected
+                print("[UI] Reconnection failed - connect and reconnect buttons enabled")
         except Exception as e:
             print(f"[UI] Error updating button states after reconnect: {e}")
+            # Fallback: enable connect and reconnect buttons when disconnected
+            self.connect_button.setEnabled(True)
+            self.disconnect_button.setEnabled(False)
+            self.reconnect_button.setEnabled(True)
 
     def _stop_all_threads(self):
         """Stop all active threads cleanly"""
@@ -860,11 +962,11 @@ class MainWindow(QMainWindow):
         self.fft_thread = FFTAnalyzerThread(input_device_index=self.audio_device_index)
         self.fft_thread.fft_data_updated.connect(self.handle_fft_data)
         
-        # Reset UI button states
+        # Reset UI button states for disconnected state
         self.start_button.setText("Start Camera")
-        self.connect_button.setEnabled(True)
-        self.disconnect_button.setEnabled(False)
-        self.reconnect_button.setEnabled(False)
+        self.connect_button.setEnabled(True)  # Enable connect when disconnected
+        self.disconnect_button.setEnabled(False)  # Disable disconnect when disconnected
+        self.reconnect_button.setEnabled(True)  # Enable reconnect when disconnected
         self.stt_active = False
         self.stt_button.setText("Start Speech Recognition")
         self.fft_active = False
