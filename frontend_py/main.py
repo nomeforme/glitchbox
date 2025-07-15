@@ -9,13 +9,17 @@ from dotenv import load_dotenv
 from PySide6.QtWidgets import QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QFrame, QScrollArea, QSpinBox
 from PySide6.QtCore import Qt, QTimer, Signal, QObject
 
+# Add imports for device detection
+import pyaudio
+from typing import List, Tuple
+
 from components import CameraDisplay
 from components import ProcessedDisplay
 from components import ControlPanel
 from components import StatusBar
 from clients import WebSocketClient
 from threads import CameraThread, SpeechToTextThread, FFTAnalyzerThread
-from config import MIC_DEVICE_INDEX, AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE
+from config import MIC_DEVICE_INDEX, AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE, CAMERA_DEVICE_INDEX
 load_dotenv(override=True)
 
 # Default server configuration
@@ -25,6 +29,62 @@ DEFAULT_SERVER_PORT = os.getenv("DEFAULT_SERVER_PORT")
 class CurationUpdateSignalHandler(QObject):
     """Signal handler for curation index updates"""
     update_completed = Signal(bool, str)  # success, message
+
+def detect_cameras() -> List[Tuple[int, str, str]]:
+    """Detect available camera indices with device names and info"""
+    available_cameras = []
+    for i in range(10):  # Check first 10 indices
+        try:
+            cap = cv2.VideoCapture(i)
+            if cap.isOpened():
+                ret, frame = cap.read()
+                if ret:
+                    # Get basic camera properties
+                    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+                    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                    fps = cap.get(cv2.CAP_PROP_FPS)
+                    
+                    # Try to get device name from sysfs (Linux)
+                    device_name = f"Camera {i}"
+                    try:
+                        sysfs_path = f"/sys/class/video4linux/video{i}/name"
+                        if os.path.exists(sysfs_path):
+                            with open(sysfs_path, 'r') as f:
+                                device_name = f.read().strip()
+                    except Exception:
+                        pass
+                    
+                    # Create info string with resolution and FPS
+                    info = f"{width}x{height}"
+                    if fps > 0:
+                        info += f" @ {fps:.1f}fps"
+                    
+                    available_cameras.append((i, device_name, info))
+                cap.release()
+            else:
+                cap.release()
+        except Exception:
+            pass
+    return available_cameras
+
+def detect_microphones() -> List[Tuple[int, str]]:
+    """Detect available microphone devices"""
+    available_mics = []
+    try:
+        p = pyaudio.PyAudio()
+        for i in range(p.get_device_count()):
+            try:
+                device_info = p.get_device_info_by_index(i)
+                # Only include devices with input channels
+                if device_info['maxInputChannels'] > 0:
+                    name = device_info['name']
+                    available_mics.append((i, name))
+            except Exception:
+                pass
+        p.terminate()
+    except Exception:
+        pass
+    return available_mics
 
 class MainWindow(QMainWindow):
     def __init__(self, server_host, server_port):
@@ -37,7 +97,16 @@ class MainWindow(QMainWindow):
         self.server_ws_uri = f"ws://{server_host}:{server_port}"
         self.server_http_uri = f"http://{server_host}:{server_port}"
 
+        # Initialize device indices from config
+        self.camera_device_index = CAMERA_DEVICE_INDEX
         self.audio_device_index = MIC_DEVICE_INDEX
+        
+        # Detect available devices
+        self.available_cameras = detect_cameras()
+        self.available_microphones = detect_microphones()
+        
+        print(f"[UI] Detected cameras: {[(idx, name, info) for idx, name, info in self.available_cameras]}")
+        print(f"[UI] Detected microphones: {[f'{idx}: {name}' for idx, name in self.available_microphones]}")
         
         # Import and set UI behavior config
         self.auto_disable_black_frame_after_curation_update = AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE
@@ -148,35 +217,109 @@ class MainWindow(QMainWindow):
         self.controls_container = QFrame()
         controls_layout = QVBoxLayout(self.controls_container)
         
-        # Curation Index Control - Add before other controls
+        # Device Index Controls - arranged horizontally
+        device_controls_layout = QHBoxLayout()
+        
+        # Curation Index Control
         curation_layout = QHBoxLayout()
         curation_label = QLabel("Curation Index:")
         self.curation_spinbox = QSpinBox()
         self.curation_spinbox.setMinimum(0)
         self.curation_spinbox.setMaximum(10)
         self.curation_spinbox.setValue(0)  # Default value
-        self.curation_update_button = QPushButton("Update Curation Index")
+        self.curation_update_button = QPushButton("Update")
         self.curation_update_button.clicked.connect(self.update_curation_index)
         
         curation_layout.addWidget(curation_label)
         curation_layout.addWidget(self.curation_spinbox)
         curation_layout.addWidget(self.curation_update_button)
-        curation_layout.addStretch()  # Add stretch to keep controls compact
         
-        controls_layout.addLayout(curation_layout)
+        device_controls_layout.addLayout(curation_layout)
+        
+        # Camera Index Control
+        camera_layout = QHBoxLayout()
+        camera_label = QLabel("Camera Index:")
+        self.camera_spinbox = QSpinBox()
+        self.camera_spinbox.setMinimum(0)
+        self.camera_spinbox.setMaximum(20)  # Allow higher range in case detection missed some
+        self.camera_spinbox.setValue(self.camera_device_index)
+        
+        # Set range and tooltip based on detected cameras
+        if self.available_cameras:
+            camera_list = [f"{idx}: {name} ({info})" for idx, name, info in self.available_cameras]
+            self.camera_spinbox.setToolTip("Available cameras:\n" + "\n".join(camera_list))
+        else:
+            self.camera_spinbox.setToolTip("No cameras detected, but you can still try different indices")
+            
+        self.camera_update_button = QPushButton("Update")
+        self.camera_update_button.clicked.connect(self.update_camera_index)
+        
+        camera_layout.addWidget(camera_label)
+        camera_layout.addWidget(self.camera_spinbox)
+        camera_layout.addWidget(self.camera_update_button)
+        
+        device_controls_layout.addLayout(camera_layout)
+        
+        # Microphone Index Control
+        mic_layout = QHBoxLayout()
+        mic_label = QLabel("Microphone Index:")
+        self.mic_spinbox = QSpinBox()
+        self.mic_spinbox.setMinimum(0)
+        self.mic_spinbox.setMaximum(50)  # Audio devices can have higher indices
+        self.mic_spinbox.setValue(self.audio_device_index)
+        
+        # Set tooltip with detected microphones
+        if self.available_microphones:
+            mic_list = [f"{idx}: {name[:30]}..." if len(name) > 30 else f"{idx}: {name}" 
+                       for idx, name in self.available_microphones]
+            self.mic_spinbox.setToolTip("Available microphones:\n" + "\n".join(mic_list))
+        else:
+            self.mic_spinbox.setToolTip("No microphones detected, but you can still try different indices")
+            
+        self.mic_update_button = QPushButton("Update")
+        self.mic_update_button.clicked.connect(self.update_mic_index)
+        
+        mic_layout.addWidget(mic_label)
+        mic_layout.addWidget(self.mic_spinbox)
+        mic_layout.addWidget(self.mic_update_button)
+        
+        device_controls_layout.addLayout(mic_layout)
+        
+        # Refresh Devices Control
+        refresh_layout = QHBoxLayout()
+        refresh_label = QLabel("Device Lists:")
+        self.refresh_devices_button = QPushButton("Refresh")
+        self.refresh_devices_button.clicked.connect(self.refresh_device_lists)
+        self.refresh_devices_button.setToolTip("Re-scan for available cameras and microphones")
+        
+        refresh_layout.addWidget(refresh_label)
+        refresh_layout.addWidget(self.refresh_devices_button)
+        
+        device_controls_layout.addLayout(refresh_layout)
+        
+        # Add stretch to push everything to the left
+        device_controls_layout.addStretch()
+        
+        controls_layout.addLayout(device_controls_layout)
         
         # Create horizontal layout for buttons
         buttons_layout = QHBoxLayout()
         
-        # Start/Stop button
+        # Connect to Server button
+        self.connect_button = QPushButton("Connect to Server")
+        self.connect_button.clicked.connect(self.toggle_server_connection)
+        buttons_layout.addWidget(self.connect_button)
+        
+        # Start/Stop Camera button
         self.start_button = QPushButton("Start Camera")
         self.start_button.clicked.connect(self.toggle_camera)
-        self.start_button.setEnabled(False)  # Disabled until settings are loaded
+        # Camera button is now always enabled
         buttons_layout.addWidget(self.start_button)
         
-        # Reconnect button
+        # Reconnect button (renamed for clarity)
         self.reconnect_button = QPushButton("Reconnect to Server")
         self.reconnect_button.clicked.connect(self.reconnect_to_server)
+        self.reconnect_button.setEnabled(False)  # Only enabled when connected
         buttons_layout.addWidget(self.reconnect_button)
         
         # STT Toggle button
@@ -237,6 +380,8 @@ class MainWindow(QMainWindow):
         # Initialize threads
         self.ws_client = WebSocketClient(uri=self.server_ws_uri, max_retries=10, initial_retry_delay=1.0)
         self.camera_thread = CameraThread()
+        # Set the camera device index
+        self.camera_thread.device_index = self.camera_device_index
 
         # Initialize the STT thread with the audio device index
         self.stt_thread = SpeechToTextThread(input_device_index=self.audio_device_index)
@@ -265,26 +410,73 @@ class MainWindow(QMainWindow):
         self.processing_frame = False
         self.presentation_mode = False
         self.black_frame_enabled = False
+        
+        # Add separate state tracking for camera and server connection
+        self.camera_running = False
+        self.server_connected = False
 
         # Create signal handler for curation updates
         self.curation_signal_handler = CurationUpdateSignalHandler()
         self.curation_signal_handler.update_completed.connect(self._handle_curation_update_result)
 
-        # Get initial settings
-        self.get_initial_settings()
+        # Don't automatically connect to server - user will click Connect button
+        # self.get_initial_settings()
+        
+        # Set initial status message
+        self.status_bar.update_processing_status("Ready - Click 'Connect to Server' to connect")
 
     def get_initial_settings(self):
         """Start WebSocket client to get initial settings"""
-        self.status_bar.update_processing_status("Getting settings...")
+        self.status_bar.update_processing_status("Connecting to server...")
+        self.connect_button.setEnabled(False)  # Disable during connection
         self.reconnect_button.setEnabled(False)  # Disable during connection
         self.ws_client.start()
+
+    def toggle_server_connection(self):
+        """Toggle server connection"""
+        if not self.server_connected:
+            self.get_initial_settings()
+        else:
+            self.disconnect_from_server()
+
+    def disconnect_from_server(self):
+        """Disconnect from server"""
+        self.status_bar.update_processing_status("Disconnecting from server...")
+        self.connect_button.setEnabled(False)
+        
+        # Stop streaming if camera is running
+        if self.camera_running:
+            self.ws_client.stop_camera()
+        
+        # Stop WebSocket client
+        self.ws_client.stop()
+        self.server_connected = False
+        
+        # Update UI state
+        self.connect_button.setText("Connect to Server")
+        self.connect_button.setEnabled(True)
+        self.reconnect_button.setEnabled(False)
+        self.status_bar.update_connection_status(False)
+        self.status_bar.update_processing_status("Disconnected from server")
+        
+        # Stop the processed display stream
+        self.processed_display.stop_stream()
 
     def handle_settings(self, settings):
         """Handle received pipeline settings"""
         self.control_panel.setup_pipeline_options(settings)
-        self.start_button.setEnabled(True)
+        self.server_connected = True
+        
+        # Update UI state
+        self.connect_button.setText("Disconnect from Server")
+        self.connect_button.setEnabled(True)
         self.reconnect_button.setEnabled(True)  # Enable after successful settings
         self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
+        
+        # If camera is already running, start streaming automatically
+        if self.camera_running:
+            self.ws_client.start_camera()
+            self.status_bar.update_processing_status("Streaming frames to server...")
         
         # Update curation index from server settings
         current_curation_index = settings.get('current_curation_index', 0)
@@ -301,23 +493,37 @@ class MainWindow(QMainWindow):
             self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
             # Start the MJPEG stream when connected
             self.processed_display.start_stream(self.ws_client.user_id, self.server_http_uri)
-            # Re-enable reconnect button on successful connection
-            self.reconnect_button.setEnabled(True)
+            # Re-enable connect button on successful connection
+            self.connect_button.setEnabled(True)
+            self.connect_button.setText("Disconnect from Server")
         elif status == "disconnected":
+            self.server_connected = False
             self.status_bar.update_connection_status(False)
+            # Update connect button state
+            self.connect_button.setText("Connect to Server")
+            self.connect_button.setEnabled(True)
+            self.reconnect_button.setEnabled(False)
             # Clear the server info from status bar
-            self.status_bar.update_processing_status("")
+            if self.camera_running:
+                self.status_bar.update_processing_status("Camera running (not streaming - disconnected)")
+            else:
+                self.status_bar.update_processing_status("Disconnected from server")
             # Stop the stream when disconnected
             self.processed_display.stop_stream()
         elif status == "ready":
-            # Reset UI state when camera is stopped
-            self.start_button.setText("Start Camera")
-            self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
+            # This status comes when camera streaming is stopped on server side
+            if self.camera_running and self.server_connected:
+                self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
+            elif self.camera_running:
+                self.status_bar.update_processing_status("Camera running (not streaming - disconnected)")
         elif status == "Connection failed after maximum retries":
+            self.server_connected = False
             self.status_bar.update_connection_status(False)
-            self.status_bar.update_processing_status("Connection failed - click Reconnect to retry")
-            # Ensure reconnect button is enabled when connection fails
-            self.reconnect_button.setEnabled(True)
+            self.status_bar.update_processing_status("Connection failed - click Connect to retry")
+            # Ensure connect button is enabled when connection fails
+            self.connect_button.setText("Connect to Server")
+            self.connect_button.setEnabled(True)
+            self.reconnect_button.setEnabled(False)
 
     def handle_camera_frame(self, frame):
         """Handle new frame from camera"""
@@ -341,19 +547,26 @@ class MainWindow(QMainWindow):
                     self.status_bar.update_processing_status(f"FFT Audio Energy: {avg_energy:.2f}")
 
     def toggle_camera(self):
-        """Start/Stop camera and processing"""
-        if self.start_button.text() == "Start Camera":
+        """Start/Stop camera (local display only)"""
+        if not self.camera_running:
             self.start_camera()
         else:
             self.stop_camera()
 
     def start_camera(self):
-        """Start camera and processing"""
+        """Start camera and local display"""
         self.camera_thread.start()
-        self.ws_client.start_camera()
         self.frame_timer.start()
+        self.camera_running = True
         self.start_button.setText("Stop Camera")
-        self.status_bar.update_processing_status("Processing frames...")
+        
+        # Update status based on connection state
+        if self.server_connected:
+            # Start server streaming automatically
+            self.ws_client.start_camera()
+            self.status_bar.update_processing_status("Camera running - streaming to server")
+        else:
+            self.status_bar.update_processing_status("Camera running (not streaming - disconnected)")
 
     def stop_camera(self):
         """Stop camera and processing"""
@@ -365,13 +578,23 @@ class MainWindow(QMainWindow):
         # Stop camera thread
         self.camera_thread.stop()
         
-        # Stop WebSocket processing and wait for ready status
-        self.ws_client.stop_camera()
+        # Stop server streaming if connected
+        if self.server_connected:
+            self.ws_client.stop_camera()
+        
+        # Update state
+        self.camera_running = False
+        self.start_button.setText("Start Camera")
         
         # Clear displays immediately
         self.camera_display.clear_display()
         self.processed_display.clear_display()
-        self.status_bar.update_processing_status("Stopping...")
+        
+        # Update status based on connection state
+        if self.server_connected:
+            self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
+        else:
+            self.status_bar.update_processing_status("Camera stopped")
 
     def process_frame(self):
         """Process current frame through WebSocket"""
@@ -384,33 +607,43 @@ class MainWindow(QMainWindow):
 
     def handle_connection_error(self, error_msg: str):
         """Handle connection errors"""
+        self.server_connected = False
         self.status_bar.update_processing_status(f"Error: {error_msg}")
         self.status_bar.update_connection_status(False)
+        
+        # Update button states
+        self.connect_button.setText("Connect to Server")
+        self.connect_button.setEnabled(True)
+        self.reconnect_button.setEnabled(False)
+        
+        # Update status message based on camera state
+        if self.camera_running:
+            self.status_bar.update_processing_status("Camera running (not streaming - connection error)")
+        else:
+            self.status_bar.update_processing_status(f"Connection error: {error_msg}")
 
     def reconnect_to_server(self):
-        """Reconnect to server by cleanly stopping all threads and reestablishing connection"""
+        """Reconnect to server by cleanly stopping connection and reestablishing it"""
         print("[UI] Manual reconnection initiated...")
         self.status_bar.update_processing_status("Reconnecting to server...")
         self.reconnect_button.setEnabled(False)  # Disable button during reconnection
+        self.connect_button.setEnabled(False)  # Disable connect button during reconnection
         
         try:
-            # Stop all active processes first
-            self._stop_all_threads()
+            # Stop server connection but keep camera running
+            was_camera_running = self.camera_running
             
-            # Clear displays
-            self.camera_display.clear_display()
+            # Stop server streaming if connected
+            if self.server_connected:
+                self.ws_client.stop_camera()
+            
+            # Stop processed display
             self.processed_display.clear_display()
+            self.processed_display.stop_stream()
             
-            # Reset UI state
-            self.start_button.setText("Start Camera")
-            self.start_button.setEnabled(False)
+            # Reset server connection state
+            self.server_connected = False
             self.status_bar.update_connection_status(False)
-            
-            # Reset thread state flags
-            self.stt_active = False
-            self.stt_button.setText("Start Speech Recognition")
-            self.fft_active = False
-            self.fft_button.setText("Start Audio FFT")
             
             # Reset WebSocket client state instead of creating new one
             self.ws_client.reset_connection_state()
@@ -431,6 +664,10 @@ class MainWindow(QMainWindow):
             self.ws_client.settings_received.connect(self.handle_settings)
             self.ws_client.status_changed.connect(self.handle_status_change)
             
+            # Update status based on camera state
+            if was_camera_running:
+                self.status_bar.update_processing_status("Camera running (not streaming - reconnecting)")
+            
             # Start the connection process
             self.get_initial_settings()
             
@@ -439,9 +676,10 @@ class MainWindow(QMainWindow):
         except Exception as e:
             print(f"[UI] Error during reconnection: {e}")
             self.status_bar.update_processing_status(f"Reconnection failed: {e}")
+            self.server_connected = False
         finally:
             # Re-enable the reconnect button after a short delay
-            QTimer.singleShot(2000, lambda: self.reconnect_button.setEnabled(True))
+            QTimer.singleShot(2000, lambda: self.reconnect_button.setEnabled(self.server_connected))
 
     def _stop_all_threads(self):
         """Stop all active threads cleanly"""
@@ -451,6 +689,10 @@ class MainWindow(QMainWindow):
         if hasattr(self, 'frame_timer'):
             self.frame_timer.stop()
         self.processing_frame = False
+        
+        # Reset state variables
+        self.camera_running = False
+        self.server_connected = False
         
         # Stop STT thread if running
         if hasattr(self, 'stt_thread') and self.stt_thread is not None:
@@ -496,6 +738,7 @@ class MainWindow(QMainWindow):
         # Recreate threads (except WebSocket which is recreated in reconnect_to_server)
         print("[UI] Recreating threads...")
         self.camera_thread = CameraThread()
+        self.camera_thread.device_index = self.camera_device_index
         self.camera_thread.frame_ready.connect(self.handle_camera_frame)
         
         # Recreate STT thread
@@ -505,6 +748,16 @@ class MainWindow(QMainWindow):
         # Recreate FFT thread
         self.fft_thread = FFTAnalyzerThread(input_device_index=self.audio_device_index)
         self.fft_thread.fft_data_updated.connect(self.handle_fft_data)
+        
+        # Reset UI button states
+        self.start_button.setText("Start Camera")
+        self.connect_button.setText("Connect to Server")
+        self.connect_button.setEnabled(True)
+        self.reconnect_button.setEnabled(False)
+        self.stt_active = False
+        self.stt_button.setText("Start Speech Recognition")
+        self.fft_active = False
+        self.fft_button.setText("Start Audio FFT")
         
         print("[UI] All threads stopped and recreated successfully")
 
@@ -742,6 +995,11 @@ class MainWindow(QMainWindow):
             # First stop all active processes
             self.frame_timer.stop()
             
+            # Reset state variables
+            self.camera_running = False
+            self.server_connected = False
+            self.processing_frame = False
+            
             # Stop the STT thread if it's running
             if hasattr(self, 'stt_thread') and self.stt_thread is not None:
                 self.stt_thread.stop()
@@ -898,6 +1156,149 @@ class MainWindow(QMainWindow):
                     print(f"[UI] Cleaned up pending curation index")
             except Exception as e:
                 print(f"[UI] Error re-enabling button: {e}")
+
+    def update_camera_index(self):
+        """Update the camera device index"""
+        new_index = self.camera_spinbox.value()
+        
+        if new_index == self.camera_device_index:
+            self.status_bar.update_processing_status(f"Camera already using index {new_index}")
+            return
+            
+        print(f"[UI] Updating camera index from {self.camera_device_index} to {new_index}")
+        self.camera_update_button.setEnabled(False)
+        self.camera_update_button.setText("Updating...")
+        self.status_bar.update_processing_status(f"Updating camera to index {new_index}...")
+        
+        # Store the old state
+        was_camera_running = self.camera_running
+        
+        try:
+            # Stop camera if it's running
+            if was_camera_running:
+                self.stop_camera()
+            
+            # Update the index
+            self.camera_device_index = new_index
+            
+            # Recreate camera thread with new index
+            if hasattr(self, 'camera_thread'):
+                self.camera_thread.stop()
+                self.camera_thread.wait(1000)
+                if self.camera_thread.isRunning():
+                    self.camera_thread.terminate()
+            
+            self.camera_thread = CameraThread()
+            self.camera_thread.device_index = self.camera_device_index
+            self.camera_thread.frame_ready.connect(self.handle_camera_frame)
+            
+            # Restart camera if it was running
+            if was_camera_running:
+                self.start_camera()
+                self.status_bar.update_processing_status(f"Camera updated to index {new_index} and restarted")
+            else:
+                self.status_bar.update_processing_status(f"Camera updated to index {new_index}")
+                
+            print(f"[UI] Successfully updated camera to index {new_index}")
+            
+        except Exception as e:
+            print(f"[UI] Error updating camera index: {e}")
+            self.status_bar.update_processing_status(f"Error updating camera: {e}")
+        finally:
+            self.camera_update_button.setEnabled(True)
+            self.camera_update_button.setText("Update Camera")
+
+    def update_mic_index(self):
+        """Update the microphone device index"""
+        new_index = self.mic_spinbox.value()
+        
+        if new_index == self.audio_device_index:
+            self.status_bar.update_processing_status(f"Microphone already using index {new_index}")
+            return
+            
+        print(f"[UI] Updating microphone index from {self.audio_device_index} to {new_index}")
+        self.mic_update_button.setEnabled(False)
+        self.mic_update_button.setText("Updating...")
+        self.status_bar.update_processing_status(f"Updating microphone to index {new_index}...")
+        
+        # Store the old states
+        was_stt_running = self.stt_active
+        was_fft_running = self.fft_active
+        
+        try:
+            # Stop audio threads if they're running
+            if was_stt_running:
+                self.toggle_stt()  # This will stop and recreate the thread
+            if was_fft_running:
+                self.toggle_fft()  # This will stop and recreate the thread
+            
+            # Update the index
+            self.audio_device_index = new_index
+            
+            # Recreate audio threads with new index
+            self.stt_thread = SpeechToTextThread(input_device_index=self.audio_device_index)
+            self.stt_thread.transcription_updated.connect(self.handle_transcription)
+            
+            self.fft_thread = FFTAnalyzerThread(input_device_index=self.audio_device_index)
+            self.fft_thread.fft_data_updated.connect(self.handle_fft_data)
+            
+            # Restart audio threads if they were running
+            if was_stt_running:
+                self.toggle_stt()  # This will start the new thread
+            if was_fft_running:
+                self.toggle_fft()  # This will start the new thread
+                
+            if was_stt_running or was_fft_running:
+                self.status_bar.update_processing_status(f"Microphone updated to index {new_index} and audio processing restarted")
+            else:
+                self.status_bar.update_processing_status(f"Microphone updated to index {new_index}")
+                
+            print(f"[UI] Successfully updated microphone to index {new_index}")
+            
+        except Exception as e:
+            print(f"[UI] Error updating microphone index: {e}")
+            self.status_bar.update_processing_status(f"Error updating microphone: {e}")
+        finally:
+            self.mic_update_button.setEnabled(True)
+            self.mic_update_button.setText("Update Microphone")
+
+    def refresh_device_lists(self):
+        """Refresh the lists of available cameras and microphones"""
+        print("[UI] Refreshing device lists...")
+        self.refresh_devices_button.setEnabled(False)
+        self.refresh_devices_button.setText("Refreshing...")
+        
+        try:
+            self.available_cameras = detect_cameras()
+            self.available_microphones = detect_microphones()
+            
+            print(f"[UI] Detected cameras: {[(idx, name, info) for idx, name, info in self.available_cameras]}")
+            print(f"[UI] Detected microphones: {[f'{idx}: {name}' for idx, name in self.available_microphones]}")
+            
+            # Update camera spinbox tooltip
+            if self.available_cameras:
+                camera_list = [f"{idx}: {name} ({info})" for idx, name, info in self.available_cameras]
+                self.camera_spinbox.setToolTip("Available cameras:\n" + "\n".join(camera_list))
+            else:
+                self.camera_spinbox.setToolTip("No cameras detected, but you can still try different indices")
+            
+            # Update microphone spinbox tooltip
+            if self.available_microphones:
+                mic_list = [f"{idx}: {name[:30]}..." if len(name) > 30 else f"{idx}: {name}" 
+                           for idx, name in self.available_microphones]
+                self.mic_spinbox.setToolTip("Available microphones:\n" + "\n".join(mic_list))
+            else:
+                self.mic_spinbox.setToolTip("No microphones detected, but you can still try different indices")
+            
+            self.status_bar.update_processing_status(f"Device refresh complete: {len(self.available_cameras)} cameras, {len(self.available_microphones)} microphones")
+            print("[UI] Device lists refreshed successfully")
+            
+        except Exception as e:
+            print(f"[UI] Error refreshing device lists: {e}")
+            self.status_bar.update_processing_status(f"Error refreshing devices: {e}")
+        finally:
+            self.refresh_devices_button.setEnabled(True)
+            self.refresh_devices_button.setText("Refresh Device Lists")
 
     def force_terminate(self):
         """Force terminate the application at the OS level"""

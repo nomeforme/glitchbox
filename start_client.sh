@@ -1,1 +1,2 @@
+#!/bin/bash
 cd frontend_py && source .venv/bin/activate && python main.py
