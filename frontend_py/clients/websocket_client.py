@@ -283,16 +283,24 @@ class WebSocketClient(QThread):
                 
             while self.running:
                 try:
+                    # Check running state more frequently
+                    if not self.running:
+                        print("[WebSocket] Main loop stopping - running flag is False")
+                        break
+                        
                     if self.current_frame is not None and self.processing:
                         processed_frame = await self.receive_processed_frame()
-                        if processed_frame is not None:
+                        if processed_frame is not None and self.running:  # Check again after processing
                             self.frame_received.emit(processed_frame)
-                            
+                    
+                    # Short sleep with running check
                     await asyncio.sleep(0.01)
                         
                 except websockets.exceptions.ConnectionClosed:
                     if not self.running:  # If we're shutting down, don't try to reconnect
+                        print("[WebSocket] Connection closed during shutdown - exiting gracefully")
                         break
+                    print("[WebSocket] Connection closed unexpectedly - attempting reconnect")
                     self.status_changed.emit("disconnected")
                     self.websocket = None
                     self.connection_successful = False
@@ -304,7 +312,9 @@ class WebSocketClient(QThread):
                         break
                 except Exception as e:
                     if not self.running:  # If we're shutting down, don't report errors
+                        print(f"[WebSocket] Exception during shutdown (expected): {e}")
                         break
+                    print(f"[WebSocket] Unexpected error in main loop: {e}")
                     self.connection_error.emit(str(e))
                     self.websocket = None
                     self.connection_successful = False
@@ -346,26 +356,35 @@ class WebSocketClient(QThread):
         self.processing_frame = False
         self.current_frame = None
         
-        # Use a timeout to prevent hanging if the server doesn't respond
-        # Create event loop for stop signal with a timeout
-        if IS_WINDOWS:
-            loop = asyncio.new_event_loop()
-        else:
-            loop = uvloop.new_event_loop()
-        asyncio.set_event_loop(loop)
+        # Emit status change immediately
+        self.status_changed.emit("ready")
+        
+        # Try to send stop signal but don't block if it fails
         try:
-            # Send stop signal to server with timeout
-            loop.run_until_complete(
-                asyncio.wait_for(self._send_stop_signal(), timeout=2.0)
-            )
-        except asyncio.TimeoutError:
-            print("[WebSocket] Stop signal timed out")
+            # Only attempt to send stop signal if we have an active connection
+            if self.websocket and hasattr(self.websocket, 'open') and self.websocket.open:
+                # Create a brief event loop with very short timeout
+                if IS_WINDOWS:
+                    loop = asyncio.new_event_loop()
+                else:
+                    loop = uvloop.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    # Send stop signal to server with very short timeout
+                    loop.run_until_complete(
+                        asyncio.wait_for(self._send_stop_signal(), timeout=0.5)
+                    )
+                    print("[WebSocket] Stop signal sent successfully")
+                except asyncio.TimeoutError:
+                    print("[WebSocket] Stop signal timed out (non-critical)")
+                except Exception as e:
+                    print(f"[WebSocket] Error sending stop signal (non-critical): {e}")
+                finally:
+                    loop.close()
+            else:
+                print("[WebSocket] No active connection, skip sending stop signal")
         except Exception as e:
-            print(f"[WebSocket] Error sending stop signal: {e}")
-        finally:
-            loop.close()
-            # Emit status change to update UI
-            self.status_changed.emit("ready")
+            print(f"[WebSocket] Error during stop camera cleanup (non-critical): {e}")
 
     async def _send_stop_signal(self):
         """Send stop signal to server"""
@@ -383,6 +402,19 @@ class WebSocketClient(QThread):
             except Exception as e:
                 print(f"[WebSocket] Error sending stop signal: {e}")
 
+    def close(self):
+        """Close the WebSocket connection gracefully (called from main thread)"""
+        print("[WebSocket] Closing WebSocket connection gracefully")
+        
+        # Signal to stop processing and running
+        self.running = False
+        self.processing = False
+        
+        # Clear current frame to prevent new processing
+        self.current_frame = None
+        
+        print("[WebSocket] Graceful close initiated - signals set")
+
     def stop(self):
         """Stop the WebSocket client and cleanup resources"""
         print("[WebSocket] Stopping WebSocket client")
@@ -392,38 +424,51 @@ class WebSocketClient(QThread):
             
         self.running = False
         self.processing = False
+        self.current_frame = None
+        
+        # Emit disconnected status immediately
+        self.status_changed.emit("disconnected")
         
         # Create event loop in this thread for cleanup with a timeout
         try:
-            # Signal the main loop to stop
-            self.running = False
-            
-            # Wait with timeout for the thread to finish
-            if not self.wait(3000):  # 3 second timeout
+            # Wait with shorter timeout for the thread to finish gracefully
+            if not self.wait(1000):  # 1 second timeout
                 print("[WebSocket] Thread wait timed out, forcing termination")
                 self.terminate()
+                # Give termination a moment to complete
+                self.wait(500)
+            else:
+                print("[WebSocket] Thread stopped gracefully")
             
-            # Now we can safely close the websocket
+            # Now we can safely close the websocket if it wasn't closed already
             if self.websocket:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
                 try:
-                    # Set a timeout for the close operation
-                    loop.run_until_complete(
-                        asyncio.wait_for(
-                            self._close_websocket(), 
-                            timeout=2.0
+                    # Try a quick close operation with minimal timeout
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(
+                            asyncio.wait_for(
+                                self._close_websocket(), 
+                                timeout=1.0  # Shorter timeout
+                            )
                         )
-                    )
-                except asyncio.TimeoutError:
-                    print("[WebSocket] Close operation timed out")
+                    except asyncio.TimeoutError:
+                        print("[WebSocket] Close operation timed out - forcing close")
+                    except Exception as e:
+                        print(f"[WebSocket] Error during close: {e}")
+                    finally:
+                        loop.close()
+                        self.websocket = None
                 except Exception as e:
-                    print(f"[WebSocket] Error during close: {e}")
-                finally:
-                    loop.close()
+                    print(f"[WebSocket] Error creating event loop for close: {e}")
                     self.websocket = None
         except Exception as e:
             print(f"[WebSocket] Error during cleanup: {e}")
+        finally:
+            # Ensure websocket is None regardless of errors
+            self.websocket = None
+            print("[WebSocket] WebSocket client stopped and cleaned up")
             
     async def _close_websocket(self):
         """Safely close the websocket connection"""
