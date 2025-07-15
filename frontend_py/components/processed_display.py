@@ -74,7 +74,11 @@ class StreamThread(QThread):
     def stop(self):
         """Stop the stream thread"""
         self.running = False
-        self.wait()
+        # Try to wait briefly for graceful shutdown
+        if self.wait(200):  # Wait up to 200ms
+            print("[Stream] Thread stopped gracefully")
+        else:
+            print("[Stream] Thread didn't stop gracefully")
 
 class ZMQThread(QThread):
     """Thread for handling ZMQ image stream"""
@@ -91,6 +95,9 @@ class ZMQThread(QThread):
         try:
             self.socket.connect(zmq_address)
             self.socket.setsockopt(zmq.SUBSCRIBE, b"")  # Subscribe to all messages
+            # Set socket options to prevent blocking
+            self.socket.setsockopt(zmq.RCVTIMEO, 1000)  # 1 second receive timeout
+            self.socket.setsockopt(zmq.LINGER, 0)  # Don't wait for pending messages on close
             print("[ZMQ] Socket connected and subscribed")
         except Exception as e:
             print(f"[ZMQ] Failed to connect to ZMQ socket: {e}")
@@ -105,12 +112,8 @@ class ZMQThread(QThread):
             
             while self.running:
                 try:
-                    # Receive raw bytes with timeout
+                    # Receive raw bytes with timeout (using socket timeout set above)
                     print("[ZMQ] Waiting for data...")
-                    if self.socket.poll(timeout=1000) == 0:  # 1 second timeout
-                        print("[ZMQ] No data received within timeout")
-                        continue
-                        
                     data = self.socket.recv()
                     if not data:
                         print("[ZMQ] Received empty data")
@@ -137,7 +140,16 @@ class ZMQThread(QThread):
                 except zmq.error.Again:
                     print("[ZMQ] ZMQ timeout - no data received")
                     continue
+                except zmq.error.ZMQError as e:
+                    if not self.running:
+                        print("[ZMQ] ZMQ error during shutdown (expected)")
+                        break
+                    print(f"[ZMQ] ZMQ error: {e}")
+                    continue
                 except Exception as e:
+                    if not self.running:
+                        print("[ZMQ] Exception during shutdown (expected)")
+                        break
                     print(f"[ZMQ] Error processing frame: {e}")
                     import traceback
                     traceback.print_exc()
@@ -150,16 +162,32 @@ class ZMQThread(QThread):
         finally:
             print("[ZMQ] Cleaning up ZMQ resources...")
             self.running = False
-            self.socket.close()
-            self.context.term()
-            print("[ZMQ] ZMQ resources cleaned up")
+            try:
+                # Close socket first with timeout
+                if hasattr(self, 'socket') and self.socket:
+                    self.socket.setsockopt(zmq.LINGER, 0)  # Don't wait for pending messages
+                    self.socket.close()
+                
+                # Terminate context with timeout
+                if hasattr(self, 'context') and self.context:
+                    self.context.term()
+                print("[ZMQ] ZMQ resources cleaned up successfully")
+            except Exception as e:
+                print(f"[ZMQ] Error during cleanup (non-critical): {e}")
+            finally:
+                self.socket = None
+                self.context = None
 
     def stop(self):
         """Stop the ZMQ thread"""
         print("[ZMQ] Stopping ZMQ thread...")
         self.running = False
-        self.wait()
-        print("[ZMQ] ZMQ thread stopped")
+        
+        # Try to wait briefly for graceful shutdown
+        if self.wait(200):  # Wait up to 200ms
+            print("[ZMQ] Thread stopped gracefully")
+        else:
+            print("[ZMQ] Thread didn't stop gracefully, will be terminated externally")
 
 class ProcessedDisplay(QWidget):
     """Widget to display processed image output"""
@@ -255,19 +283,78 @@ class ProcessedDisplay(QWidget):
         if self.stream_thread:
             print("[Display] Stopping stream thread...")
             self.stream_thread.stop()
-            self.stream_thread = None
+            # Use QTimer to wait for thread to finish without blocking UI
+            self._wait_for_stream_cleanup()
             
         if self.zmq_thread:
             print("[Display] Stopping ZMQ thread...")
             self.zmq_thread.stop()
-            # Wait for ZMQ thread to finish
-            if self.zmq_thread.wait(2000):  # Wait up to 2 seconds
-                print("[Display] ZMQ thread stopped gracefully")
-            else:
-                print("[Display] Force terminating ZMQ thread")
-                self.zmq_thread.terminate()
+            # Use QTimer to wait for thread to finish without blocking UI
+            self._wait_for_zmq_cleanup()
+
+    def _wait_for_zmq_cleanup(self):
+        """Wait for ZMQ thread to finish without blocking UI"""
+        if self.zmq_thread is None:
+            return
+            
+        # Check if thread has finished
+        if self.zmq_thread.isFinished():
+            print("[Display] ZMQ thread finished gracefully")
+            self.zmq_thread = None
+            return
+        
+        # If thread is still running, try to terminate it gracefully
+        if self.zmq_thread.isRunning():
+            print("[Display] ZMQ thread still running, attempting graceful termination...")
+            from PySide6.QtCore import QTimer
+            
+            # Try to wait a bit more, then force terminate if needed
+            def check_and_terminate():
+                if self.zmq_thread and self.zmq_thread.isRunning():
+                    print("[Display] Force terminating ZMQ thread...")
+                    self.zmq_thread.terminate()
+                    # Give termination a moment to complete
+                    QTimer.singleShot(100, lambda: setattr(self, 'zmq_thread', None))
+                else:
+                    print("[Display] ZMQ thread stopped gracefully")
+                    self.zmq_thread = None
+            
+            QTimer.singleShot(500, check_and_terminate)  # Wait 500ms then check
+        else:
             self.zmq_thread = None
             print("[Display] ZMQ thread cleanup completed")
+
+    def _wait_for_stream_cleanup(self):
+        """Wait for stream thread to finish without blocking UI"""
+        if self.stream_thread is None:
+            return
+            
+        # Check if thread has finished
+        if self.stream_thread.isFinished():
+            print("[Display] Stream thread finished gracefully")
+            self.stream_thread = None
+            return
+        
+        # If thread is still running, try to terminate it gracefully
+        if self.stream_thread.isRunning():
+            print("[Display] Stream thread still running, attempting graceful termination...")
+            from PySide6.QtCore import QTimer
+            
+            # Try to wait a bit more, then force terminate if needed
+            def check_and_terminate():
+                if self.stream_thread and self.stream_thread.isRunning():
+                    print("[Display] Force terminating stream thread...")
+                    self.stream_thread.terminate()
+                    # Give termination a moment to complete
+                    QTimer.singleShot(100, lambda: setattr(self, 'stream_thread', None))
+                else:
+                    print("[Display] Stream thread stopped gracefully")
+                    self.stream_thread = None
+            
+            QTimer.singleShot(300, check_and_terminate)  # Wait 300ms then check
+        else:
+            self.stream_thread = None
+            print("[Display] Stream thread cleanup completed")
 
     def update_frame(self, frame: np.ndarray):
         """Update the display with a new frame"""
@@ -319,17 +406,24 @@ class ProcessedDisplay(QWidget):
 
     def clear_zmq_queue(self):
         """Clear any pending messages in the ZMQ queue"""
-        if self.zmq_thread and self.zmq_thread.running:
+        if self.zmq_thread and self.zmq_thread.running and hasattr(self.zmq_thread, 'socket') and self.zmq_thread.socket:
             try:
+                cleared_count = 0
                 # Clear pending messages by receiving all available data without blocking
                 while self.zmq_thread.socket.poll(timeout=0) > 0:  # 0 timeout = non-blocking
                     self.zmq_thread.socket.recv(zmq.NOBLOCK)
-                    print("[ZMQ] Cleared pending message from queue")
+                    cleared_count += 1
+                    # Prevent infinite loops
+                    if cleared_count > 100:
+                        print(f"[ZMQ] Cleared {cleared_count} messages, stopping to prevent infinite loop")
+                        break
+                if cleared_count > 0:
+                    print(f"[ZMQ] Cleared {cleared_count} pending messages from queue")
             except zmq.error.Again:
                 # No more messages to clear
                 pass
             except Exception as e:
-                print(f"[ZMQ] Error clearing queue: {e}")
+                print(f"[ZMQ] Error clearing queue (non-critical): {e}")
 
     def display_black_frame(self):
         """Display a black frame of the expected image size"""
@@ -381,4 +475,19 @@ class ProcessedDisplay(QWidget):
         
     def __del__(self):
         """Cleanup on deletion"""
-        self.cleanup()
+        try:
+            # Safely stop threads without waiting to prevent core dumps during destruction
+            if hasattr(self, 'stream_thread') and self.stream_thread:
+                self.stream_thread.running = False
+                if self.stream_thread.isRunning():
+                    self.stream_thread.terminate()
+                
+            if hasattr(self, 'zmq_thread') and self.zmq_thread:
+                self.zmq_thread.running = False
+                if self.zmq_thread.isRunning():
+                    self.zmq_thread.terminate()
+                    
+            if hasattr(self, 'fullscreen_window') and self.fullscreen_window:
+                self.fullscreen_window.close()
+        except Exception as e:
+            print(f"[Display] Error during destruction: {e}")

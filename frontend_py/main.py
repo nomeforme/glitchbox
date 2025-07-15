@@ -307,8 +307,14 @@ class MainWindow(QMainWindow):
         
         # Connect to Server button
         self.connect_button = QPushButton("Connect to Server")
-        self.connect_button.clicked.connect(self.toggle_server_connection)
+        self.connect_button.clicked.connect(self.connect_to_server)
         buttons_layout.addWidget(self.connect_button)
+        
+        # Disconnect from Server button
+        self.disconnect_button = QPushButton("Disconnect from Server")
+        self.disconnect_button.clicked.connect(self.disconnect_from_server)
+        self.disconnect_button.setEnabled(False)  # Only enabled when connected
+        buttons_layout.addWidget(self.disconnect_button)
         
         # Start/Stop Camera button
         self.start_button = QPushButton("Start Camera")
@@ -428,39 +434,112 @@ class MainWindow(QMainWindow):
     def get_initial_settings(self):
         """Start WebSocket client to get initial settings"""
         self.status_bar.update_processing_status("Connecting to server...")
-        self.connect_button.setEnabled(False)  # Disable during connection
-        self.reconnect_button.setEnabled(False)  # Disable during connection
+        # Disable all connection buttons during connection
+        self.connect_button.setEnabled(False)
+        self.disconnect_button.setEnabled(False)
+        self.reconnect_button.setEnabled(False)
         self.ws_client.start()
 
-    def toggle_server_connection(self):
-        """Toggle server connection"""
+    def connect_to_server(self):
+        """Connect to server"""
         if not self.server_connected:
             self.get_initial_settings()
         else:
-            self.disconnect_from_server()
+            self.status_bar.update_processing_status("Already connected to server")
 
     def disconnect_from_server(self):
-        """Disconnect from server"""
+        """Disconnect from server with proper cleanup"""
+        if not self.server_connected:
+            self.status_bar.update_processing_status("Not connected to server")
+            return
+            
+        print("[UI] Disconnecting from server...")
         self.status_bar.update_processing_status("Disconnecting from server...")
+        
+        # Disable buttons during disconnection
         self.connect_button.setEnabled(False)
-        
-        # Stop streaming if camera is running
-        if self.camera_running:
-            self.ws_client.stop_camera()
-        
-        # Stop WebSocket client
-        self.ws_client.stop()
-        self.server_connected = False
-        
-        # Update UI state
-        self.connect_button.setText("Connect to Server")
-        self.connect_button.setEnabled(True)
+        self.disconnect_button.setEnabled(False)
         self.reconnect_button.setEnabled(False)
-        self.status_bar.update_connection_status(False)
-        self.status_bar.update_processing_status("Disconnected from server")
         
-        # Stop the processed display stream
+        # Immediately update connection state to prevent further operations
+        self.server_connected = False
+        self.status_bar.update_connection_status(False)
+        
+        # Stop frame processing immediately
+        print("[UI] Stopping frame processing...")
+        self.frame_timer.stop()
+        self.processing_frame = False
+        
+        # Stop the processed display stream immediately
+        print("[UI] Stopping processed display stream...")
+        # Clear ZMQ queue first to prevent blocking on pending messages
+        self.processed_display.clear_zmq_queue()
         self.processed_display.stop_stream()
+        self.processed_display.clear_display()
+        
+        # Use QTimer to perform cleanup asynchronously to avoid blocking UI
+        def perform_async_cleanup():
+            try:
+                print("[UI] Starting async cleanup...")
+                
+                # Stop streaming if camera was running
+                if self.camera_running:
+                    print("[UI] Stopping camera streaming to server...")
+                    try:
+                        self.ws_client.stop_camera()
+                    except Exception as e:
+                        print(f"[UI] Error stopping camera streaming: {e}")
+                
+                # Gracefully close the WebSocket connection
+                print("[UI] Gracefully closing WebSocket connection...")
+                try:
+                    self.ws_client.close()
+                except Exception as e:
+                    print(f"[UI] Error during close: {e}")
+                
+                print("[UI] Async cleanup completed")
+                
+            except Exception as e:
+                print(f"[UI] Error during async cleanup: {e}")
+            
+            # Schedule the final cleanup after a short delay
+            QTimer.singleShot(200, perform_final_cleanup)
+        
+        def perform_final_cleanup():
+            try:
+                print("[UI] Starting final cleanup...")
+                
+                # Stop the WebSocket client thread (non-blocking approach)
+                if hasattr(self, 'ws_client'):
+                    print("[UI] Stopping WebSocket client thread...")
+                    self.ws_client.stop()
+                
+                # Restart frame timer if camera is still running
+                if self.camera_running:
+                    print("[UI] Restarting frame timer for local camera display...")
+                    self.frame_timer.start()
+                
+                print("[UI] Server disconnection completed successfully")
+                
+            except Exception as e:
+                print(f"[UI] Error during final cleanup: {e}")
+                # Try to restart frame timer if camera is running, even after error
+                if self.camera_running and not self.frame_timer.isActive():
+                    self.frame_timer.start()
+            finally:
+                # Always update UI state regardless of errors
+                self.connect_button.setEnabled(True)
+                self.disconnect_button.setEnabled(False)
+                self.reconnect_button.setEnabled(False)
+                
+                # Update status based on camera state
+                if self.camera_running:
+                    self.status_bar.update_processing_status("Camera running (not streaming - disconnected)")
+                else:
+                    self.status_bar.update_processing_status("Disconnected from server")
+        
+        # Start the async cleanup with a small delay to let the UI update
+        QTimer.singleShot(50, perform_async_cleanup)
 
     def handle_settings(self, settings):
         """Handle received pipeline settings"""
@@ -468,8 +547,8 @@ class MainWindow(QMainWindow):
         self.server_connected = True
         
         # Update UI state
-        self.connect_button.setText("Disconnect from Server")
         self.connect_button.setEnabled(True)
+        self.disconnect_button.setEnabled(True)  # Enable disconnect button when connected
         self.reconnect_button.setEnabled(True)  # Enable after successful settings
         self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
         
@@ -493,15 +572,15 @@ class MainWindow(QMainWindow):
             self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
             # Start the MJPEG stream when connected
             self.processed_display.start_stream(self.ws_client.user_id, self.server_http_uri)
-            # Re-enable connect button on successful connection
+            # Re-enable buttons on successful connection
             self.connect_button.setEnabled(True)
-            self.connect_button.setText("Disconnect from Server")
+            self.disconnect_button.setEnabled(True)
         elif status == "disconnected":
             self.server_connected = False
             self.status_bar.update_connection_status(False)
-            # Update connect button state
-            self.connect_button.setText("Connect to Server")
+            # Update button states
             self.connect_button.setEnabled(True)
+            self.disconnect_button.setEnabled(False)
             self.reconnect_button.setEnabled(False)
             # Clear the server info from status bar
             if self.camera_running:
@@ -520,9 +599,9 @@ class MainWindow(QMainWindow):
             self.server_connected = False
             self.status_bar.update_connection_status(False)
             self.status_bar.update_processing_status("Connection failed - click Connect to retry")
-            # Ensure connect button is enabled when connection fails
-            self.connect_button.setText("Connect to Server")
+            # Ensure buttons are in correct state when connection fails
             self.connect_button.setEnabled(True)
+            self.disconnect_button.setEnabled(False)
             self.reconnect_button.setEnabled(False)
 
     def handle_camera_frame(self, frame):
@@ -575,14 +654,7 @@ class MainWindow(QMainWindow):
         self.frame_timer.stop()
         self.processing_frame = False
         
-        # Stop camera thread
-        self.camera_thread.stop()
-        
-        # Stop server streaming if connected
-        if self.server_connected:
-            self.ws_client.stop_camera()
-        
-        # Update state
+        # Update state immediately
         self.camera_running = False
         self.start_button.setText("Start Camera")
         
@@ -590,11 +662,34 @@ class MainWindow(QMainWindow):
         self.camera_display.clear_display()
         self.processed_display.clear_display()
         
-        # Update status based on connection state
-        if self.server_connected:
-            self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
-        else:
-            self.status_bar.update_processing_status("Camera stopped")
+        # Use async cleanup to avoid blocking UI
+        def perform_camera_cleanup():
+            try:
+                print("[UI] Starting camera cleanup...")
+                
+                # Stop camera thread
+                self.camera_thread.stop()
+                
+                # Stop server streaming if connected (non-blocking)
+                if self.server_connected:
+                    try:
+                        self.ws_client.stop_camera()
+                    except Exception as e:
+                        print(f"[UI] Error stopping server streaming: {e}")
+                
+                print("[UI] Camera cleanup completed")
+                
+            except Exception as e:
+                print(f"[UI] Error during camera cleanup: {e}")
+            finally:
+                # Update status based on connection state
+                if self.server_connected:
+                    self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
+                else:
+                    self.status_bar.update_processing_status("Camera stopped")
+        
+        # Start cleanup asynchronously
+        QTimer.singleShot(50, perform_camera_cleanup)
 
     def process_frame(self):
         """Process current frame through WebSocket"""
@@ -612,8 +707,8 @@ class MainWindow(QMainWindow):
         self.status_bar.update_connection_status(False)
         
         # Update button states
-        self.connect_button.setText("Connect to Server")
         self.connect_button.setEnabled(True)
+        self.disconnect_button.setEnabled(False)
         self.reconnect_button.setEnabled(False)
         
         # Update status message based on camera state
@@ -626,8 +721,10 @@ class MainWindow(QMainWindow):
         """Reconnect to server by cleanly stopping connection and reestablishing it"""
         print("[UI] Manual reconnection initiated...")
         self.status_bar.update_processing_status("Reconnecting to server...")
-        self.reconnect_button.setEnabled(False)  # Disable button during reconnection
-        self.connect_button.setEnabled(False)  # Disable connect button during reconnection
+        # Disable all connection buttons during reconnection
+        self.reconnect_button.setEnabled(False)
+        self.connect_button.setEnabled(False)
+        self.disconnect_button.setEnabled(False)
         
         try:
             # Stop server connection but keep camera running
@@ -678,8 +775,22 @@ class MainWindow(QMainWindow):
             self.status_bar.update_processing_status(f"Reconnection failed: {e}")
             self.server_connected = False
         finally:
-            # Re-enable the reconnect button after a short delay
-            QTimer.singleShot(2000, lambda: self.reconnect_button.setEnabled(self.server_connected))
+            # Re-enable buttons after a short delay based on connection state
+            QTimer.singleShot(2000, lambda: self._update_button_states_after_reconnect())
+
+    def _update_button_states_after_reconnect(self):
+        """Update button states after reconnection attempt"""
+        try:
+            if self.server_connected:
+                self.connect_button.setEnabled(True)
+                self.disconnect_button.setEnabled(True)
+                self.reconnect_button.setEnabled(True)
+            else:
+                self.connect_button.setEnabled(True)
+                self.disconnect_button.setEnabled(False)
+                self.reconnect_button.setEnabled(False)
+        except Exception as e:
+            print(f"[UI] Error updating button states after reconnect: {e}")
 
     def _stop_all_threads(self):
         """Stop all active threads cleanly"""
@@ -751,8 +862,8 @@ class MainWindow(QMainWindow):
         
         # Reset UI button states
         self.start_button.setText("Start Camera")
-        self.connect_button.setText("Connect to Server")
         self.connect_button.setEnabled(True)
+        self.disconnect_button.setEnabled(False)
         self.reconnect_button.setEnabled(False)
         self.stt_active = False
         self.stt_button.setText("Start Speech Recognition")
@@ -991,8 +1102,12 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         """Handle window close event - cleanup all threads in proper order"""
         print("[UI] Closing window - cleaning up...")
+        
+        # Accept the close event immediately to prevent freezing
+        event.accept()
+        
         try:
-            # First stop all active processes
+            # Stop all active processes immediately
             self.frame_timer.stop()
             
             # Reset state variables
@@ -1000,54 +1115,79 @@ class MainWindow(QMainWindow):
             self.server_connected = False
             self.processing_frame = False
             
-            # Stop the STT thread if it's running
-            if hasattr(self, 'stt_thread') and self.stt_thread is not None:
-                self.stt_thread.stop()
-                self.stt_thread.wait(1000)  # Wait up to 1 second
-                if self.stt_thread.isRunning():
-                    self.stt_thread.terminate()
-            
-            # Stop the FFT thread if it's running
-            if hasattr(self, 'fft_thread') and self.fft_thread is not None:
-                self.fft_thread.stop()
-                self.fft_thread.wait(1000)  # Wait up to 1 second
-                if self.fft_thread.isRunning():
-                    self.fft_thread.terminate()
-            
-            # Stop the stream immediately to prevent further network activity
+            # Clear displays immediately
+            if hasattr(self, 'camera_display'):
+                self.camera_display.clear_display()
             if hasattr(self, 'processed_display'):
                 print("[UI] Cleaning up processed display...")
+                # Clear ZMQ queue first to prevent blocking
+                self.processed_display.clear_zmq_queue()
                 self.processed_display.cleanup()
             
-            # Force flag changes to prevent new operations
+            # Force terminate all threads immediately to prevent core dumps
+            threads_to_terminate = []
+            
             if hasattr(self, 'ws_client') and self.ws_client is not None:
                 self.ws_client.running = False
                 self.ws_client.processing = False
-                # Force close the WebSocket connection
                 self.ws_client.close()
-                self.ws_client.wait(1000)  # Wait up to 1 second
-                if self.ws_client.isRunning():
-                    self.ws_client.terminate()
+                threads_to_terminate.append(('WebSocket', self.ws_client))
             
-            # Stop camera thread with short timeout
+            if hasattr(self, 'stt_thread') and self.stt_thread is not None:
+                self.stt_thread.stop()
+                threads_to_terminate.append(('STT', self.stt_thread))
+            
+            if hasattr(self, 'fft_thread') and self.fft_thread is not None:
+                self.fft_thread.stop()
+                threads_to_terminate.append(('FFT', self.fft_thread))
+                
             if hasattr(self, 'camera_thread') and self.camera_thread is not None:
                 self.camera_thread.stop()
-                self.camera_thread.wait(1000)  # Wait up to 1 second
-                if self.camera_thread.isRunning():
-                    self.camera_thread.terminate()
+                threads_to_terminate.append(('Camera', self.camera_thread))
             
-            # Clear displays
-            if hasattr(self, 'camera_display'):
-                self.camera_display.clear_display()
+            # Give threads a brief moment to stop gracefully, then force terminate
+            def force_terminate_remaining():
+                for name, thread in threads_to_terminate:
+                    if thread and thread.isRunning():
+                        print(f"[UI] Force terminating {name} thread...")
+                        thread.terminate()
+                
+                # Final cleanup after all threads are terminated
+                def final_cleanup():
+                    print("[UI] All threads terminated - final cleanup...")
+                    QApplication.quit()
+                
+                QTimer.singleShot(200, final_cleanup)  # Final cleanup after 200ms
             
-            print("[UI] Cleanup completed successfully")
+            QTimer.singleShot(300, force_terminate_remaining)  # Force terminate after 300ms
+            
+            print("[UI] Cleanup signals sent - threads will be force terminated if needed")
+            
         except Exception as e:
             print(f"[UI] Error during cleanup: {e}")
-        finally:
-            # Always accept the close event to ensure the window closes
-            event.accept()
-            # Force quit the application if it's still running
-            QApplication.quit()
+            # Force immediate exit on error
+            def emergency_exit():
+                import os
+                print("[UI] Emergency exit due to cleanup error")
+                try:
+                    os._exit(1)
+                except:
+                    import sys
+                    sys.exit(1)
+            
+            QTimer.singleShot(100, emergency_exit)
+            
+        # Use QTimer to force termination if app doesn't quit quickly
+        def force_exit():
+            import os
+            import sys
+            print("[UI] Force terminating application")
+            try:
+                os._exit(0)
+            except:
+                sys.exit(0)
+        
+        QTimer.singleShot(2000, force_exit)  # Force exit after 2 seconds
 
     def update_curation_index(self):
         """Update the curation index on the server"""
