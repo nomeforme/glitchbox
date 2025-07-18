@@ -47,6 +47,7 @@ class Args(NamedTuple):
     prompts_dir: str = "prompts"
     prompt_file_pattern: str = "*.txt"
     loop_prompts: bool = True
+
     # Default acid processor settings
     acid_strength: float = 0.4
     acid_coef_noise: float = 0.15
@@ -102,6 +103,8 @@ class Args(NamedTuple):
     warmup: bool = True
     # LoRA Configuration Directory
     lora_config_dir: str = "lora_config"
+    # Mock server mode for testing
+    mock_server_mode: bool = False
 
     def pretty_print(self):
         print("\n")
@@ -513,12 +516,13 @@ parser.add_argument(
     help="Don't loop back to the beginning when reaching the end of prompts",
 )
 
+
 # Add depth estimation arguments
 parser.add_argument(
     "--use-depth-estimator",
     dest="use_depth_estimator",
     action="store_true",
-    default=True,
+    default=False,
     help="Enable depth estimation using DepthAnything TensorRT",
 )
 parser.add_argument(
@@ -532,7 +536,7 @@ parser.add_argument(
     "--use-camera-as-control",
     dest="use_camera_as_control",
     action="store_true",
-    default=False,
+    default=True,
     help="Use camera image directly as control image, bypassing depth estimation (useful for depth cameras)",
 )
 
@@ -686,6 +690,13 @@ parser.add_argument(
     type=str,
     default="lora_config",
     help="Directory containing LoRA curation JSON configuration files.",
+)
+parser.add_argument(
+    "--mock-server-mode",
+    dest="mock_server_mode",
+    action="store_true",
+    default=True,
+    help="Enable mock server mode for testing",
 )
 
 parser.set_defaults(taesd=USE_TAESD)
