@@ -19,7 +19,7 @@ from components import ControlPanel
 from components import StatusBar
 from clients import WebSocketClient
 from threads import CameraThread, SpeechToTextThread, FFTAnalyzerThread
-from config import MIC_DEVICE_INDEX, AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE, CAMERA_DEVICE_INDEX
+from config import MIC_DEVICE_INDEX, AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE, CAMERA_DEVICE_INDEX, CURATION_INDEX_AUTO_UPDATE, CURATION_INDEX_UPDATE_TIME, CURATION_INDEX_MAX
 load_dotenv(override=True)
 
 # Default server configuration
@@ -225,10 +225,13 @@ class MainWindow(QMainWindow):
         curation_label = QLabel("Curation Index:")
         self.curation_spinbox = QSpinBox()
         self.curation_spinbox.setMinimum(0)
-        self.curation_spinbox.setMaximum(10)
+        self.curation_spinbox.setMaximum(CURATION_INDEX_MAX)
         self.curation_spinbox.setValue(0)  # Default value
         self.curation_update_button = QPushButton("Update")
         self.curation_update_button.clicked.connect(self.update_curation_index)
+        
+        # Connect value change signal to validate the input
+        self.curation_spinbox.valueChanged.connect(self.validate_curation_index)
         
         curation_layout.addWidget(curation_label)
         curation_layout.addWidget(self.curation_spinbox)
@@ -375,6 +378,12 @@ class MainWindow(QMainWindow):
         self.toggle_fullscreen_button.clicked.connect(self.toggle_fullscreen)
         presentation_layout.addWidget(self.toggle_fullscreen_button)
         
+        # Add automatic curation update toggle button
+        self.toggle_auto_curation_button = QPushButton("Start Auto Curation Updates")
+        self.toggle_auto_curation_button.clicked.connect(self.toggle_automatic_curation_updates)
+        self.toggle_auto_curation_button.setToolTip(f"Toggle automatic curation index updates (every {CURATION_INDEX_UPDATE_TIME} seconds, range 0-{CURATION_INDEX_MAX})")
+        presentation_layout.addWidget(self.toggle_auto_curation_button)
+        
         # Add force terminate button
         self.force_terminate_button = QPushButton("Exit")
         self.force_terminate_button.setStyleSheet("background-color: #ff4444; color: white;")
@@ -411,6 +420,11 @@ class MainWindow(QMainWindow):
         self.frame_timer.timeout.connect(self.process_frame)
         self.frame_timer.setInterval(33)  # ~30 FPS
         
+        # Automatic curation index update timer
+        self.curation_auto_timer = QTimer()
+        self.curation_auto_timer.timeout.connect(self.perform_automatic_curation_update)
+        self.curation_auto_timer.setInterval(CURATION_INDEX_UPDATE_TIME * 1000)  # Convert seconds to milliseconds
+        
         # State variables
         self.current_frame = None
         self.processing_frame = False
@@ -430,6 +444,15 @@ class MainWindow(QMainWindow):
         
         # Set initial status message
         self.status_bar.update_processing_status("Ready - Click 'Connect to Server' to connect")
+        
+        # Log automatic curation update configuration
+        if CURATION_INDEX_AUTO_UPDATE:
+            print(f"[UI] Automatic curation updates enabled (interval: {CURATION_INDEX_UPDATE_TIME} seconds)")
+            print(f"[UI] Curation index range: 0 to {CURATION_INDEX_MAX}")
+            print(f"[UI] Timer will start automatically when connected to server")
+        else:
+            print("[UI] Automatic curation updates disabled in config")
+        print(f"[UI] Curation index range: 0 to {CURATION_INDEX_MAX}")
 
     def get_initial_settings(self):
         """Start WebSocket client to get initial settings"""
@@ -489,6 +512,14 @@ class MainWindow(QMainWindow):
         self.processed_display.clear_zmq_queue()
         self.processed_display.stop_stream()
         self.processed_display.clear_display()
+        
+        # Stop automatic curation update timer
+        if self.curation_auto_timer.isActive():
+            print("[UI] Stopping automatic curation update timer")
+            self.curation_auto_timer.stop()
+            # Update button text to reflect inactive state
+            if hasattr(self, 'toggle_auto_curation_button'):
+                self.toggle_auto_curation_button.setText("Start Auto Curation Updates")
         
         # Use QTimer to perform cleanup asynchronously to avoid blocking UI
         def perform_async_cleanup():
@@ -588,6 +619,20 @@ class MainWindow(QMainWindow):
         current_curation_index = settings.get('current_curation_index', 0)
         self.curation_spinbox.setValue(current_curation_index)
         print(f"[UI] Set curation index to {current_curation_index} from server settings")
+        
+        # Start automatic curation update timer if enabled
+        if CURATION_INDEX_AUTO_UPDATE:
+            print(f"[UI] Starting automatic curation update timer (interval: {CURATION_INDEX_UPDATE_TIME} seconds, range 0-{CURATION_INDEX_MAX})")
+            self.curation_auto_timer.start()
+            print(f"[UI] Automatic curation update timer is now active")
+            # Update button text to reflect active state
+            if hasattr(self, 'toggle_auto_curation_button'):
+                self.toggle_auto_curation_button.setText("Stop Auto Curation Updates")
+        else:
+            print("[UI] Automatic curation updates disabled in config")
+            # Update button text to reflect inactive state
+            if hasattr(self, 'toggle_auto_curation_button'):
+                self.toggle_auto_curation_button.setText("Start Auto Curation Updates")
 
     def handle_status_change(self, status: str):
         """Handle WebSocket status changes"""
@@ -617,6 +662,13 @@ class MainWindow(QMainWindow):
                 self.status_bar.update_processing_status("Disconnected from server")
             # Stop the stream when disconnected
             self.processed_display.stop_stream()
+            # Stop automatic curation update timer
+            if self.curation_auto_timer.isActive():
+                print("[UI] Stopping automatic curation update timer due to disconnection")
+                self.curation_auto_timer.stop()
+                # Update button text to reflect inactive state
+                if hasattr(self, 'toggle_auto_curation_button'):
+                    self.toggle_auto_curation_button.setText("Start Auto Curation Updates")
         elif status == "ready":
             # This status comes when camera streaming is stopped on server side
             if self.camera_running and self.server_connected:
@@ -1225,6 +1277,10 @@ class MainWindow(QMainWindow):
             # Stop all active processes immediately
             self.frame_timer.stop()
             
+            # Stop automatic curation update timer
+            if hasattr(self, 'curation_auto_timer'):
+                self.curation_auto_timer.stop()
+            
             # Reset state variables
             self.camera_running = False
             self.server_connected = False
@@ -1305,9 +1361,12 @@ class MainWindow(QMainWindow):
         QTimer.singleShot(2000, force_exit)  # Force exit after 2 seconds
 
     def update_curation_index(self):
-        """Update the curation index on the server"""
+        """Update the curation index on the server (manual button press)"""
         index = self.curation_spinbox.value()
-        
+        self._perform_curation_index_update(index, is_automatic=False)
+
+    def _perform_curation_index_update(self, index, is_automatic=False):
+        """Internal method to perform curation index update"""
         # Enable black frame mode before updating curation index
         if not self.black_frame_enabled:
             print(f"[UI] Enabling black frame mode for curation index update")
@@ -1319,11 +1378,15 @@ class MainWindow(QMainWindow):
         print(f"[UI] Clearing ZMQ queue and displaying black frame for curation index update")
         self.processed_display.clear_zmq_queue()
         
-        # Disable the button during update
-        self.curation_update_button.setEnabled(False)
-        self.curation_update_button.setText("Updating...")
-        self.status_bar.update_processing_status(f"Updating curation index to {index}...")
-        print("[UI] updating curation index", index)
+        # Handle button state only for manual updates
+        if not is_automatic:
+            # Disable the button during update
+            self.curation_update_button.setEnabled(False)
+            self.curation_update_button.setText("Updating...")
+        
+        update_type = "Automatic" if is_automatic else "Manual"
+        self.status_bar.update_processing_status(f"{update_type} curation index update to {index}...")
+        print(f"[UI] {update_type.lower()} curation index update: {index}")
 
         
         # Use QTimer to perform the update without blocking the UI
@@ -1335,6 +1398,7 @@ class MainWindow(QMainWindow):
                 
                 # Store the update parameters for the success/failure callbacks
                 self._pending_curation_index = index
+                self._pending_curation_is_automatic = is_automatic
                 
                 # Call the WebSocket client's update method (this should be non-blocking)
                 # We'll assume the WebSocket client handles this asynchronously
@@ -1380,10 +1444,13 @@ class MainWindow(QMainWindow):
         try:
             print(f"[UI] Handling curation update result: success={success}, message={message}")
             index = getattr(self, '_pending_curation_index', 'unknown')
+            is_automatic = getattr(self, '_pending_curation_is_automatic', False)
+            
+            update_type = "Automatic" if is_automatic else "Manual"
             
             if success:
-                self.status_bar.update_processing_status(f"Curation index updated to {index}: {message}")
-                print(f"[UI] Successfully updated curation index to {index}")
+                self.status_bar.update_processing_status(f"{update_type} curation index updated to {index}: {message}")
+                print(f"[UI] Successfully updated curation index to {index} ({update_type.lower()})")
                 
                 # Automatically disable black frame mode on successful update (if configured)
                 if self.black_frame_enabled and self.auto_disable_black_frame_after_curation_update:
@@ -1392,25 +1459,92 @@ class MainWindow(QMainWindow):
                     self.processed_display.set_black_frame_mode(False)
                     self.toggle_black_frame_button.setText("Enable Black Frame")
             else:
-                self.status_bar.update_processing_status(f"Failed to update curation index: {message}")
-                print(f"[UI] Failed to update curation index: {message}")
+                self.status_bar.update_processing_status(f"Failed to update curation index ({update_type.lower()}): {message}")
+                print(f"[UI] Failed to update curation index ({update_type.lower()}): {message}")
                 
         except Exception as e:
             self.status_bar.update_processing_status(f"Error updating curation index: {str(e)}")
             print(f"[UI] Error in _handle_curation_update_result: {e}")
         finally:
-            # Always re-enable the button, no matter what happens
+            # Re-enable the button only for manual updates
             try:
-                print(f"[UI] Re-enabling curation update button")
-                self.curation_update_button.setEnabled(True)
-                self.curation_update_button.setText("Update Curation Index")
+                if not getattr(self, '_pending_curation_is_automatic', False):
+                    print(f"[UI] Re-enabling curation update button")
+                    self.curation_update_button.setEnabled(True)
+                    self.curation_update_button.setText("Update Curation Index")
                 
-                # Clean up the pending index
+                # Clean up the pending data
                 if hasattr(self, '_pending_curation_index'):
                     delattr(self, '_pending_curation_index')
-                    print(f"[UI] Cleaned up pending curation index")
+                if hasattr(self, '_pending_curation_is_automatic'):
+                    delattr(self, '_pending_curation_is_automatic')
+                print(f"[UI] Cleaned up pending curation data")
             except Exception as e:
-                print(f"[UI] Error re-enabling button: {e}")
+                print(f"[UI] Error cleaning up: {e}")
+
+    def perform_automatic_curation_update(self):
+        """Perform automatic curation index update (called by timer)"""
+        print("[UI] Automatic curation update timer triggered")
+        
+        if not CURATION_INDEX_AUTO_UPDATE:
+            print("[UI] Skipping automatic curation update - disabled in config")
+            return
+            
+        if not self.server_connected:
+            print("[UI] Skipping automatic curation update - not connected to server")
+            return
+            
+        print("[UI] Performing automatic curation index update...")
+        
+        # Get current curation index and increment it
+        current_index = self.curation_spinbox.value()
+        
+        # Calculate next index (cycle through available indices)
+        next_index = (current_index + 1) % (CURATION_INDEX_MAX + 1)
+        
+        # Update the spinbox value
+        self.curation_spinbox.setValue(next_index)
+        
+        # Validate that the value is within range
+        if next_index > CURATION_INDEX_MAX:
+            print(f"[UI] Warning: Curation index {next_index} exceeds maximum {CURATION_INDEX_MAX}, clamping to maximum")
+            next_index = CURATION_INDEX_MAX
+            self.curation_spinbox.setValue(next_index)
+        
+        # Simulate the manual update process
+        print(f"[UI] Automatic curation update: {current_index} -> {next_index}")
+        self.status_bar.update_processing_status(f"Automatic curation update: {current_index} -> {next_index}")
+        
+        # Perform the actual update (similar to manual update but without button interference)
+        self._perform_curation_index_update(next_index, is_automatic=True)
+
+    def validate_curation_index(self, value):
+        """Validate that the curation index is within the configured range"""
+        if value > CURATION_INDEX_MAX:
+            print(f"[UI] Warning: Manual curation index {value} exceeds maximum {CURATION_INDEX_MAX}, clamping to maximum")
+            self.curation_spinbox.setValue(CURATION_INDEX_MAX)
+        elif value < 0:
+            print(f"[UI] Warning: Manual curation index {value} is negative, setting to 0")
+            self.curation_spinbox.setValue(0)
+
+    def toggle_automatic_curation_updates(self):
+        """Toggle automatic curation index updates"""
+        if self.curation_auto_timer.isActive():
+            # Stop automatic updates
+            self.curation_auto_timer.stop()
+            self.toggle_auto_curation_button.setText("Start Auto Curation Updates")
+            self.status_bar.update_processing_status("Automatic curation updates stopped")
+            print("[UI] Automatic curation updates stopped")
+        else:
+            # Start automatic updates (only if connected to server)
+            if self.server_connected:
+                self.curation_auto_timer.start()
+                self.toggle_auto_curation_button.setText("Stop Auto Curation Updates")
+                self.status_bar.update_processing_status(f"Automatic curation updates started (every {CURATION_INDEX_UPDATE_TIME} seconds, range 0-{CURATION_INDEX_MAX})")
+                print(f"[UI] Automatic curation updates started (interval: {CURATION_INDEX_UPDATE_TIME} seconds, range 0-{CURATION_INDEX_MAX})")
+            else:
+                self.status_bar.update_processing_status("Cannot start automatic updates - not connected to server")
+                print("[UI] Cannot start automatic updates - not connected to server")
 
     def update_camera_index(self):
         """Update the camera device index"""
