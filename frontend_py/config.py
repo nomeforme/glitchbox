@@ -21,4 +21,9 @@ FFT_FREQ_START_IDX = 0  # Starting index for frequency range
 FFT_FREQ_END_IDX = None  # Ending index for frequency range (None means use all bins)
 
 # UI behavior settings
-AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE = False  # Automatically disable black frame mode after successful curation index update
+AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE = True  # Automatically disable black frame mode after successful curation index update
+
+# Automatic curation index update settings
+CURATION_INDEX_AUTO_UPDATE = True  # Enable automatic curation index updates
+CURATION_INDEX_UPDATE_TIME = 20  # Update interval in seconds (1 hour = 3600 seconds)
+CURATION_INDEX_MAX = 5  # Maximum curation index value (0 to this value)
