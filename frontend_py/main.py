@@ -977,10 +977,23 @@ class MainWindow(QMainWindow):
     def handle_transcription(self, text):
         """Handle transcribed text from STT and update the prompt"""
         if text and len(text.strip()) > 0:
+            # Get the current client prompt prefix from WebSocket client parameters
+            current_prefix = self.ws_client.params.get('client_prompt_prefix', "")
+            
+            # Prepend the client prompt prefix if it exists
+            if current_prefix and len(current_prefix.strip()) > 0:
+                full_prompt = f"{current_prefix} {text}"
+                print(f"[UI] STT prompt with prefix: '{current_prefix}' + '{text}' = '{full_prompt}'")
+            else:
+                full_prompt = text
+                print(f"[UI] STT prompt without prefix: '{text}'")
+            
             # Update the prompt in the WebSocket client
-            self.ws_client.update_prompt(text)
+            self.ws_client.update_prompt(full_prompt)
+            # Update the prompt field in the control panel
+            self.control_panel.update_control('prompt', full_prompt)
             # Update the UI to show the current prompt
-            self.status_bar.update_processing_status(f"Prompt: {text}")
+            self.status_bar.update_processing_status(f"Prompt: {full_prompt}")
 
     def toggle_stt(self):
         """Toggle speech-to-text processing"""
