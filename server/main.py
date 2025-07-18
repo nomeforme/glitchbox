@@ -33,8 +33,6 @@ from modules.prompt_scheduler import PromptTravelScheduler
 # Import background removal processor
 from modules.bg_removal import get_processor as get_bg_removal_processor
 # Import the depth estimator (conditional)
-depth_estimator_imported = False
-DepthAnything = None
 # Import the image saver
 from modules.image_saver import get_image_saver
 # Import LoRACurationConfig for curation management
@@ -372,11 +370,8 @@ class App:
                 try:
                     print("[main.py] Initializing depth estimator")
                     # Import the depth estimator module only when needed
-                    global depth_estimator_imported, DepthAnything
-                    if not depth_estimator_imported:
-                        from modules.depth_anything.depth_anything_trt import DepthAnythingTRT as DepthAnything
-                        depth_estimator_imported = True
-                        print("[main.py] DepthAnythingTRT module imported")
+                    from modules.depth_anything.depth_anything_trt import DepthAnythingTRT as DepthAnything
+                    print("[main.py] DepthAnythingTRT module imported")
                     
                     self.depth_estimator = DepthAnything(
                         engine_path=self.depth_engine_path,
