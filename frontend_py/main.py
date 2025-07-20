@@ -19,7 +19,7 @@ from components import ControlPanel
 from components import StatusBar
 from clients import WebSocketClient
 from threads import CameraThread, SpeechToTextThread, FFTAnalyzerThread
-from config import MIC_DEVICE_INDEX, AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE, CAMERA_DEVICE_INDEX, CURATION_INDEX_AUTO_UPDATE, CURATION_INDEX_UPDATE_TIME, CURATION_INDEX_MAX
+from config import MIC_DEVICE_INDEX, AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE, FORCE_MANUAL_RECONNECTION_AFTER_CURATION_UPDATE, CAMERA_DEVICE_INDEX, CURATION_INDEX_AUTO_UPDATE, CURATION_INDEX_UPDATE_TIME, CURATION_INDEX_MAX
 load_dotenv(override=True)
 
 # Default server configuration
@@ -110,6 +110,7 @@ class MainWindow(QMainWindow):
         
         # Import and set UI behavior config
         self.auto_disable_black_frame_after_curation_update = AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE
+        self.force_manual_reconnection_after_curation_update = FORCE_MANUAL_RECONNECTION_AFTER_CURATION_UPDATE
         
         # Create scroll area as the central widget
         self.scroll_area = QScrollArea()
@@ -415,6 +416,9 @@ class MainWindow(QMainWindow):
         self.ws_client.status_changed.connect(self.handle_status_change)
         self.camera_thread.frame_ready.connect(self.handle_camera_frame)
         
+        # Track signal connections to prevent duplication
+        self.signal_connections_active = True
+        
         # Frame processing timer
         self.frame_timer = QTimer()
         self.frame_timer.timeout.connect(self.process_frame)
@@ -424,6 +428,10 @@ class MainWindow(QMainWindow):
         self.curation_auto_timer = QTimer()
         self.curation_auto_timer.timeout.connect(self.perform_automatic_curation_update)
         self.curation_auto_timer.setInterval(CURATION_INDEX_UPDATE_TIME * 1000)  # Convert seconds to milliseconds
+        
+        # Track reconnection attempts to prevent infinite loops
+        self.reconnection_count = 0
+        self.max_reconnection_attempts = 5
         
         # State variables
         self.current_frame = None
@@ -596,14 +604,18 @@ class MainWindow(QMainWindow):
         self.reconnect_button.setEnabled(False)  # Disable reconnect when already connected
         self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
         
+        # Reset reconnection count on successful connection
+        self.reconnection_count = 0
+        
         # Ensure ProcessedDisplay streaming is started (important for reconnection)
         print("[UI] Starting ProcessedDisplay streaming...")
         try:
-            # Stop any existing streams first
+            # Stop any existing streams first to prevent duplication
             self.processed_display.stop_stream()
-            # Start fresh streaming
-            self.processed_display.start_stream(self.ws_client.user_id, self.server_http_uri)
-            print("[UI] ProcessedDisplay streaming started successfully")
+            
+            # Add delay to ensure cleanup is complete
+            QTimer.singleShot(100, lambda: self._start_fresh_stream())
+            print("[UI] ProcessedDisplay streaming restart scheduled")
         except Exception as e:
             print(f"[UI] Error starting ProcessedDisplay streaming: {e}")
         
@@ -642,8 +654,9 @@ class MainWindow(QMainWindow):
             self.status_bar.update_connection_status(True)
             # Update the status bar with server info
             self.status_bar.update_processing_status(f"Connected to server: {self.server_host}:{self.server_port}")
-            # Start the MJPEG stream when connected
-            self.processed_display.start_stream(self.ws_client.user_id, self.server_http_uri)
+            # NOTE: Stream is already started in handle_settings() - no need to start it again here
+            # to prevent duplication that causes FPS counter hallucination
+            print("[UI] WebSocket connected - stream should already be active from handle_settings()")
             # Update buttons on successful connection - disable connect and reconnect when connected
             self.connect_button.setEnabled(False)  # Disable connect when already connected
             self.disconnect_button.setEnabled(True)  # Enable disconnect when connected
@@ -806,6 +819,9 @@ class MainWindow(QMainWindow):
         self.connect_button.setEnabled(False)
         self.disconnect_button.setEnabled(False)
         
+        # Add aggressive cleanup before reconnection to prevent resource accumulation
+        self._perform_aggressive_cleanup_before_reconnection()
+        
         # Store camera state to restore later
         was_camera_running = self.camera_running
         
@@ -862,11 +878,16 @@ class MainWindow(QMainWindow):
                     print("[UI] Creating new WebSocket client...")
                     self.ws_client = WebSocketClient(uri=self.server_ws_uri, max_retries=10, initial_retry_delay=1.0)
                     
-                    # Connect signals for the new client
+                    # Connect signals for the new client (ensuring fresh connections)
                     self.ws_client.frame_received.connect(self.processed_display.update_frame)
                     self.ws_client.connection_error.connect(self.handle_connection_error)
                     self.ws_client.settings_received.connect(self.handle_settings)
                     self.ws_client.status_changed.connect(self.handle_status_change)
+                    self.signal_connections_active = True
+                    
+                    # Reset FPS counter for fresh start
+                    if hasattr(self, 'status_bar') and hasattr(self.status_bar, 'frame_times'):
+                        self.status_bar.frame_times = []
                     
                     print("[UI] New WebSocket client created and connected")
                     
@@ -918,11 +939,19 @@ class MainWindow(QMainWindow):
         # This happens in handle_settings when the server connection is established
         # For now, just ensure it's ready to receive new streams
         
-        # Restart frame timer if camera is running
+        # Restart frame timer if camera is running (create fresh timer instance)
         if self.camera_running:
-            print("[UI] Restarting frame timer for camera...")
-            if not self.frame_timer.isActive():
-                self.frame_timer.start()
+            print("[UI] Recreating and starting frame timer for camera...")
+            # Ensure old timer is completely stopped
+            if hasattr(self, 'frame_timer'):
+                self.frame_timer.stop()
+                
+            # Create a completely new timer instance to prevent duplication
+            self.frame_timer = QTimer()
+            self.frame_timer.timeout.connect(self.process_frame)
+            self.frame_timer.setInterval(33)  # ~30 FPS
+            self.frame_timer.start()
+            print("[UI] Fresh frame timer created and started")
         
         print("[UI] Streaming components restart completed")
 
@@ -1458,7 +1487,7 @@ class MainWindow(QMainWindow):
                 if not getattr(self, '_pending_curation_is_automatic', False):
                     print(f"[UI] Re-enabling curation update button")
                     self.curation_update_button.setEnabled(True)
-                    self.curation_update_button.setText("Update Curation Index")
+                    self.curation_update_button.setText("Update")
                 
                 # Clean up the pending data
                 if hasattr(self, '_pending_curation_index'):
@@ -1466,6 +1495,15 @@ class MainWindow(QMainWindow):
                 if hasattr(self, '_pending_curation_is_automatic'):
                     delattr(self, '_pending_curation_is_automatic')
                 print(f"[UI] Cleaned up pending curation data")
+                
+                # Check connection state after curation update and trigger reconnection if needed
+                if self.force_manual_reconnection_after_curation_update:
+                    print(f"[UI] Force Reconnecting after curation update")
+                    # Add longer delay to allow complete cleanup before reconnection
+                    QTimer.singleShot(2000, self.reconnect_to_server)  # 2 second delay
+                else:
+                    self._check_connection_after_curation_update()
+                
             except Exception as e:
                 print(f"[UI] Error cleaning up: {e}")
 
@@ -1675,6 +1713,122 @@ class MainWindow(QMainWindow):
         finally:
             self.refresh_devices_button.setEnabled(True)
             self.refresh_devices_button.setText("Refresh Device Lists")
+
+    def _perform_aggressive_cleanup_before_reconnection(self):
+        """Perform thorough cleanup before reconnection to prevent resource accumulation"""
+        print("[UI] Performing aggressive cleanup before reconnection...")
+        
+        try:
+            # CRITICAL: Stop frame timer to prevent duplication
+            if hasattr(self, 'frame_timer'):
+                self.frame_timer.stop()
+                self.processing_frame = False
+                
+            # Reset FPS counter in aggressive cleanup
+            if hasattr(self, 'status_bar') and hasattr(self.status_bar, 'frame_times'):
+                self.status_bar.frame_times = []
+            
+            # Stop and forcefully cleanup processed display with longer timeout
+            if hasattr(self, 'processed_display'):
+                self.processed_display.clear_zmq_queue()
+                self.processed_display.stop_stream()
+                
+                # Force cleanup of ZMQ and Stream threads
+                if hasattr(self.processed_display, 'zmq_thread') and self.processed_display.zmq_thread:
+                    self.processed_display.zmq_thread.running = False
+                    if self.processed_display.zmq_thread.isRunning():
+                        self.processed_display.zmq_thread.terminate()
+                        self.processed_display.zmq_thread.wait(1000)
+                    self.processed_display.zmq_thread = None
+                    
+                if hasattr(self.processed_display, 'stream_thread') and self.processed_display.stream_thread:
+                    self.processed_display.stream_thread.running = False
+                    if self.processed_display.stream_thread.isRunning():
+                        self.processed_display.stream_thread.terminate()
+                        self.processed_display.stream_thread.wait(1000)
+                    self.processed_display.stream_thread = None
+                
+            # Ensure WebSocket is completely dead before proceeding
+            if hasattr(self, 'ws_client') and self.ws_client is not None:
+                # CRITICAL: Disconnect all signals to prevent duplication
+                if hasattr(self, 'signal_connections_active') and self.signal_connections_active:
+                    try:
+                        self.ws_client.frame_received.disconnect()
+                        self.ws_client.connection_error.disconnect()
+                        self.ws_client.settings_received.disconnect()
+                        self.ws_client.status_changed.disconnect()
+                    except Exception as e:
+                        print(f"[UI] Error disconnecting signals (non-critical): {e}")
+                    self.signal_connections_active = False
+                
+                self.ws_client.running = False
+                self.ws_client.processing = False
+                self.ws_client.connection_successful = False
+                
+                # Force terminate WebSocket thread if it's still running
+                if self.ws_client.isRunning():
+                    self.ws_client.terminate()
+                    self.ws_client.wait(1000)  # Wait up to 1 second
+                    
+            # Force garbage collection to clean up any lingering objects
+            import gc
+            gc.collect()
+                    
+            print("[UI] Aggressive cleanup completed")
+            
+        except Exception as e:
+            print(f"[UI] Error during aggressive cleanup: {e}")
+
+    def _check_connection_after_curation_update(self):
+        """Check connection state after curation update and trigger reconnection if needed"""
+        def check_connection():
+            try:
+                print("[UI] Checking connection state after curation update...")
+                
+                # Check multiple indicators of connection state
+                server_connected = self.server_connected
+                ws_connection_successful = hasattr(self.ws_client, 'connection_successful') and self.ws_client.connection_successful
+                ws_running = hasattr(self.ws_client, 'running') and self.ws_client.running
+                
+                print(f"[UI] Connection state - server_connected: {server_connected}, ws_connection_successful: {ws_connection_successful}, ws_running: {ws_running}")
+                
+                # If any connection indicator shows disconnected state, trigger reconnection
+                if not server_connected or not ws_connection_successful or not ws_running:
+                    # Check if we've exceeded maximum reconnection attempts
+                    if self.reconnection_count >= self.max_reconnection_attempts:
+                        print(f"[UI] Maximum reconnection attempts ({self.max_reconnection_attempts}) reached - stopping automatic reconnection")
+                        self.status_bar.update_processing_status(f"Connection lost - maximum reconnection attempts ({self.max_reconnection_attempts}) reached")
+                        return
+                        
+                    print(f"[UI] Connection appears to be disconnected after curation update - triggering automatic reconnection (attempt {self.reconnection_count + 1}/{self.max_reconnection_attempts})")
+                    self.status_bar.update_processing_status(f"Connection lost after curation update - automatically reconnecting (attempt {self.reconnection_count + 1}/{self.max_reconnection_attempts})...")
+                    
+                    self.reconnection_count += 1
+                    
+                    # Use QTimer to call reconnect_to_server in the next event loop iteration
+                    # This ensures we don't interfere with any ongoing cleanup
+                    QTimer.singleShot(100, self.reconnect_to_server)
+                else:
+                    print("[UI] Connection state appears healthy after curation update")
+                    # Reset reconnection count on successful connection
+                    self.reconnection_count = 0
+                    
+            except Exception as e:
+                print(f"[UI] Error checking connection state after curation update: {e}")
+        
+        # Use QTimer to delay the check longer, allowing the connection state to fully stabilize
+        QTimer.singleShot(1500, check_connection)  # 1.5 second delay
+
+    def _start_fresh_stream(self):
+        """Start a fresh stream with proper cleanup to prevent duplication"""
+        try:
+            if hasattr(self, 'ws_client') and self.ws_client and hasattr(self, 'processed_display'):
+                self.processed_display.start_stream(self.ws_client.user_id, self.server_http_uri)
+                print("[UI] Fresh ProcessedDisplay streaming started successfully")
+            else:
+                print("[UI] Cannot start fresh stream - WebSocket client not available")
+        except Exception as e:
+            print(f"[UI] Error starting fresh stream: {e}")
 
     def force_terminate(self):
         """Force terminate the application at the OS level"""

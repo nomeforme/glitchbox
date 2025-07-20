@@ -22,6 +22,7 @@ FFT_FREQ_END_IDX = None  # Ending index for frequency range (None means use all 
 
 # UI behavior settings
 AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE = True  # Automatically disable black frame mode after successful curation index update
+FORCE_MANUAL_RECONNECTION_AFTER_CURATION_UPDATE = False  # Force manual reconnection after curation index update
 
 # Automatic curation index update settings
 CURATION_INDEX_AUTO_UPDATE = True  # Enable automatic curation index updates

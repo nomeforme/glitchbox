@@ -113,14 +113,14 @@ class ZMQThread(QThread):
             while self.running:
                 try:
                     # Receive raw bytes with timeout (using socket timeout set above)
-                    print("[ZMQ] Waiting for data...")
+                    # print("[ZMQ] Waiting for data...")
                     data = self.socket.recv()
                     if not data:
-                        print("[ZMQ] Received empty data")
+                        # print("[ZMQ] Received empty data")
                         continue
                         
                     # Convert bytes to numpy array
-                    print(f"[ZMQ] Received data of size: {len(data)} bytes")
+                    # print(f"[ZMQ] Received data of size: {len(data)} bytes")
                     frame = np.frombuffer(data, dtype=np.uint8)
                     
                     # Calculate expected size based on display dimensions and upscaling
