@@ -55,7 +55,7 @@ def list_audio_devices():
 def run_FFT_analyzer():
 
     ear = Stream_Analyzer(
-        device = 9,        # Pyaudio (portaudio) device index - using PulseAudio interface for virtual device
+        device = 4,        # Pyaudio (portaudio) device index - using PulseAudio interface for virtual device
         rate   = None,               # Audio samplerate, None uses the default source settings
         FFT_window_size_ms  = 60,    # Window size used for the FFT transform
         updates_per_second  = 500,   # How often to read the audio stream for new data
