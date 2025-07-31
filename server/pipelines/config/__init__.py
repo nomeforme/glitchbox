@@ -41,6 +41,7 @@ class LoRACurationConfig:
             "goldworld": "loras/goldworld-000006.safetensors",
             "monoblue": "loras/jas_monoblue.safetensors",
             "psychaos": "loras/jas_psychaos2-000019.safetensors",
+            "angels": "loras/angelsai-step00001500.safetensors",
         }
 
         self._all_curations = {} # Stores all loaded JSON data {key: data}

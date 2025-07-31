@@ -571,19 +571,13 @@ class PromptTravel:
                 f"You have passed a list of generators of length {len(generator)}, but requested an effective batch"
                 f" size of {batch_size}. Make sure the batch size matches the length of the generators."
             )
-
+        
         if latents is None:
+            print("LATENTS INIT", shape, height, width)
             latents = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
         else:
-            # Resize stored latents to match new dimensions if needed
-            if latents.shape[2:] != shape[2:] and int(height) < 480:
-                latents = torch.nn.functional.interpolate(
-                    latents,
-                    size=shape[2:],
-                    mode='bilinear',
-                    align_corners=False
-                ).to(device)
             noise = randn_tensor(shape, generator=generator, device=device, dtype=dtype)
+            print("NOISE INIT", noise.shape, shape, height, width)
             latents = latent_blend_factor * noise + (1 - latent_blend_factor) * latents
 
         # scale the initial noise by the standard deviation required by the scheduler

@@ -178,10 +178,10 @@ class Pipeline:
             4, min=1, max=15, title="Steps", field="range", hide=True, id="steps"
         )
         width: int = Field(
-            640, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
+            480, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
         )
         height: int = Field(
-            360, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
+            480, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
         )
         guidance_scale: float = Field(
             1.00,
@@ -204,7 +204,7 @@ class Pipeline:
             id="strength",
         )
         controlnet_scale: float = Field(
-            0.75,
+            0.87,
             min=0,
             max=2.0,
             step=0.001,
@@ -581,6 +581,8 @@ class Pipeline:
         self.current_pipe_idx = int(params.pipe_index)
         pipe = self.pipes[self.current_pipe_idx]
         pipe_state = self.pipe_states[self.current_pipe_idx]
+
+        print("LORA CURATION CONFIG", self.lora_curation)
         
         # # Update LoRAs if curation_index has changed
         # self.update_lora_set(pipe, pipe_state, self.curation_index)

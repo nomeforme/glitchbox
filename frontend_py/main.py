@@ -11,6 +11,7 @@ from PySide6.QtCore import Qt, QTimer, Signal, QObject
 
 # Add imports for device detection
 import pyaudio
+import time
 from typing import List, Tuple
 
 from components import CameraDisplay
@@ -19,7 +20,7 @@ from components import ControlPanel
 from components import StatusBar
 from clients import WebSocketClient
 from threads import CameraThread, SpeechToTextThread, FFTAnalyzerThread
-from config import MIC_DEVICE_INDEX, AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE, FORCE_MANUAL_RECONNECTION_AFTER_CURATION_UPDATE, CAMERA_DEVICE_INDEX, CURATION_INDEX_AUTO_UPDATE, CURATION_INDEX_UPDATE_TIME, CURATION_INDEX_MAX
+from config import MIC_DEVICE_INDEX, AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE, BLACK_FRAME_DISABLE_TIMEOUT, FORCE_MANUAL_RECONNECTION_AFTER_CURATION_UPDATE, CAMERA_DEVICE_INDEX, CURATION_INDEX_AUTO_UPDATE, CURATION_INDEX_UPDATE_TIME, CURATION_INDEX_MAX
 load_dotenv(override=True)
 
 # Default server configuration
@@ -111,7 +112,8 @@ class MainWindow(QMainWindow):
         # Import and set UI behavior config
         self.auto_disable_black_frame_after_curation_update = AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE
         self.force_manual_reconnection_after_curation_update = FORCE_MANUAL_RECONNECTION_AFTER_CURATION_UPDATE
-        
+        self.black_frame_disable_timeout = BLACK_FRAME_DISABLE_TIMEOUT
+
         # Create scroll area as the central widget
         self.scroll_area = QScrollArea()
         self.setCentralWidget(self.scroll_area)
@@ -1471,6 +1473,8 @@ class MainWindow(QMainWindow):
                 # Automatically disable black frame mode on successful update (if configured)
                 if self.black_frame_enabled and self.auto_disable_black_frame_after_curation_update:
                     print(f"[UI] Automatically disabling black frame mode after successful curation index update")
+                    print(f"[UI] Waiting {self.black_frame_disable_timeout} seconds...")
+                    time.sleep(self.black_frame_disable_timeout)
                     self.black_frame_enabled = False
                     self.processed_display.set_black_frame_mode(False)
                     self.toggle_black_frame_button.setText("Enable Black Frame")

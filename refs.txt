@@ -62,6 +62,8 @@ uv run pipelines/diffusers_pipelines/pipeline_controlnet_tensorrt.py --sd_model 
 pip install -U --pre oneflow -f https://github.com/siliconflow/oneflow_releases/releases/expanded_assets/community_cu121
 
 # Pip backend
+cd server
+uv sync
 uv pip install pip
 uv pip install -r requirements.txt
 uv pip uninstall torch torchvision torchaudio
