@@ -4,13 +4,15 @@ import time
 import numpy as np
 import sys
 import os
+import subprocess
+import threading
 
 # Add the parent directory to the path to allow importing from the parent package
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import DISPLAY_WIDTH, DISPLAY_HEIGHT
 
 class VideoThread(QThread):
-    """Thread for handling video file playback"""
+    """Thread for handling video file playback with synchronized audio"""
     frame_ready = Signal(np.ndarray)
     video_finished = Signal()
     
@@ -24,6 +26,8 @@ class VideoThread(QThread):
         self.total_frames = 0
         self.current_frame_number = 0
         self.video_fps = 30.0  # Default FPS
+        self.ffplay_process = None
+        self.audio_enabled = True
 
     def set_video_path(self, video_path):
         """Set the video file path"""
@@ -36,6 +40,10 @@ class VideoThread(QThread):
     def set_fps(self, fps):
         """Set target playback FPS"""
         self.target_fps = fps
+        
+    def set_audio_enabled(self, enabled):
+        """Enable or disable audio playback"""
+        self.audio_enabled = enabled
 
     def get_video_info(self):
         """Get video information"""
@@ -56,13 +64,45 @@ class VideoThread(QThread):
         cap.release()
         return info
 
+    def start_ffplay(self):
+        """Start ffplay for synchronized audio/video playback"""
+        try:
+            ffplay_cmd = [
+                'ffplay',
+                '-i', self.video_path,
+                '-nodisp',  # No video display (we'll handle that separately)
+                '-autoexit',  # Exit when finished
+            ]
+            
+            if not self.audio_enabled:
+                ffplay_cmd.append('-an')  # Disable audio
+                
+            if self.loop:
+                ffplay_cmd.extend(['-loop', '0'])  # Loop infinitely
+            
+            print(f"[Video] Starting ffplay: {' '.join(ffplay_cmd)}")
+            self.ffplay_process = subprocess.Popen(
+                ffplay_cmd,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            
+        except Exception as e:
+            print(f"[Video] Error starting ffplay: {e}")
+            self.ffplay_process = None
+
     def run(self):
-        """Main thread loop for reading video frames"""
+        """Main thread loop for synchronized video playback"""
         if not self.video_path or not os.path.exists(self.video_path):
             print(f"[Video] Video file not found: {self.video_path}")
             return
             
         try:
+            # Start ffplay for audio/video sync
+            if self.audio_enabled:
+                self.start_ffplay()
+            
+            # Open video with OpenCV for frame extraction
             self.cap = cv2.VideoCapture(self.video_path)
             if not self.cap.isOpened():
                 print(f"[Video] Failed to open video file: {self.video_path}")
@@ -74,7 +114,6 @@ class VideoThread(QThread):
             if self.video_fps <= 0:
                 self.video_fps = 30.0  # Default if FPS is not available
                 
-            # Set target FPS (use video FPS if not specified)
             target_fps = self.target_fps if self.target_fps else self.video_fps
             frame_delay = 1.0 / target_fps
             
@@ -84,7 +123,18 @@ class VideoThread(QThread):
             self.running = True
             self.current_frame_number = 0
             
+            # Synchronize with ffplay timing
+            start_time = time.time()
+            
             while self.running:
+                # Check if ffplay is still running (if audio enabled)
+                if self.ffplay_process and self.ffplay_process.poll() is not None:
+                    # ffplay finished
+                    if not self.loop:
+                        print("[Video] ffplay finished")
+                        self.video_finished.emit()
+                        break
+                
                 ret, frame = self.cap.read()
                 if not ret:
                     # End of video reached
@@ -104,7 +154,7 @@ class VideoThread(QThread):
                 
                 self.current_frame_number += 1
                 
-                # Sleep to maintain target FPS
+                # Sleep for frame timing
                 time.sleep(frame_delay)
                 
         except Exception as e:
@@ -149,6 +199,19 @@ class VideoThread(QThread):
     def cleanup(self):
         """Clean up video resources"""
         print("[Video] Cleaning up video resources")
+        
+        # Stop ffplay process
+        if self.ffplay_process:
+            try:
+                self.ffplay_process.terminate()
+                self.ffplay_process.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self.ffplay_process.kill()
+            except Exception as e:
+                print(f"[Video] Error stopping ffplay: {e}")
+            self.ffplay_process = None
+        
+        # Release OpenCV resources
         if self.cap is not None and self.cap.isOpened():
             self.cap.release()
             self.cap = None

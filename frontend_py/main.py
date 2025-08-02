@@ -18,6 +18,7 @@ from components import CameraDisplay
 from components import ProcessedDisplay
 from components import ControlPanel
 from components import StatusBar
+from components.video_display import VideoDisplay
 from clients import WebSocketClient
 from threads import CameraThread, SpeechToTextThread, FFTAnalyzerThread, VideoThread, VideoAudioThread
 from config import MIC_DEVICE_INDEX, AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE, BLACK_FRAME_DISABLE_TIMEOUT, FORCE_MANUAL_RECONNECTION_AFTER_CURATION_UPDATE, CAMERA_DEVICE_INDEX, CURATION_INDEX_AUTO_UPDATE, CURATION_INDEX_UPDATE_TIME, CURATION_INDEX_MAX
@@ -197,6 +198,11 @@ class MainWindow(QMainWindow):
         # Camera feed
         self.camera_display = CameraDisplay()
         camera_container_layout.addWidget(self.camera_display)
+        
+        # Video feed (initially hidden)
+        self.video_display = VideoDisplay()
+        self.video_display.setVisible(False)
+        camera_container_layout.addWidget(self.video_display)
         
         # Camera label
         self.camera_label = QLabel("Input Camera")
@@ -459,6 +465,11 @@ class MainWindow(QMainWindow):
         self.video_audio_thread = VideoAudioThread()
         self.video_audio_thread.fft_data_updated.connect(self.handle_fft_data)
         self.video_audio_thread.audio_finished.connect(self.handle_video_finished)
+        
+        # Connect video display signals
+        self.video_display.signals.frame_ready.connect(self.handle_video_frame)
+        self.video_display.signals.fft_data_ready.connect(self.handle_fft_data)
+        self.video_display.signals.video_finished.connect(self.handle_video_finished)
         
         # Connect signals
         self.ws_client.frame_received.connect(self.processed_display.update_frame)
@@ -752,6 +763,22 @@ class MainWindow(QMainWindow):
         """Handle new frame from camera"""
         self.current_frame = frame
         self.camera_display.update_frame(frame)
+
+    def handle_video_frame(self, frame):
+        """Handle new frame from video"""
+        from PySide6.QtGui import QImage, QPixmap
+        from config import DISPLAY_WIDTH, DISPLAY_HEIGHT
+        
+        self.current_frame = frame
+        
+        # Convert numpy array to QPixmap (same as camera display)
+        if frame is not None:
+            height, width = frame.shape[:2]
+            bytes_per_line = 3 * width
+            q_image = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
+            pixmap = QPixmap.fromImage(q_image).scaled(
+                DISPLAY_WIDTH, DISPLAY_HEIGHT, Qt.KeepAspectRatio)
+            self.video_display.video_label.setPixmap(pixmap)
 
     def update_parameter(self, param_id: str, value):
         """Update parameter in WebSocket client"""
@@ -1339,6 +1366,9 @@ class MainWindow(QMainWindow):
             # Clear displays immediately
             if hasattr(self, 'camera_display'):
                 self.camera_display.clear_display()
+            if hasattr(self, 'video_display'):
+                print("[UI] Cleaning up video display...")
+                self.video_display.cleanup()
             if hasattr(self, 'processed_display'):
                 print("[UI] Cleaning up processed display...")
                 # Clear ZMQ queue first to prevent blocking
@@ -1875,17 +1905,55 @@ class MainWindow(QMainWindow):
             print(f"[UI] Error starting fresh stream: {e}")
 
     def force_terminate(self):
-        """Force terminate the application at the OS level"""
+        """Force terminate the application with proper cleanup"""
         print("[UI] Force terminating application...")
         try:
-            # Get the current process ID
-            pid = os.getpid()
-            # Use os.kill to forcefully terminate the process
-            os.kill(pid, 9)  # SIGKILL signal
+            # First, perform proper cleanup
+            self._perform_immediate_cleanup()
+            
+            # Give cleanup a moment to complete
+            import time
+            time.sleep(0.5)
+            
+            # Then close the application gracefully
+            self.close()  # This will trigger closeEvent
+            
         except Exception as e:
-            print(f"[UI] Error during force termination: {e}")
-            # If os.kill fails, try sys.exit as a fallback
-            sys.exit(1)
+            print(f"[UI] Error during cleanup, forcing exit: {e}")
+            # If cleanup fails, use force termination as last resort
+            try:
+                pid = os.getpid()
+                os.kill(pid, 9)  # SIGKILL signal
+            except:
+                sys.exit(1)
+                
+    def _perform_immediate_cleanup(self):
+        """Perform immediate cleanup before termination"""
+        print("[UI] Performing immediate cleanup...")
+        
+        # Stop all active processes
+        if hasattr(self, 'frame_timer'):
+            self.frame_timer.stop()
+            
+        # Stop camera/video
+        if self.camera_running:
+            self.stop_camera()
+            
+        # Clean up video display specifically
+        if hasattr(self, 'video_display'):
+            print("[UI] Force cleaning up video display...")
+            self.video_display.cleanup(force=True)
+            
+        # Stop other threads
+        if hasattr(self, 'stt_thread') and self.stt_thread is not None:
+            self.stt_thread.stop()
+            
+        if hasattr(self, 'fft_thread') and self.fft_thread is not None:
+            self.fft_thread.stop()
+            
+        # Close WebSocket connection
+        if hasattr(self, 'ws_client') and self.ws_client is not None:
+            self.ws_client.close()
 
     def toggle_video_mode(self, state):
         """Toggle between camera/microphone and video input modes"""
@@ -1901,6 +1969,10 @@ class MainWindow(QMainWindow):
             self.camera_update_button.setEnabled(False)
             self.mic_spinbox.setEnabled(False)
             self.mic_update_button.setEnabled(False)
+            
+            # Switch display components
+            self.camera_display.setVisible(False)
+            self.video_display.setVisible(True)
             
             # Update labels and button text
             self.camera_label.setText("Video Input")
@@ -1922,6 +1994,10 @@ class MainWindow(QMainWindow):
             self.camera_update_button.setEnabled(True)
             self.mic_spinbox.setEnabled(True)
             self.mic_update_button.setEnabled(True)
+            
+            # Switch display components
+            self.video_display.setVisible(False)
+            self.camera_display.setVisible(True)
             
             # Update labels and button text
             self.camera_label.setText("Input Camera")
@@ -1948,8 +2024,13 @@ class MainWindow(QMainWindow):
             self.video_path_label.setStyleSheet("color: black; font-style: normal;")
             self.video_path_label.setToolTip(file_path)
             
-            # Update video threads with the new path
+            # Update video display component
+            self.video_display.set_video_path(file_path)
+            self.video_display.set_loop_enabled(self.video_loop_checkbox.isChecked())
+            
+            # Update old video threads (keep for compatibility if needed)
             self.video_thread.set_video_path(file_path)
+            self.video_thread.set_audio_enabled(True)  # Enable audio in video thread
             self.video_audio_thread.set_video_path(file_path)
             
             # Set loop settings
@@ -1977,34 +2058,35 @@ class MainWindow(QMainWindow):
     def start_camera(self):
         """Start camera/video and local display"""
         if self.video_mode and self.video_path:
-            # Start video mode
-            self.video_thread.start()
-            self.video_audio_thread.start()
-            self.frame_timer.start()
-            self.camera_running = True
-            self.start_button.setText("Stop Video")
-            
-            # Automatically enable FFT in video mode
-            if not self.fft_active:
-                self.fft_active = True
-                self.fft_button.setText("Stop Audio FFT")
-                self.status_bar.update_processing_status("Video running with FFT - streaming to server")
-            else:
-                self.status_bar.update_processing_status("Video running - streaming to server")
-            
-            # Update status based on connection state
-            if self.server_connected:
-                # Start server streaming automatically
-                self.ws_client.start_camera()
+            # Start video mode using video display component
+            if self.video_display.start_playback():
+                self.frame_timer.start()
+                self.camera_running = True
+                self.start_button.setText("Stop Video")
+                
+                # Automatically enable FFT in video mode
                 if not self.fft_active:
+                    self.fft_active = True
+                    self.fft_button.setText("Stop Audio FFT")
                     self.status_bar.update_processing_status("Video running with FFT - streaming to server")
                 else:
                     self.status_bar.update_processing_status("Video running - streaming to server")
-            else:
-                if not self.fft_active:
-                    self.status_bar.update_processing_status("Video running with FFT (not streaming - disconnected)")
+                
+                # Update status based on connection state
+                if self.server_connected:
+                    # Start server streaming automatically
+                    self.ws_client.start_camera()
+                    if self.fft_active:
+                        self.status_bar.update_processing_status("Video running with FFT - streaming to server")
+                    else:
+                        self.status_bar.update_processing_status("Video running - streaming to server")
                 else:
-                    self.status_bar.update_processing_status("Video running (not streaming - disconnected)")
+                    if self.fft_active:
+                        self.status_bar.update_processing_status("Video running with FFT (not streaming - disconnected)")
+                    else:
+                        self.status_bar.update_processing_status("Video running (not streaming - disconnected)")
+            else:
+                self.status_bar.update_processing_status("Failed to start video playback")
         else:
             # Start camera mode (original behavior)
             self.camera_thread.start()
@@ -2044,9 +2126,8 @@ class MainWindow(QMainWindow):
                 print("[UI] Starting camera/video cleanup...")
                 
                 if self.video_mode:
-                    # Stop video threads
-                    self.video_thread.stop()
-                    self.video_audio_thread.stop()
+                    # Stop video display component
+                    self.video_display.stop_playback()
                     # Reset FFT state in video mode
                     if self.fft_active:
                         self.fft_active = False
