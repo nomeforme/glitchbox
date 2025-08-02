@@ -1972,6 +1972,8 @@ class MainWindow(QMainWindow):
             if self.camera_running:
                 self.stop_camera()
 
+
+
     def start_camera(self):
         """Start camera/video and local display"""
         if self.video_mode and self.video_path:
