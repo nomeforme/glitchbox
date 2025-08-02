@@ -23,13 +23,10 @@ class VideoAudioThread(QThread):
         self.target_fps = fps
         self.running = False
         self.temp_audio_file = None
-        self.audio_stream = None
-        self.playback_stream = None
         self.pa = None
         self.video_fps = 30.0
         self.audio_duration = 0.0
         self.current_time = 0.0
-        self.audio_playback_enabled = False
         
     def set_video_path(self, video_path):
         """Set the video file path"""
@@ -43,15 +40,7 @@ class VideoAudioThread(QThread):
         """Set target playback FPS"""
         self.target_fps = fps
         
-    def set_audio_playback(self, enabled):
-        """Enable or disable audio playback"""
-        self.audio_playback_enabled = enabled
-        if enabled:
-            # If audio file is ready and no playback stream exists, create it
-            if hasattr(self, 'temp_audio_file') and self.temp_audio_file and not self.playback_stream:
-                self.create_playback_stream()
-        elif not enabled and self.playback_stream:
-            self.stop_playback_stream()
+
         
     def extract_audio_from_video(self, video_path):
         """Extract audio from video file using ffmpeg"""
@@ -139,7 +128,9 @@ class VideoAudioThread(QThread):
             self.audio_samples = np.frombuffer(self.audio_data, dtype=np.int16)
             self.sample_rate = wf.getframerate()
             self.current_sample = 0
-            self.samples_per_chunk = int(self.sample_rate / 50)  # 50Hz update rate
+            # Use video FPS for audio chunks to sync with video
+            target_fps = self.video_fps if self.video_fps > 0 else 30.0
+            self.samples_per_chunk = int(self.sample_rate / target_fps)
             
             return True
             
@@ -147,51 +138,7 @@ class VideoAudioThread(QThread):
             print(f"[VideoAudio] Error creating audio stream: {e}")
             return False
             
-    def create_playback_stream(self):
-        """Create an audio playback stream for hearing the video audio"""
-        try:
-            if not self.pa or not self.temp_audio_file:
-                print("[VideoAudio] Cannot create playback stream - missing PA or audio file")
-                return
-                
-            self.playback_wf = wave.open(self.temp_audio_file, 'rb')
-            
-            # Get audio properties
-            sample_width = self.playback_wf.getsampwidth()
-            channels = self.playback_wf.getnchannels()
-            framerate = self.playback_wf.getframerate()
-            
-            # Create playback stream
-            self.playback_stream = self.pa.open(
-                format=self.pa.get_format_from_width(sample_width),
-                channels=channels,
-                rate=framerate,
-                output=True,
-                frames_per_buffer=1024
-            )
-            
-            # Start the stream
-            self.playback_stream.start_stream()
-            
-            print("[VideoAudio] Audio playback enabled")
-            
-        except Exception as e:
-            print(f"[VideoAudio] Error creating playback stream: {e}")
-            
-    def stop_playback_stream(self):
-        """Stop the audio playback stream"""
-        try:
-            if self.playback_stream:
-                self.playback_stream.stop_stream()
-                self.playback_stream.close()
-                self.playback_stream = None
-                
-            if hasattr(self, 'playback_wf') and self.playback_wf:
-                self.playback_wf.close()
-                self.playback_wf = None
-            
-        except Exception as e:
-            print(f"[VideoAudio] Error stopping playback stream: {e}")
+
             
     def run(self):
         """Main thread execution"""
@@ -211,13 +158,14 @@ class VideoAudioThread(QThread):
                 print("[VideoAudio] Failed to create audio stream")
                 return
                 
-            print("[VideoAudio] Video audio stream created")
-            
-            # Automatically enable audio playback
-            self.audio_playback_enabled = True
-            self.create_playback_stream()
-            
+            print("[VideoAudio] Video audio FFT analyzer ready")
             self.running = True
+            
+            # Use precise timing to match video
+            start_time = time.time()
+            target_fps = self.video_fps if self.video_fps > 0 else 30.0
+            frame_delay = 1.0 / target_fps
+            next_frame_time = start_time
             
             # Process audio data while the thread is running
             while self.running:
@@ -233,19 +181,7 @@ class VideoAudioThread(QThread):
                 end_sample = min(self.current_sample + self.samples_per_chunk, len(self.audio_samples))
                 audio_chunk = self.audio_samples[self.current_sample:end_sample]
                 
-                # Handle audio playback if enabled
-                if self.audio_playback_enabled and self.playback_stream and hasattr(self, 'playback_wf'):
-                    try:
-                        # Read audio data for playback
-                        playback_data = self.playback_wf.readframes(self.samples_per_chunk)
-                        if playback_data:
-                            self.playback_stream.write(playback_data)
-                        else:
-                            # End of playback file
-                            if self.loop:
-                                self.playback_wf.rewind()
-                    except Exception as e:
-                        print(f"[VideoAudio] Error during playback: {e}")
+                # Audio playback is now handled by ffplay in video thread
                 
                 # Pad if necessary for FFT
                 if len(audio_chunk) < self.samples_per_chunk:
@@ -283,8 +219,16 @@ class VideoAudioThread(QThread):
                 # Update sample position
                 self.current_sample += self.samples_per_chunk
                 
-                # Sleep to maintain timing
-                self.msleep(20)  # 50Hz update rate
+                # Precise timing to match video
+                next_frame_time += frame_delay
+                current_time = time.time()
+                sleep_time = next_frame_time - current_time
+                
+                if sleep_time > 0:
+                    time.sleep(sleep_time)
+                else:
+                    # If we're behind, adjust next frame time to current time
+                    next_frame_time = current_time
                 
         except Exception as e:
             print(f"[VideoAudio] Error in video audio thread: {e}")
@@ -295,17 +239,7 @@ class VideoAudioThread(QThread):
         """Clean up resources"""
         self.running = False
         
-        # Stop audio stream
-        if self.audio_stream:
-            try:
-                self.audio_stream.stop_stream()
-                self.audio_stream.close()
-            except:
-                pass
-            self.audio_stream = None
-            
-        # Stop playback stream
-        self.stop_playback_stream()
+        # No audio streams to stop - ffplay handles audio playback
             
         # Close WAV file
         if hasattr(self, 'wf') and self.wf:
