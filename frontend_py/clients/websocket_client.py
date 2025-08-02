@@ -111,8 +111,8 @@ class WebSocketClient(QThread):
                 self.params['acid_settings'][param_id] = value
             else:
                 self.params[param_id] = value
-            print(f"[WebSocket] Updated parameter {param_id}: {value}")
-            print("[WebSocket] Current parameters:", self.params)
+            # print(f"[WebSocket] Updated parameter {param_id}: {value}")
+            # print("[WebSocket] Current parameters:", self.params)
 
     def update_prompt(self, text):
         """Specifically update the prompt parameter with text from STT"""
