@@ -5,7 +5,7 @@ torchaudio>=2.7.0
 accelerate>=1.5.2
 colored>=2.3.0
 compel>=2.0.3
-cuda-python>=12.8.0
+cuda-python<13,>=12.6.0
 diffusers>=0.32.2
 fastapi[all]>=0.115.11
 huggingface-hub>=0.29.3
@@ -27,7 +27,6 @@ uvicorn[standard]>=0.34.0
 opencv-python
 scipy
 pycuda
-cuda-python>=12.8.0
 omegaconf
 PyOpenGL
 PyOpenGL-accelerate
