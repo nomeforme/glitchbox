@@ -752,9 +752,6 @@ class Pipeline:
             else:
                 scale_factor = 1
 
-            scale_factor = 4
-
-
             w0, h0 = (scale_factor * 200, scale_factor * 200)
             control_image = control_image.resize((w0, h0))
             w1, h1 = result_image.size

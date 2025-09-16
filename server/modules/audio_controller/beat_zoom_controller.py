@@ -87,7 +87,7 @@ class BeatZoomController:
             return self.zoom_factor_value
                     
         # Extract max from binned FFT multiplied by amplifying factor
-        use_bin = normalized_energies[10] * self.amplifying_factor
+        use_bin = normalized_energies[48] * self.amplifying_factor
 
         self.use_bin_baseline.append(use_bin)
 

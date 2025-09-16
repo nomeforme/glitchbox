@@ -1,18 +1,18 @@
 {
-    "prompts_file_name": "megamix",
-    "loras": ["robwood", "twisted-bodies", "origami", "nature-sand"],
+    "prompts_file_name": "children_building",
+    "loras": ["children", "building"],
     "adapter_weights_sets": [
-        [1.0, 0.5, 0.2, 0.0],
-        [0.6, 0.9, 0.7, 0.2],
-        [0.4, 0.5, 1.0, 0.5],
-        [0.3, 0.5, 0.9, 0.6],
-        [0.3, 0.6, 0.8, 0.6]
+        [1.0, 0.0],
+        [1.0, 0.5],
+        [1.0, 1.0],
+        [0.5, 1.0],
+        [0.0, 1.0]
     ],
     "input_params": {
         "prompt": "two figures in a dynamic, abstract dance, forming a surreal, interconnected sculpture against a black background.",
         "target_prompt": "a blue dog",
         "pipe_index": 0,
-        "use_prompt_travel": false,
+        "use_prompt_travel": true,
         "prompt_travel_factor": 0.5,
         "use_latent_travel": true,
         "latent_travel_method": "slerp",
@@ -20,7 +20,7 @@
         "lora_scale": 1.0,
         "seed": 4402026899276587,
         "target_seed": null,
-        "steps": 4,
+        "steps": 1,
         "width": 640,
         "height": 360,
         "guidance_scale": 1.0,
@@ -30,6 +30,6 @@
         "controlnet_end": 1.0,
         "debug_controlnet": false,
         "use_output_bg_removal": false,
-        "use_prompt_indexing": false
+        "use_prompt_indexing": true
     }
 } 
