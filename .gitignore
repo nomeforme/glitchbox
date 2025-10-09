@@ -11,6 +11,7 @@ IGNORE
 
 # Ignore prompt prefix files
 server/prompts/*.txt
+server/prompts/output/*
 server/loras/*
 server/modules/bg_removal/pretrained/*
 server/modules/depth_anything/models/*
