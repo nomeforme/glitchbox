@@ -25,6 +25,7 @@ class SpeechToTextThread(QThread):
         
         try:
             # Initialize the AudioToTextRecorder
+            print(f"[STT] Initializing AudioToTextRecorder with input device index: {self.input_device_index}")
             self.recorder = AudioToTextRecorder(
                 input_device_index=self.input_device_index,
                 enable_realtime_transcription=True,

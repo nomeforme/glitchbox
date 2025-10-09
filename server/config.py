@@ -102,6 +102,8 @@ class Args(NamedTuple):
     warmup: bool = True
     # LoRA Configuration Directory
     lora_config_dir: str = "lora_config"
+    # Mock server mode for testing
+    mock_server_mode: bool = False
 
     def pretty_print(self):
         print("\n")
@@ -686,6 +688,13 @@ parser.add_argument(
     type=str,
     default="lora_config",
     help="Directory containing LoRA curation JSON configuration files.",
+)
+parser.add_argument(
+    "--mock-server-mode",
+    dest="mock_server_mode",
+    action="store_true",
+    default=False,
+    help="Enable mock server mode for testing",
 )
 
 parser.set_defaults(taesd=USE_TAESD)
