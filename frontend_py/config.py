@@ -4,10 +4,13 @@ Configuration settings for the Glitch Machine Engine.
 
 # Display and camera dimensions
 DISPLAY_WIDTH = 640#480
-DISPLAY_HEIGHT = 360#480 
+DISPLAY_HEIGHT = 360#480
 DISPLAY_SCALE = 4.0 #4.0
 CAMERA_DEVICE_INDEX = 0 #0 #42
 MIC_DEVICE_INDEX = 0 #16
+
+# Speech-to-text settings
+STT_DEVICE = "cpu"  # Device for STT processing: "cpu" or "cuda"
 
 # Audio settings
 NUM_FFT_BINS = 50
