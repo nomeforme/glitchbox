@@ -17,6 +17,7 @@ dependencies = [
     "pyqt6==6.6.1",
     "pyqt6-qt6==6.6.1",
     "pyqt6-sip==13.6.0",
+    "pyrealsense2>=2.56.5.9235",
     "pyside6==6.6.1",
     "python-dotenv>=1.1.0",
     "python-multipart==0.0.6",
