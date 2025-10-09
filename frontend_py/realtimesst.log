@@ -20728,3 +20728,18 @@ Exception: Selected device validation failed
 2025-06-01 22:26:15.766 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
 2025-06-01 22:26:16.512 - RealTimeSTT: root - DEBUG - _audio_data_worker writing audio data into queue.
 2025-06-01 22:26:16.613 - RealTimeSTT: faster_whisper - INFO - Detected language 'en' with probability 0.87
+2025-10-09 19:39:30.153 - RealTimeSTT: root - INFO - Starting RealTimeSTT
+2025-10-09 19:39:30.169 - RealTimeSTT: root - INFO - Initializing faster_whisper main transcription model tiny
+2025-10-09 19:39:30.169 - RealTimeSTT: root - INFO - Initializing audio recording (creating pyAudio input stream, sample rate: 16000 buffer size: 512
+2025-10-09 19:39:30.169 - RealTimeSTT: root - INFO - Initializing WebRTC voice with Sensitivity 3
+2025-10-09 19:39:30.169 - RealTimeSTT: root - DEBUG - WebRTC VAD voice activity detection engine initialized successfully
+2025-10-09 19:39:30.209 - RealTimeSTT: urllib3.connectionpool - DEBUG - Starting new HTTPS connection (1): huggingface.co:443
+2025-10-09 19:39:30.225 - RealTimeSTT: root - DEBUG - Device validation failed: [Errno -9997] Invalid sample rate
+2025-10-09 19:39:30.226 - RealTimeSTT: root - ERROR - Microphone connection failed: Selected device validation failed. Retrying...
+Traceback (most recent call last):
+  File "/home/dream/Desktop/AI/Glitch/boom/Real-Time-Latent-Consistency-Model/frontend_py/.venv/lib/python3.10/site-packages/RealtimeSTT/audio_recorder.py", line 1078, in initialize_audio_stream
+    raise Exception("Selected device validation failed")
+Exception: Selected device validation failed
+2025-10-09 19:39:30.571 - RealTimeSTT: urllib3.connectionpool - DEBUG - https://huggingface.co:443 "GET /api/models/Systran/faster-whisper-tiny/revision/main HTTP/1.1" 200 1872
+2025-10-09 19:39:30.782 - RealTimeSTT: faster_whisper - INFO - Processing audio with duration 00:01.620
+2025-10-09 19:39:30.789 - RealTimeSTT: faster_whisper - INFO - VAD filter removed 00:00.000 of audio
