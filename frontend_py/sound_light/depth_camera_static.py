@@ -3,6 +3,7 @@ import numpy as np
 import cv2
 import pyvirtualcam # Import the library
 import os # To check if the device exists
+from realsense_utils import create_pipeline_with_reset, hardware_reset_and_wait
 
 # --- RealSense Configuration ---
 WIDTH, HEIGHT, FPS = 640, 480, 30 # Define constants for clarity
@@ -16,8 +17,8 @@ BACKGROUND_REMOVAL_THRESHOLD = 0.5  # Adjust this value between 0.0 and 1.0
 MIN_DEPTH_MM = 300   # Minimum depth to consider (closer objects)
 MAX_DEPTH_MM = 3000  # Maximum depth to consider (further objects)
 
-# Configure depth and color streams
-pipeline = rs.pipeline()
+# Create pipeline with hardware reset for clean state
+pipeline, ctx = create_pipeline_with_reset()
 config = rs.config()
 
 # Get device product line for setting a supporting resolution
@@ -134,5 +135,8 @@ finally:
     print("Stopping RealSense pipeline...")
     pipeline.stop()
     print("RealSense pipeline stopped.")
-    # cv2.destroyAllWindows() # Not needed as no windows were created
+
+    # Hardware reset for next run
+    print("Cleaning up with hardware reset...")
+    hardware_reset_and_wait(ctx, verbose=False)
     print("Script finished.")

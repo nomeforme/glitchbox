@@ -11,9 +11,10 @@ import numpy as np
 import cv2
 import signal
 import sys
+from realsense_utils import create_pipeline_with_reset, hardware_reset_and_wait
 
-# Configure depth and color streams
-pipeline = rs.pipeline()
+# Create pipeline with hardware reset for clean state
+pipeline, ctx = create_pipeline_with_reset()
 config = rs.config()
 
 # Get device product line for setting a supporting resolution
@@ -22,7 +23,7 @@ pipeline_profile = config.resolve(pipeline_wrapper)
 device = pipeline_profile.get_device()
 device_product_line = str(device.get_info(rs.camera_info.product_line))
 print(device_product_line)
-found_rgb = False 
+found_rgb = False
 for s in device.sensors:
     if s.get_info(rs.camera_info.name) == 'RGB Camera':
         found_rgb = True
@@ -112,3 +113,8 @@ finally:
     # Stop streaming
     pipeline.stop()
     cv2.destroyAllWindows()
+
+    # Hardware reset for next run
+    print("Cleaning up with hardware reset...")
+    hardware_reset_and_wait(ctx, verbose=False)
+    print("Cleanup complete.")
