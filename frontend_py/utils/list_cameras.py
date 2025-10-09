@@ -31,7 +31,7 @@ def get_video_devices() -> List[str]:
     Returns a list of video device paths
     """
     devices = []
-    for i in range(10):  # Check first 10 indices
+    for i in range(50):  # Check first 50 indices (to support virtual cameras like /dev/video42)
         path = f"/dev/video{i}"
         if os.path.exists(path):
             devices.append(path)
@@ -109,9 +109,9 @@ def main():
     if not video_devices:
         print("No video devices found in /dev/video*")
         print("\nTrying OpenCV camera detection...")
-        
+
         # Fallback to OpenCV detection
-        for i in range(10):  # Check first 10 indices
+        for i in range(50):  # Check first 50 indices (to support virtual cameras like /dev/video42)
             success, message, device_info = test_camera(i)
             if success:
                 print(f"\nCamera found at index {i}")
