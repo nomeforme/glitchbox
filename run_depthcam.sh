@@ -31,4 +31,4 @@ echo "------------------------------------------------------------"
 # Make sure you are in your virtual environment if you run this script directly.
 # Or activate it here:
 # source .venv/bin/activate
-python depth_virtual_camera.py
+python frontend_py/utils/depthcam/depth_virtual_camera.py
