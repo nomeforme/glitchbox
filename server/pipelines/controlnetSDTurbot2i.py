@@ -108,13 +108,12 @@ class Pipeline:
             hide=True,
         )
         client_prompt_prefix: str = Field(
-            default_prompt,
+            prompt_prefix,
             title="Client Prompt Prefix",
             field="textarea",
             id="client_prompt_prefix",
             description="Prefix to prepend to client-provided prompts from STT",
         )
-
         pipe_index: int = Field(
             0,
             min=0,
