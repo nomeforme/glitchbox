@@ -107,6 +107,13 @@ class Pipeline:
             id="target_prompt",
             hide=True,
         )
+        client_prompt_prefix: str = Field(
+            default_prompt,
+            title="Client Prompt Prefix",
+            field="textarea",
+            id="client_prompt_prefix",
+            description="Prefix to prepend to client-provided prompts from STT",
+        )
 
         pipe_index: int = Field(
             0,
@@ -298,6 +305,13 @@ class Pipeline:
             field="checkbox",
             id="use_prompt_indexing",
             description="Use pipe index to select prompts from file instead of sequential scheduling",
+        )
+        use_client_prompts: bool = Field(
+            False,
+            title="Use Client Prompts",
+            field="checkbox",
+            id="use_client_prompts",
+            description="Use client-provided prompts instead of scheduled prompts for prompt travel",
         )
 
     def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype, lora_config=None):

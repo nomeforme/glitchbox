@@ -32,8 +32,7 @@ from utils.test_oscillators import ZoomOscillator, ShiftOscillator
 from modules.prompt_scheduler import PromptTravelScheduler
 # Import background removal processor
 from modules.bg_removal import get_processor as get_bg_removal_processor
-# Import the depth estimator
-from modules.depth_anything.depth_anything_trt import DepthAnythingTRT as DepthAnything
+# Import the depth estimator (conditional)
 # Import the image saver
 from modules.image_saver import get_image_saver
 # Import LoRACurationConfig for curation management
@@ -41,7 +40,7 @@ from pipelines.config import LoRACurationConfig
 
 import numpy as np
 import zmq
-import pycuda.driver as cuda
+# import pycuda.driver as cuda
 
 # # Print detailed CUDA device information
 # print("\nDetailed CUDA Device Information:")
@@ -370,6 +369,10 @@ class App:
             if self.use_depth_estimator:
                 try:
                     print("[main.py] Initializing depth estimator")
+                    # Import the depth estimator module only when needed
+                    from modules.depth_anything.depth_anything_trt import DepthAnythingTRT as DepthAnything
+                    print("[main.py] DepthAnythingTRT module imported")
+                    
                     self.depth_estimator = DepthAnything(
                         engine_path=self.depth_engine_path,
                         device=device.type,
@@ -423,8 +426,11 @@ class App:
                     print("[main.py] Prompt travel service initialized and background tasks started")
                 except Exception as e:
                     print(f"[main.py] Error initializing embeddings service: {e}")
-                    print("[main.py] Running without prompt travel")
-                    self.use_prompt_travel = False
+                    if getattr(self.args, 'mock_server_mode', False):
+                        print("[main.py] Mock server mode enabled - keeping prompt travel enabled despite initialization error")
+                    else:
+                        print("[main.py] Running without prompt travel")
+                        self.use_prompt_travel = False
         
         @self.app.on_event("shutdown")
         async def shutdown_event():
@@ -595,26 +601,38 @@ class App:
                                     
                                     # Use scheduled prompts if prompt scheduler is enabled
                                     if self.prompt_travel_scheduler.use_prompt_scheduler:
-                                        # Check if prompt indexing is enabled
-                                        if getattr(params, 'use_prompt_indexing', False):
-                                            # Use pipe index to select prompts
-                                            prompt_index = getattr(params, 'prompt_index', 0)
-                                            indexed_prompt = self.prompt_travel_scheduler.get_prompt_by_index(prompt_index)
-                                            if indexed_prompt is not None:
-                                                setattr(params, 'prompt', indexed_prompt)
-                                                setattr(params, 'target_prompt', indexed_prompt)  # Same prompt for both
+                                        # Check if we should use client prompts instead of scheduled prompts
+                                        if getattr(params, 'use_client_prompts', False):
+                                            # Use client-provided prompt for both current and target
+                                            client_prompt = getattr(params, 'prompt', '')
+                                            if client_prompt:
+                                                setattr(params, 'prompt', client_prompt)
+                                                setattr(params, 'target_prompt', client_prompt)
                                                 if self.args.debug:
-                                                    print(f"[main.py] Using indexed prompt for prompt index {prompt_index}: {indexed_prompt}")
+                                                    print(f"[main.py] Using client prompts:")
+                                                    print(f"source: {client_prompt}")
+                                                    print(f"target: {client_prompt}")
                                         else:
-                                            # Use sequential prompt scheduling
-                                            current_prompt, next_prompt = self.prompt_travel_scheduler.get_prompts()
-                                            if current_prompt is not None and next_prompt is not None:
-                                                setattr(params, 'prompt', current_prompt)
-                                                setattr(params, 'target_prompt', next_prompt)
-                                                if self.args.debug:
-                                                    print(f"[main.py] Using scheduled prompts:")
-                                                    print(f"source: {current_prompt}")
-                                                    print(f"target: {next_prompt}")
+                                            # Check if prompt indexing is enabled
+                                            if getattr(params, 'use_prompt_indexing', False):
+                                                # Use pipe index to select prompts
+                                                prompt_index = getattr(params, 'prompt_index', 0)
+                                                indexed_prompt = self.prompt_travel_scheduler.get_prompt_by_index(prompt_index)
+                                                if indexed_prompt is not None:
+                                                    setattr(params, 'prompt', indexed_prompt)
+                                                    setattr(params, 'target_prompt', indexed_prompt)  # Same prompt for both
+                                                    if self.args.debug:
+                                                        print(f"[main.py] Using indexed prompt for prompt index {prompt_index}: {indexed_prompt}")
+                                            else:
+                                                # Use sequential prompt scheduling
+                                                current_prompt, next_prompt = self.prompt_travel_scheduler.get_prompts()
+                                                if current_prompt is not None and next_prompt is not None:
+                                                    setattr(params, 'prompt', current_prompt)
+                                                    setattr(params, 'target_prompt', next_prompt)
+                                                    if self.args.debug:
+                                                        print(f"[main.py] Using scheduled prompts:")
+                                                        print(f"source: {current_prompt}")
+                                                        print(f"target: {next_prompt}")
                                     
                                     if self.args.debug:
                                         print(f"[main.py] Using scheduled prompt travel factor: {scheduler_factor:.2f}")
