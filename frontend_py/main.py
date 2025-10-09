@@ -36,38 +36,21 @@ class CurationUpdateSignalHandler(QObject):
 def detect_cameras() -> List[Tuple[int, str, str]]:
     """Detect available camera indices with device names and info"""
     available_cameras = []
-    for i in range(50):  # Check first 50 indices (to support virtual cameras like /dev/video42)
-        try:
-            cap = cv2.VideoCapture(i)
-            if cap.isOpened():
-                ret, frame = cap.read()
-                if ret:
-                    # Get basic camera properties
-                    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                    fps = cap.get(cv2.CAP_PROP_FPS)
-                    
-                    # Try to get device name from sysfs (Linux)
-                    device_name = f"Camera {i}"
-                    try:
-                        sysfs_path = f"/sys/class/video4linux/video{i}/name"
-                        if os.path.exists(sysfs_path):
-                            with open(sysfs_path, 'r') as f:
-                                device_name = f.read().strip()
-                    except Exception:
-                        pass
-                    
-                    # Create info string with resolution and FPS
-                    info = f"{width}x{height}"
-                    if fps > 0:
-                        info += f" @ {fps:.1f}fps"
-                    
-                    available_cameras.append((i, device_name, info))
-                cap.release()
-            else:
-                cap.release()
-        except Exception:
-            pass
+    for i in range(MAX_CAMERA_INDEX):
+        success, message, camera_info = test_camera(i)
+        if success:
+            # Get device name from sysfs
+            device_path = f"/dev/video{i}"
+            device_info = get_device_info(device_path)
+            device_name = device_info.get('name', f"Camera {i}")
+
+            # Create info string with resolution and FPS
+            info = camera_info.get('resolution', 'Unknown')
+            if camera_info.get('fps', 0) > 0:
+                info += f" @ {camera_info['fps']:.1f}fps"
+
+            available_cameras.append((i, device_name, info))
+
     return available_cameras
 
 def detect_microphones() -> List[Tuple[int, str]]:
@@ -260,7 +243,7 @@ class MainWindow(QMainWindow):
         camera_label = QLabel("Camera Index:")
         self.camera_spinbox = QSpinBox()
         self.camera_spinbox.setMinimum(0)
-        self.camera_spinbox.setMaximum(50)  # Allow higher range to support virtual cameras like /dev/video42
+        self.camera_spinbox.setMaximum(MAX_CAMERA_INDEX)
         self.camera_spinbox.setValue(self.camera_device_index)
         
         # Set range and tooltip based on detected cameras
