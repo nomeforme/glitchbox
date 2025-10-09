@@ -7,6 +7,7 @@ import sys
 import os
 from typing import List, Dict, Tuple
 import pyaudio
+from config import MAX_CAMERA_INDEX
 
 def list_audio_devices():
     p = pyaudio.PyAudio()
@@ -31,7 +32,7 @@ def get_video_devices() -> List[str]:
     Returns a list of video device paths
     """
     devices = []
-    for i in range(50):  # Check first 50 indices (to support virtual cameras like /dev/video42)
+    for i in range(MAX_CAMERA_INDEX):
         path = f"/dev/video{i}"
         if os.path.exists(path):
             devices.append(path)
@@ -111,7 +112,7 @@ def main():
         print("\nTrying OpenCV camera detection...")
 
         # Fallback to OpenCV detection
-        for i in range(50):  # Check first 50 indices (to support virtual cameras like /dev/video42)
+        for i in range(MAX_CAMERA_INDEX):
             success, message, device_info = test_camera(i)
             if success:
                 print(f"\nCamera found at index {i}")
