@@ -21,7 +21,8 @@ from components import StatusBar
 from components.video_display import VideoDisplay
 from clients import WebSocketClient
 from threads import CameraThread, SpeechToTextThread, FFTAnalyzerThread, VideoThread, VideoAudioThread
-from config import MIC_DEVICE_INDEX, AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE, BLACK_FRAME_DISABLE_TIMEOUT, FORCE_MANUAL_RECONNECTION_AFTER_CURATION_UPDATE, CAMERA_DEVICE_INDEX, CURATION_INDEX_AUTO_UPDATE, CURATION_INDEX_UPDATE_TIME, CURATION_INDEX_MAX
+from config import MIC_DEVICE_INDEX, AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE, BLACK_FRAME_DISABLE_TIMEOUT, FORCE_MANUAL_RECONNECTION_AFTER_CURATION_UPDATE, CAMERA_DEVICE_INDEX, CURATION_INDEX_AUTO_UPDATE, CURATION_INDEX_UPDATE_TIME, CURATION_INDEX_MAX, MAX_CAMERA_INDEX
+from utils.list_cameras import test_camera, get_device_info
 load_dotenv(override=True)
 
 # Default server configuration
@@ -35,7 +36,7 @@ class CurationUpdateSignalHandler(QObject):
 def detect_cameras() -> List[Tuple[int, str, str]]:
     """Detect available camera indices with device names and info"""
     available_cameras = []
-    for i in range(10):  # Check first 10 indices
+    for i in range(50):  # Check first 50 indices (to support virtual cameras like /dev/video42)
         try:
             cap = cv2.VideoCapture(i)
             if cap.isOpened():
@@ -259,7 +260,7 @@ class MainWindow(QMainWindow):
         camera_label = QLabel("Camera Index:")
         self.camera_spinbox = QSpinBox()
         self.camera_spinbox.setMinimum(0)
-        self.camera_spinbox.setMaximum(20)  # Allow higher range in case detection missed some
+        self.camera_spinbox.setMaximum(50)  # Allow higher range to support virtual cameras like /dev/video42
         self.camera_spinbox.setValue(self.camera_device_index)
         
         # Set range and tooltip based on detected cameras

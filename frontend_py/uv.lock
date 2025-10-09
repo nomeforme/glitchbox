@@ -366,6 +366,7 @@ dependencies = [
     { name = "pyside6" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
+    { name = "pyvirtualcam" },
     { name = "pyzmq" },
     { name = "realtimestt" },
     { name = "requests" },
@@ -394,6 +395,7 @@ requires-dist = [
     { name = "pyside6", specifier = "==6.6.1" },
     { name = "python-dotenv", specifier = ">=1.1.0" },
     { name = "python-multipart", specifier = "==0.0.6" },
+    { name = "pyvirtualcam", specifier = ">=0.14.0" },
     { name = "pyzmq", specifier = ">=26.4.0" },
     { name = "realtimestt", specifier = "==0.3.98" },
     { name = "requests", specifier = ">=2.32.3" },
@@ -1621,6 +1623,36 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/2d/23/abcfad10c3348cb6358400f8adbc21b523bbc6c954494fd0974428068672/python_multipart-0.0.6.tar.gz", hash = "sha256:e9925a80bb668529f1b67c7fdb0a5dacdd7cbfc6fb0bff3ea443fe22bdd62132", size = 31024, upload-time = "2023-02-27T16:40:10.091Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b4/ff/b1e11d8bffb5e0e1b6d27f402eeedbeb9be6df2cdbc09356a1ae49806dbf/python_multipart-0.0.6-py3-none-any.whl", hash = "sha256:ee698bab5ef148b0a760751c261902cd096e57e10558e11aca17646b74ee1c18", size = 45711, upload-time = "2023-02-27T16:40:14.113Z" },
+]
+
+[[package]]
+name = "pyvirtualcam"
+version = "0.14.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "numpy" },
+]
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b0/e0/b366e37c7850f82080d8e19b36164011851d273a14461f3a3781f54361ab/pyvirtualcam-0.14.0-cp310-cp310-macosx_10_9_x86_64.whl", hash = "sha256:5a1545f0b815da5a0d35b3ba450cad8422bdb730b65d1994ce22ccb5691bc36a", size = 643255, upload-time = "2025-09-10T07:31:17.004Z" },
+    { url = "https://files.pythonhosted.org/packages/35/80/39e23d4ed14d7e46842bd493f8baa48a35035d2d26c893cee246b623a254/pyvirtualcam-0.14.0-cp310-cp310-macosx_11_0_arm64.whl", hash = "sha256:bc2cc8df8ad4418cb0aa937fd83be91b8204c6b2d54976fc6f54d585ebf477bd", size = 645719, upload-time = "2025-09-10T07:31:18.772Z" },
+    { url = "https://files.pythonhosted.org/packages/c1/76/d6d61e68a257873b1dc6b95721a7fbaaa825505d192808c5b98f66bfde84/pyvirtualcam-0.14.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:1512977c103759d9294d160ee4c38a2e8ef825be8a3726d14f3c289786b2b1fc", size = 158574, upload-time = "2025-09-10T07:31:19.929Z" },
+    { url = "https://files.pythonhosted.org/packages/08/22/45bd42995b06709325cd997f3773397555f80656650896f3f1db33ea52e3/pyvirtualcam-0.14.0-cp310-cp310-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:ab32643b667971702069ac6e6bb34a5c1671b2471a0b32ee9e6e1b93872dc37b", size = 114196, upload-time = "2025-09-10T07:31:20.991Z" },
+    { url = "https://files.pythonhosted.org/packages/8b/00/485e4dcd8da0444232e647ac9a47b9703995fe8e4f20cab5f10d8661890a/pyvirtualcam-0.14.0-cp310-cp310-win_amd64.whl", hash = "sha256:cbafb5d04ce1b4bcd6d4131fb1df981ff68f5a44ff3a4cd25a375eefe412d36d", size = 185797, upload-time = "2025-09-10T07:31:22.318Z" },
+    { url = "https://files.pythonhosted.org/packages/f0/98/3be3c0934808d8ea4b3aa7277fde5fcddb5b31f6bdc0b7740d04ebfc9417/pyvirtualcam-0.14.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:ff2b3da10cd7ecf7403124205b661636a7c0fab2a7ff556c80a729fcde01a00d", size = 645537, upload-time = "2025-09-10T07:31:23.396Z" },
+    { url = "https://files.pythonhosted.org/packages/ca/06/7dd05e466ae60387796d830ec0b2f05dcad2f995ab033f8c931ae72a3752/pyvirtualcam-0.14.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:855e481389f53bff3b4787149b87f1991b3caf82d0419147516160b9ce6f98bf", size = 647615, upload-time = "2025-09-10T07:31:24.74Z" },
+    { url = "https://files.pythonhosted.org/packages/7b/58/c883204289a5470f7a73f89bee6c72a1eb42e0dcd6de0fb92290c54c48b5/pyvirtualcam-0.14.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:579ea0ce4d81e6e7e5cb8785a7d8a3f35285f99f2933c8f76ab9ac7389623660", size = 160338, upload-time = "2025-09-10T07:31:26.189Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/bc/4863450456a564e8f9ed2a35769ed1f535161b3a45a5222b7049ea1db1a3/pyvirtualcam-0.14.0-cp311-cp311-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:6ad2bda5bfd3c7b0f772a47102c389e881f5779b8d909687a6d63a273a2f32c4", size = 115235, upload-time = "2025-09-10T07:31:27.297Z" },
+    { url = "https://files.pythonhosted.org/packages/b2/7f/5b399907ab5bb99ed61aa876dc8afc24e2a51e0eafeb9d4e93bdc70c54ef/pyvirtualcam-0.14.0-cp311-cp311-win_amd64.whl", hash = "sha256:14e56df362dc2e06e9cd7a44d8660ded4afdb5f01dc8aa9bed31342dc946d76c", size = 187742, upload-time = "2025-09-10T07:31:28.327Z" },
+    { url = "https://files.pythonhosted.org/packages/78/47/c16b447b6023b582861fc5e0e3df1618210984c1702d5b671ddd14b273b6/pyvirtualcam-0.14.0-cp312-cp312-macosx_10_9_x86_64.whl", hash = "sha256:9e4d051ce09eb7ef41b2f5520813791366e1bce1a81e75a4f79b87ee15336716", size = 648481, upload-time = "2025-09-10T07:31:29.431Z" },
+    { url = "https://files.pythonhosted.org/packages/74/d2/8558d55bd504f611f4049083eb6a1222ba862bc1cbefaff73f4510d4c1c8/pyvirtualcam-0.14.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:00494fca3366d5e00148ec7521fedeb80205dcb47b326197b73f2c6420da7044", size = 650097, upload-time = "2025-09-10T07:31:30.644Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/65/4b886790d4ddf6945c461cc60bcb67b8d4a98b9926e6ef471c77b890fbc5/pyvirtualcam-0.14.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:9d27eeb8b2f5c697b7ca27b20e4a1e482f306744af123295bea7f0ca22d9f5a2", size = 160508, upload-time = "2025-09-10T07:31:32.231Z" },
+    { url = "https://files.pythonhosted.org/packages/89/99/58b09c85efa06928308c9d9696ff31b9c197c6a1bdff165883e4e72e910d/pyvirtualcam-0.14.0-cp312-cp312-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:b0b17d200dd676208cdf1b9050528dcfd36733658dbad800c9894852bfb0931a", size = 115925, upload-time = "2025-09-10T07:31:33.278Z" },
+    { url = "https://files.pythonhosted.org/packages/f5/fd/3bb7dde461da4ca60c0033220ae9c2d32014662b59b2d4e6136f98086ee2/pyvirtualcam-0.14.0-cp312-cp312-win_amd64.whl", hash = "sha256:7191e7ed01494962b263e5b2f044b7bf15de19b7d2213d67595adcdc8cd5a1f5", size = 189397, upload-time = "2025-09-10T07:31:34.64Z" },
+    { url = "https://files.pythonhosted.org/packages/dc/9b/47a2a6bca1d44283489d26077e662d4050a286004cc5f61696acaaea575a/pyvirtualcam-0.14.0-cp313-cp313-macosx_10_9_x86_64.whl", hash = "sha256:84e2d6883ff540bc17224b2f377085dde9e93f35880457eb4a53ff09697038d0", size = 648815, upload-time = "2025-09-10T07:31:36.143Z" },
+    { url = "https://files.pythonhosted.org/packages/49/8f/80b66a5b385bcc598701b6bd33874a1ce1f2beb7ffbb2c8a5df5215c47d7/pyvirtualcam-0.14.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:a43aed557a287d3edf68c30a4585f25e18be4ff9e345b1c671e6dd07f3f265d6", size = 650124, upload-time = "2025-09-10T07:31:37.337Z" },
+    { url = "https://files.pythonhosted.org/packages/1f/83/2fc0e84aa9dbeec375bf2080bf29f371b5eaf17cfc6726bd9ea8858e54a7/pyvirtualcam-0.14.0-cp313-cp313-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:230067536221966bdd9458a74f2de99346d566bf79458cdd57e70d113f0cbe79", size = 160567, upload-time = "2025-09-10T07:31:38.992Z" },
+    { url = "https://files.pythonhosted.org/packages/74/ad/e10e3417adabafd2805a8084e83863403dc766325254544f141c1bce8c99/pyvirtualcam-0.14.0-cp313-cp313-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:d62e9d4f2860a284d114365f7e3eaa4244c925eef7ba74a08cc98fe4426020ec", size = 115890, upload-time = "2025-09-10T07:31:40.403Z" },
+    { url = "https://files.pythonhosted.org/packages/50/52/49a42f04bdf8c640eef02574c8f98c86d2d58977252dd977482e5606abbb/pyvirtualcam-0.14.0-cp313-cp313-win_amd64.whl", hash = "sha256:bcb76a3a19bb286b7eab7f622113bad766e3eb32079428010eba5bba906e2c82", size = 189394, upload-time = "2025-09-10T07:31:41.453Z" },
 ]
 
 [[package]]

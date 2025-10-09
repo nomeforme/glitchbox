@@ -8,6 +8,7 @@ DISPLAY_HEIGHT = 360#480
 DISPLAY_SCALE = 4.0 #4.0
 CAMERA_DEVICE_INDEX = 0 #0 #42
 MIC_DEVICE_INDEX = 0 #16
+MAX_CAMERA_INDEX = 50  # Maximum camera index to check (supports virtual cameras like /dev/video42)
 
 # Speech-to-text settings
 STT_DEVICE = "cpu"  # Device for STT processing: "cpu" or "cuda"
