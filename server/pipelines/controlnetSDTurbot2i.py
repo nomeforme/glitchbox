@@ -760,7 +760,7 @@ class Pipeline:
         if params.debug_controlnet:
             # paste control_image on top of result_image
 
-            if getattr(params, "use_upscaler", False):
+            if self.use_upscaler:
                 scale_factor = 4
             else:
                 scale_factor = 1
