@@ -564,7 +564,7 @@ parser.add_argument(
     "--use-pixelate-processor",
     dest="use_pixelate_processor",
     action="store_true",
-    default=False,
+    default=True,
     help="Enable Pixelate Processor",
 )
 # Add upscaler arguments
@@ -572,7 +572,7 @@ parser.add_argument(
     "--use-upscaler",
     dest="use_upscaler",
     action="store_true",
-    default=False,
+    default=True,
     help="Enable upscaler for output images",
 )
 parser.add_argument(
