@@ -5,6 +5,7 @@ import pyvirtualcam # Import the library
 import os # To check if the device exists
 import threading
 import sys
+import signal
 from realsense_utils import create_pipeline_with_reset, hardware_reset_and_wait
 
 # --- Configuration ---
@@ -208,10 +209,32 @@ except Exception as e:
 finally:
     running = False  # Stop the input listener thread
     print("Stopping RealSense pipeline...")
-    pipeline.stop()
-    print("RealSense pipeline stopped.")
+    try:
+        pipeline.stop()
+        print("RealSense pipeline stopped.")
+    except Exception as e:
+        print(f"Warning: Error stopping pipeline: {e}")
 
-    # Hardware reset for next run
+    # Hardware reset for next run with timeout
     print("Cleaning up with hardware reset...")
-    hardware_reset_and_wait(ctx, verbose=False)
+
+    def timeout_handler(signum, frame):
+        print("Warning: Hardware reset timed out, forcing exit...")
+        os._exit(0)
+
+    try:
+        # Set a 3-second timeout for hardware reset
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(3)
+
+        hardware_reset_and_wait(ctx, verbose=False)
+
+        # Cancel the alarm if reset completes
+        signal.alarm(0)
+        print("Hardware reset complete.")
+    except Exception as e:
+        signal.alarm(0)  # Cancel alarm on error
+        print(f"Warning: Hardware reset failed (non-critical): {e}")
+
     print("Script finished.")
+    os._exit(0)  # Force immediate exit without waiting for threads

@@ -3,6 +3,17 @@
 # Exit immediately if a command exits with a non-zero status.
 set -e
 
+# Cleanup function to unload the module on exit
+cleanup() {
+    echo ""
+    echo "INFO: Cleaning up - unloading v4l2loopback module..."
+    sudo modprobe -r v4l2loopback 2>/dev/null || true
+    echo "INFO: Cleanup complete"
+}
+
+# Set trap to call cleanup on EXIT, INT, or TERM
+trap cleanup EXIT INT TERM
+
 echo "INFO: Setting up v4l2loopback kernel module for virtual camera..."
 
 # Unload the module if already loaded
