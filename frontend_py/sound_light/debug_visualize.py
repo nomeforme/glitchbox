@@ -55,8 +55,15 @@ hole_filling.set_option(rs.option.holes_fill, 1)
 # Lighter post-processing focused on edge smoothing
 pass  # Parameters now handled inline
 
+# Create window once before loop
+cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
+
 try:
     while True:
+        # Check if window was closed by user (X button) - check BEFORE processing frames
+        if cv2.getWindowProperty('RealSense', cv2.WND_PROP_VISIBLE) < 1:
+            break
+
         # Wait for a coherent pair of frames: depth and color
         frames = pipeline.wait_for_frames(100000000)
         depth_frame = frames.get_depth_frame()
@@ -99,9 +106,8 @@ try:
             images = np.hstack((color_image, depth_colormap))
 
         # Show images
-        cv2.namedWindow('RealSense', cv2.WINDOW_AUTOSIZE)
         cv2.imshow('RealSense', images)
-        
+
         # Press 'q' to quit
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
