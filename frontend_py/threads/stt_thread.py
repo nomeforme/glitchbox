@@ -32,6 +32,7 @@ class SpeechToTextThread(QThread):
                 use_main_model_for_realtime=True,
                 print_transcription_time=True,
                 on_realtime_transcription_update=self.on_transcription_update,
+                no_log_file=True,  # Disable log file generation
             )
             
             print("[STT] Speech-to-text system initialized, wait until it says 'speak now'")
