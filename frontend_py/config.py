@@ -32,4 +32,4 @@ BLACK_FRAME_DISABLE_TIMEOUT = 0 #75
 # Automatic curation index update settings
 CURATION_INDEX_AUTO_UPDATE = False  # Enable automatic curation index updates
 CURATION_INDEX_UPDATE_TIME = 120  # Update interval in seconds (1 hour = 3600 seconds)
-CURATION_INDEX_MAX = 9#Maximum curation index value (0 to this value)
+CURATION_INDEX_MAX = 11#Maximum curation index value (0 to this value)
