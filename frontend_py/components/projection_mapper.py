@@ -377,10 +377,10 @@ class ProjectionMapperWindow(QMainWindow):
             # Apply transform
             self.transformed_frame = cv2.warpPerspective(frame, matrix, (width, height))
 
-            # Display the transformed frame
+            # Display the transformed frame in mapper window
             self.display_frame(self.transformed_frame)
 
-            # Update fullscreen window if active
+            # Also update fullscreen window if active (for multi-screen setups)
             if self.fullscreen_window and self.is_fullscreen:
                 self.fullscreen_window.update_frame(self.transformed_frame)
         except Exception as e:
@@ -388,7 +388,7 @@ class ProjectionMapperWindow(QMainWindow):
             # If transform fails, display original frame
             self.display_frame(frame)
 
-            # Update fullscreen window with original frame if active
+            # Also update fullscreen window with original frame if active
             if self.fullscreen_window and self.is_fullscreen:
                 self.fullscreen_window.update_frame(frame)
 

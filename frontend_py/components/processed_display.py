@@ -370,38 +370,40 @@ class ProcessedDisplay(QWidget):
         """Update the display with a new frame"""
         if frame is None:
             return
-        
+
         # If black frame mode is enabled, show black frame instead
         if self.black_frame_mode:
             # Calculate image dimensions from config
             height = int(DISPLAY_HEIGHT * DISPLAY_SCALE)
             width = int(DISPLAY_WIDTH * DISPLAY_SCALE)
-            
+
             # Create black frame (RGB)
             black_frame = np.zeros((height, width, 3), dtype=np.uint8)
             frame = black_frame
-        
+
         # Apply mirroring if enabled
         if self.mirrored:
             frame = cv2.flip(frame, 1)
-            
-        height, width = frame.shape[:2]
-        bytes_per_line = 3 * width
-        q_image = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
-        
-        # Get the available size of the label
-        available_size = self.image_label.size()
-        
-        # Scale the pixmap to fit the available space while maintaining aspect ratio
-        pixmap = QPixmap.fromImage(q_image)
-        scaled_pixmap = pixmap.scaled(available_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        
-        self.image_label.setPixmap(scaled_pixmap)
 
-        # Update projection mapper if active
+        # Only render on the topmost active layer
         if self.projection_mapper and self.is_fullscreen:
+            # Projection mapper is open - send frame there, don't render locally
             self.projection_mapper.update_frame(frame)
-        
+        else:
+            # Projection mapper is not open - render in main display
+            height, width = frame.shape[:2]
+            bytes_per_line = 3 * width
+            q_image = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
+
+            # Get the available size of the label
+            available_size = self.image_label.size()
+
+            # Scale the pixmap to fit the available space while maintaining aspect ratio
+            pixmap = QPixmap.fromImage(q_image)
+            scaled_pixmap = pixmap.scaled(available_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+
+            self.image_label.setPixmap(scaled_pixmap)
+
         # Update FPS counter in status bar
         main_window = self.window()
         if main_window:
