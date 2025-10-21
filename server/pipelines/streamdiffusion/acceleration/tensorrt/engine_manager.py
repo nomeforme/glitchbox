@@ -76,7 +76,7 @@ class EngineManager:
             }
         }
     
-    def get_engine_path(self, 
+    def get_engine_path(self,
                        engine_type: EngineType,
                        model_id_or_path: str,
                        max_batch_size: int,
@@ -84,6 +84,7 @@ class EngineManager:
                        mode: str,
                        use_lcm_lora: bool,
                        use_tiny_vae: bool,
+                       t_index_list: Optional[list] = None,
                        ipadapter_scale: Optional[float] = None,
                        ipadapter_tokens: Optional[int] = None,
                        controlnet_model_id: Optional[str] = None,
@@ -112,19 +113,24 @@ class EngineManager:
             # Extract base name (from wrapper.py lines 1002-1003)
             maybe_path = Path(model_id_or_path)
             base_name = maybe_path.stem if maybe_path.exists() else model_id_or_path
-            
+
             # Create prefix (from wrapper.py lines 1005-1013)
             prefix = f"{base_name}--lcm_lora-{use_lcm_lora}--tiny_vae-{use_tiny_vae}--min_batch-{min_batch_size}--max_batch-{max_batch_size}"
-            
+
+            # Add t_index_list to differentiate engine caches
+            if t_index_list is not None:
+                t_indices_str = "_".join(map(str, t_index_list))
+                prefix += f"--t_idx-{t_indices_str}"
+
             # IP-Adapter differentiation: add type and (optionally) tokens
             # Keep scale out of identity for runtime control, but include a type flag to separate caches
             if is_faceid is True:
                 prefix += f"--fid"
             if ipadapter_tokens is not None:
                 prefix += f"--tokens{ipadapter_tokens}"
-            
+
             prefix += f"--mode-{mode}"
-            
+
             return self.engine_dir / prefix / filename
     
     def _get_embedding_dim_for_model_type(self, model_type: str) -> int:

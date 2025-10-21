@@ -47,6 +47,7 @@ class LoRACurationConfig:
             "building": "loras/sota21-step00000700.safetensors",
             "ker-blue": "loras/ker_blue-step00001100.safetensors",
             "lila-blue": "loras/lila_blue-step00001800.safetensors",
+            "pixel-art-xl": "loras/pixel-art-xl.safetensors",
         }
 
         self._all_curations = {} # Stores all loaded JSON data {key: data}

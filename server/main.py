@@ -665,18 +665,19 @@ class App:
                             if self.args.debug:
                                 print(f"Time to process prompt travel: {time.time() - prompt_travel_start:.4f}s")
                         
-                        if info.input_mode == "image":
-                            receive_image_start = time.time()
-                            image_data = await self.conn_manager.receive_bytes(user_id)
-                            if self.args.debug:
-                                print(f"Time to receive image data: {time.time() - receive_image_start:.4f}s")
+                        # Always receive bytes from client (client sends them regardless of mode)
+                        receive_image_start = time.time()
+                        image_data = await self.conn_manager.receive_bytes(user_id)
+                        if self.args.debug:
+                            print(f"Time to receive image data: {time.time() - receive_image_start:.4f}s")
 
+                        if info.input_mode == "image":
                             if len(image_data) == 0:
                                 await self.conn_manager.send_json(
                                     user_id, {"status": "send_frame"}
                                 )
                                 continue
-                            
+
                             image_processing_start = time.time()
                             params.image = bytes_to_pil(image_data)
                             

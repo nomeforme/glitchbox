@@ -1,17 +1,15 @@
 """
-StreamDiffusion Image-to-Image SDXL Pipeline with ControlNet and LoRA support
+StreamDiffusion Text-to-Image Pipeline with ControlNet and LoRA support
 
-This pipeline uses StreamDiffusion for real-time SDXL img2img generation with:
-- Stable Diffusion XL base model
-- SDXL-compatible ControlNet for structural guidance (depth-based by default)
+This pipeline uses StreamDiffusion for real-time txt2img generation with:
+- Static ControlNet integration for aesthetic guidance (depth-based by default)
 - Dynamic LoRA loading via lora_config
 - Multiple pipes with different LoRA weight combinations
 
 Design decisions:
-- Uses SDXL model: stabilityai/stable-diffusion-xl-base-1.0
-- ControlNet is statically enabled for compositional/structural control in img2img
+- ControlNet is statically enabled for compositional/aesthetic control in txt2img
 - LoRAs are loaded per-pipe based on adapter weights from lora_config
-- Uses img2img mode parameters: t_index_list=[22, 32, 45], with denoising batch
+- Uses txt2img mode parameters: t_index_list=[0, 16, 32, 45], no denoising batch
 """
 import sys
 import os
@@ -26,18 +24,16 @@ from pydantic import BaseModel, Field
 from PIL import Image
 import math
 
-base_model = "stabilityai/stable-diffusion-xl-base-1.0"
-# base_model = "stabilityai/sd-turbo"
-# base_model = "stabilityai/stable-diffusion-2-1-base"
+base_model = "stabilityai/sd-turbo"
 # base_model = "KBlueLeaf/kohaku-v2.1"
 # base_model = "SimianLuo/LCM_Dreamshaper_v7"
-taesd_model = "madebyollin/taesdxl"
+taesd_model = "madebyollin/taesd"
 
-default_prompt = "Portrait of The Joker halloween costume, face painting, with , glare pose, detailed, intricate, full of colour, cinematic lighting, trending on artstation, 8k, hyperrealistic, focused, extreme details, unreal engine 5 cinematic, masterpiece"
-default_negative_prompt = "black and white, blurry, low resolution, pixelated,  pixel art, low quality, low fidelity"
+default_prompt = "mrnabrmv style, Fragmented digital portrait blending abstract textures and vivid colors, creating a surreal, pixelated visage."
+default_negative_prompt = "blurry, low quality, distorted, 3d render"
 
 page_content = """<h1 class="text-3xl font-bold">StreamDiffusion</h1>
-<h3 class="text-xl font-bold">Image-to-Image SDXL + ControlNet</h3>
+<h3 class="text-xl font-bold">Text-to-Image SD-Turbo + ControlNet</h3>
 <p class="text-sm">
     This demo showcases
     <a
@@ -45,24 +41,24 @@ page_content = """<h1 class="text-3xl font-bold">StreamDiffusion</h1>
     target="_blank"
     class="text-blue-500 underline hover:no-underline">StreamDiffusion
 </a>
-Image to Image pipeline using
+Text to Image pipeline using
     <a
-    href="https://huggingface.co/stabilityai/stable-diffusion-xl-base-1.0"
+    href="https://huggingface.co/stabilityai/sd-turbo"
     target="_blank"
-    class="text-blue-500 underline hover:no-underline">Stable Diffusion XL</a
-    > with ControlNet for structural guidance and LoRA support.
+    class="text-blue-500 underline hover:no-underline">SD-Turbo</a
+    > with ControlNet for aesthetic guidance and LoRA support.
 </p>
 """
 
 
 class Pipeline:
     class Info(BaseModel):
-        name: str = "img2imgStreamDiffusion"
-        title: str = "Image-to-Image SDXL StreamDiffusion + ControlNet"
-        description: str = "Generates an image from an input image using SDXL StreamDiffusion with ControlNet guidance and LoRAs"
-        input_mode: str = "image"
+        name: str = "txt2imgStreamDiffusion"
+        title: str = "Text-to-Image StreamDiffusion + ControlNet"
+        description: str = "Generates an image from a text prompt using StreamDiffusion with ControlNet guidance and LoRAs"
+        input_mode: str = "text"
         page_content: str = page_content
-    
+
     class InputParams(BaseModel):
         prompt: str = Field(
             default_prompt,
@@ -87,10 +83,10 @@ class Pipeline:
             description="Select which pipe (LoRA combination) to use"
         )
         width: int = Field(
-            640, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
+            512, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
         )
         height: int = Field(
-            480, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
+            512, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
         )
         controlnet_scale: float = Field(
             0.87,
@@ -131,29 +127,29 @@ class Pipeline:
         # Get adapter weights sets from lora_config to determine number of pipes
         if lora_config is not None:
             adapter_weights_sets = lora_config.get_default_adapter_weights()
-            print(f"[img2imgStreamDiffusion.py] Creating {len(adapter_weights_sets)} pipes based on lora_config")
+            print(f"[txt2imgStreamDiffusion.py] Creating {len(adapter_weights_sets)} pipes based on lora_config")
         else:
             # Default to single pipe if no lora_config provided
             adapter_weights_sets = [[]]
-            print(f"[img2imgStreamDiffusion.py] No lora_config provided, creating single pipe")
+            print(f"[txt2imgStreamDiffusion.py] No lora_config provided, creating single pipe")
 
         params = self.InputParams()
 
-        # Define ControlNet configuration (static, for structural guidance in img2img)
+        # Define ControlNet configuration (static, for aesthetic guidance in txt2img)
         use_controlnet = True
         controlnet_config = {
-            'model_id': 'diffusers/controlnet-depth-sdxl-1.0',
+            'model_id': 'thibaud/controlnet-sd21-depth-diffusers',
             'preprocessor': 'depth',  # 'depth', 'canny', 'pose', etc.
             'conditioning_scale': 0.87,
             'enabled': True,
             'control_guidance_start': 0.0,
             'control_guidance_end': 1.0,
         }
-        print(f"[img2imgStreamDiffusion.py] ControlNet enabled with SDXL model: {controlnet_config['model_id']}")
+        print(f"[txt2imgStreamDiffusion.py] ControlNet enabled with model: {controlnet_config['model_id']}")
 
         # Create one pipe for each adapter weights set
         for idx, adapter_weights in enumerate(adapter_weights_sets):
-            print(f"[img2imgStreamDiffusion.py] Creating pipe {idx + 1}/{len(adapter_weights_sets)}")
+            print(f"[txt2imgStreamDiffusion.py] Creating pipe {idx + 1}/{len(adapter_weights_sets)}")
 
             # Build lora_dict from lora_config
             lora_dict = None
@@ -171,7 +167,8 @@ class Pipeline:
                         scale = adapter_weights[i] if i < len(adapter_weights) else 1.0
                         lora_dict[lora_path] = scale
 
-                print(f"[img2imgStreamDiffusion.py] Pipe {idx}: Built lora_dict with {len(lora_dict)} LoRAs")
+                print(f"[txt2imgStreamDiffusion.py] Pipe {idx}: Built lora_dict with {len(lora_dict)} LoRAs")
+                print(f"[txt2imgStreamDiffusion.py] lora_dict: {lora_dict}")
 
             stream = StreamDiffusionWrapper(
                 model_id_or_path=base_model,
@@ -179,7 +176,7 @@ class Pipeline:
                 use_tiny_vae=args.taesd,
                 device=device,
                 dtype=torch_dtype,
-                t_index_list=[22, 32, 45],
+                t_index_list=[0, 16, 32, 45],
                 frame_buffer_size=1,
                 width=params.width,
                 height=params.height,
@@ -187,9 +184,9 @@ class Pipeline:
                 output_type="pil",
                 warmup=10,
                 vae_id=None,
-                acceleration="tensorrt",
-                mode="img2img",
-                use_denoising_batch=True,
+                acceleration="xformers",
+                mode="txt2img",
+                use_denoising_batch=False,
                 cfg_type="none",
                 use_safety_checker=args.safety_checker,
                 use_controlnet=use_controlnet,
@@ -198,9 +195,7 @@ class Pipeline:
 
             stream.prepare(
                 prompt=default_prompt,
-                negative_prompt=default_negative_prompt,
                 num_inference_steps=50,
-                guidance_scale=1.2,
             )
 
             self.pipes.append(stream)
@@ -210,40 +205,49 @@ class Pipeline:
         self.last_prompt = default_prompt
 
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
+        # Handle None params by creating default params
+        if params is None:
+            params = self.InputParams()
+            print(f"[txt2imgStreamDiffusion.py] No params provided, using defaults")
+
         # Get pipe_index from params, default to 0 if not provided
         pipe_index = getattr(params, 'pipe_index', 0)
 
         # Ensure pipe_index is within bounds
         if pipe_index >= len(self.pipes):
-            print(f"[img2imgStreamDiffusion.py] Warning: pipe_index {pipe_index} out of bounds, using 0")
+            print(f"[txt2imgStreamDiffusion.py] Warning: pipe_index {pipe_index} out of bounds, using 0")
             pipe_index = 0
 
         # Select the appropriate stream
         stream = self.pipes[pipe_index]
 
-        # Generate image from input image and prompt
-        print(f"[img2imgStreamDiffusion.py] Params: {params}")
+        # Generate image from prompt
+        print(f"[txt2imgStreamDiffusion.py] Params: {params}")
 
         # If prompt changed, update it via prepare()
         prompt = params.prompt
         if prompt != self.last_prompt:
             stream.prepare(
                 prompt=prompt,
-                negative_prompt=default_negative_prompt,
                 num_inference_steps=50,
-                guidance_scale=1.2,
             )
             self.last_prompt = prompt
 
-        # Update ControlNet control image (use input image for structural guidance)
+        # Update ControlNet control image if provided (for aesthetic guidance)
         # ControlNet is statically enabled for this pipeline
-        control_image = getattr(params, 'control_image', params.image)
+        print(f"[txt2imgStreamDiffusion.py] params: {params}")
+        
+        control_image = getattr(params, 'control_image', None)
         if control_image is not None:
-            print(f"[img2imgStreamDiffusion.py] Updating control image for ControlNet structural guidance")
+            print(f"[txt2imgStreamDiffusion.py] Updating control image for ControlNet guidance")
             stream.update_control_image(index=0, image=control_image)
 
-        # Preprocess input image and generate
-        image_tensor = stream.preprocess_image(params.image)
-        output_image = stream(image=image_tensor)
+        # For txt2img mode, call stream() without parameters
+        # Do warmup iterations
+        for _ in range(stream.batch_size - 1):
+            stream()
+
+        # Generate final image
+        output_image = stream()
 
         return output_image

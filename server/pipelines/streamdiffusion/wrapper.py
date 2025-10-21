@@ -1011,16 +1011,16 @@ class StreamDiffusionWrapper:
         for method, method_name in loading_methods:
             try:
                 logger.info(f"_load_model: Attempting to load with {method_name}...")
-                pipe = method(model_id_or_path).to(dtype=self.dtype)
+                pipe = method(model_id_or_path).to(device=self.device, dtype=self.dtype)
                 logger.info(f"_load_model: Successfully loaded using {method_name}")
-                
+
                 # Verify that we have the right pipeline type for SDXL models
                 if is_sdxl_model and not isinstance(pipe, StableDiffusionXLPipeline):
                     logger.warning(f"_load_model: SDXL model detected but loaded with non-SDXL pipeline: {type(pipe)}")
                     # Try to explicitly load with SDXL pipeline instead
                     try:
                         logger.info(f"_load_model: Retrying with StableDiffusionXLPipeline...")
-                        pipe = StableDiffusionXLPipeline.from_single_file(model_id_or_path).to(dtype=self.dtype)
+                        pipe = StableDiffusionXLPipeline.from_single_file(model_id_or_path).to(device=self.device, dtype=self.dtype)
                         logger.info(f"_load_model: Successfully loaded using SDXL pipeline on retry")
                     except Exception as retry_error:
                         logger.warning(f"_load_model: SDXL pipeline retry failed: {retry_error}")
@@ -1095,11 +1095,11 @@ class StreamDiffusionWrapper:
 
         if use_tiny_vae:
             if vae_id is not None:
-                stream.vae = AutoencoderTiny.from_pretrained(vae_id).to(dtype=pipe.dtype)
+                stream.vae = AutoencoderTiny.from_pretrained(vae_id).to(device=self.device, dtype=pipe.dtype)
             else:
                 # Use TAESD XL for SDXL models, regular TAESD for SD 1.5
                 taesd_model = "madebyollin/taesdxl" if is_sdxl else "madebyollin/taesd"
-                stream.vae = AutoencoderTiny.from_pretrained(taesd_model).to(dtype=pipe.dtype)
+                stream.vae = AutoencoderTiny.from_pretrained(taesd_model).to(device=self.device, dtype=pipe.dtype)
     
 
         try:
@@ -1235,6 +1235,7 @@ class StreamDiffusionWrapper:
                     mode=self.mode,
                     use_lcm_lora=use_lcm_lora,
                     use_tiny_vae=use_tiny_vae,
+                    t_index_list=t_index_list,
                     ipadapter_scale=ipadapter_scale,
                     ipadapter_tokens=ipadapter_tokens,
                     is_faceid=is_faceid if use_ipadapter_trt else None
@@ -1247,6 +1248,7 @@ class StreamDiffusionWrapper:
                     mode=self.mode,
                     use_lcm_lora=use_lcm_lora,
                     use_tiny_vae=use_tiny_vae,
+                    t_index_list=t_index_list,
                     ipadapter_scale=ipadapter_scale,
                     ipadapter_tokens=ipadapter_tokens,
                     is_faceid=is_faceid if use_ipadapter_trt else None
@@ -1259,6 +1261,7 @@ class StreamDiffusionWrapper:
                     mode=self.mode,
                     use_lcm_lora=use_lcm_lora,
                     use_tiny_vae=use_tiny_vae,
+                    t_index_list=t_index_list,
                     ipadapter_scale=ipadapter_scale,
                     ipadapter_tokens=ipadapter_tokens,
                     is_faceid=is_faceid if use_ipadapter_trt else None
@@ -1567,6 +1570,7 @@ class StreamDiffusionWrapper:
                     mode=self.mode,
                     use_lcm_lora=use_lcm_lora,
                     use_tiny_vae=use_tiny_vae,
+                    t_index_list=t_index_list,
                 )
                 safety_checker_engine_exists = os.path.exists(safety_checker_path)
 

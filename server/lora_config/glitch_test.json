@@ -2,11 +2,14 @@
     "prompts_file_name": "glitch",
     "loras": ["glitch", "glitch"],
     "adapter_weights_sets": [
-        [1.0, 0.0],
-        [0.0, 1.0]
+        [1.0, 1.0],
+        [1.0, 1.0],
+        [1.0, 1.0],
+        [1.0, 1.0],
+        [1.0, 1.0]
     ],
     "input_params": {
-        "prompt": "two figures in a dynamic, abstract dance, forming a surreal, interconnected sculpture against a black background.",
+        "prompt": "mrnabrmv style, Fragmented digital portrait blending abstract textures and vivid colors, creating a surreal, pixelated visage.",
         "target_prompt": "a blue dog",
         "pipe_index": 0,
         "use_prompt_travel": true,
@@ -18,8 +21,8 @@
         "seed": 4402026899276587,
         "target_seed": null,
         "steps": 1,
-        "width": 640,
-        "height": 480,
+        "width": 512,
+        "height": 512,
         "guidance_scale": 1.0,
         "strength": 0.8,
         "controlnet_scale": 0.55,
