@@ -7,30 +7,31 @@ import cv2
 import json
 import os
 from .fullscreen_window import FullscreenWindow
+from .mesh_warp import MeshWarp
 
 
 class InteractiveImageLabel(QLabel):
-    """Custom QLabel that allows dragging corner points for keystone correction"""
+    """Custom QLabel that allows dragging mesh grid vertices"""
 
-    corner_moved = Signal(int, float, float)  # corner_idx, x_percent, y_percent
+    vertex_moved = Signal(int, int, float, float)  # row, col, x_percent, y_percent
 
-    def __init__(self):
+    def __init__(self, mesh_warp: MeshWarp):
         super().__init__()
-        self.corner_points = [[0, 0], [100, 0], [100, 100], [0, 100]]
-        self.dragging_corner = None
-        self.handle_radius = 10
+        self.mesh_warp = mesh_warp
+        self.dragging_vertex = None  # (row, col) of vertex being dragged
+        self.handle_radius = 8
         self.setMouseTracking(True)
 
-    def set_corners(self, corners):
-        """Update corner points"""
-        self.corner_points = corners
+    def set_mesh(self, mesh_warp: MeshWarp):
+        """Update mesh reference"""
+        self.mesh_warp = mesh_warp
         self.update()
 
     def paintEvent(self, event):
-        """Override paint to draw corner handles"""
+        """Override paint to draw mesh grid and vertex handles"""
         super().paintEvent(event)
 
-        if not self.pixmap():
+        if not self.pixmap() or not self.mesh_warp:
             return
 
         painter = QPainter(self)
@@ -41,36 +42,55 @@ class InteractiveImageLabel(QLabel):
         if pixmap_rect.isEmpty():
             return
 
-        # Draw corner handles
-        for i, corner in enumerate(self.corner_points):
-            # Convert percentage to pixel position on the displayed image
-            x = pixmap_rect.x() + (corner[0] / 100.0) * pixmap_rect.width()
-            y = pixmap_rect.y() + (corner[1] / 100.0) * pixmap_rect.height()
+        grid_size = self.mesh_warp.grid_size
 
-            # Draw handle
-            if i == self.dragging_corner:
-                painter.setPen(QPen(QColor(255, 255, 0), 3))
-                painter.setBrush(QBrush(QColor(255, 255, 0, 180)))
-            else:
-                painter.setPen(QPen(QColor(0, 255, 0), 2))
-                painter.setBrush(QBrush(QColor(0, 255, 0, 150)))
+        # Draw horizontal grid lines
+        painter.setPen(QPen(QColor(0, 255, 0, 80), 1, Qt.SolidLine))
+        for row in range(grid_size + 1):
+            for col in range(grid_size):
+                p1 = self.mesh_warp.get_point(row, col)
+                p2 = self.mesh_warp.get_point(row, col + 1)
 
-            painter.drawEllipse(QPoint(int(x), int(y)), self.handle_radius, self.handle_radius)
+                x1 = pixmap_rect.x() + (p1[0] / 100.0) * pixmap_rect.width()
+                y1 = pixmap_rect.y() + (p1[1] / 100.0) * pixmap_rect.height()
+                x2 = pixmap_rect.x() + (p2[0] / 100.0) * pixmap_rect.width()
+                y2 = pixmap_rect.y() + (p2[1] / 100.0) * pixmap_rect.height()
 
-            # Draw label
-            painter.setPen(QPen(QColor(255, 255, 255), 1))
-            labels = ["TL", "TR", "BR", "BL"]
-            painter.drawText(int(x) - 10, int(y) - 15, labels[i])
+                painter.drawLine(int(x1), int(y1), int(x2), int(y2))
 
-        # Draw lines connecting corners
-        painter.setPen(QPen(QColor(0, 255, 0, 100), 1, Qt.DashLine))
-        for i in range(4):
-            next_i = (i + 1) % 4
-            x1 = pixmap_rect.x() + (self.corner_points[i][0] / 100.0) * pixmap_rect.width()
-            y1 = pixmap_rect.y() + (self.corner_points[i][1] / 100.0) * pixmap_rect.height()
-            x2 = pixmap_rect.x() + (self.corner_points[next_i][0] / 100.0) * pixmap_rect.width()
-            y2 = pixmap_rect.y() + (self.corner_points[next_i][1] / 100.0) * pixmap_rect.height()
-            painter.drawLine(int(x1), int(y1), int(x2), int(y2))
+        # Draw vertical grid lines
+        for col in range(grid_size + 1):
+            for row in range(grid_size):
+                p1 = self.mesh_warp.get_point(row, col)
+                p2 = self.mesh_warp.get_point(row + 1, col)
+
+                x1 = pixmap_rect.x() + (p1[0] / 100.0) * pixmap_rect.width()
+                y1 = pixmap_rect.y() + (p1[1] / 100.0) * pixmap_rect.height()
+                x2 = pixmap_rect.x() + (p2[0] / 100.0) * pixmap_rect.width()
+                y2 = pixmap_rect.y() + (p2[1] / 100.0) * pixmap_rect.height()
+
+                painter.drawLine(int(x1), int(y1), int(x2), int(y2))
+
+        # Draw vertex handles
+        for row in range(grid_size + 1):
+            for col in range(grid_size + 1):
+                point = self.mesh_warp.get_point(row, col)
+                x = pixmap_rect.x() + (point[0] / 100.0) * pixmap_rect.width()
+                y = pixmap_rect.y() + (point[1] / 100.0) * pixmap_rect.height()
+
+                # Highlight if being dragged
+                if self.dragging_vertex == (row, col):
+                    painter.setPen(QPen(QColor(255, 255, 0), 3))
+                    painter.setBrush(QBrush(QColor(255, 255, 0, 200)))
+                # Highlight corner vertices differently
+                elif (row == 0 or row == grid_size) and (col == 0 or col == grid_size):
+                    painter.setPen(QPen(QColor(0, 200, 255), 2))
+                    painter.setBrush(QBrush(QColor(0, 200, 255, 150)))
+                else:
+                    painter.setPen(QPen(QColor(0, 255, 0), 2))
+                    painter.setBrush(QBrush(QColor(0, 255, 0, 120)))
+
+                painter.drawEllipse(QPoint(int(x), int(y)), self.handle_radius, self.handle_radius)
 
     def _get_scaled_pixmap_rect(self):
         """Get the rectangle where the scaled pixmap is actually drawn"""
@@ -90,39 +110,49 @@ class InteractiveImageLabel(QLabel):
         return QRect(x, y, scaled_pixmap.width(), scaled_pixmap.height())
 
     def mousePressEvent(self, event: QMouseEvent):
-        """Handle mouse press to start dragging a corner"""
-        if event.button() != Qt.LeftButton:
+        """Handle mouse press to start dragging a vertex"""
+        if event.button() != Qt.LeftButton or not self.mesh_warp:
             return
 
         pixmap_rect = self._get_scaled_pixmap_rect()
         if pixmap_rect.isEmpty():
             return
 
-        # Check if click is near any corner
-        for i, corner in enumerate(self.corner_points):
-            x = pixmap_rect.x() + (corner[0] / 100.0) * pixmap_rect.width()
-            y = pixmap_rect.y() + (corner[1] / 100.0) * pixmap_rect.height()
+        grid_size = self.mesh_warp.grid_size
 
-            distance = ((event.position().x() - x) ** 2 + (event.position().y() - y) ** 2) ** 0.5
-            if distance <= self.handle_radius + 5:
-                self.dragging_corner = i
-                self.update()
-                return
+        # Check if click is near any vertex
+        for row in range(grid_size + 1):
+            for col in range(grid_size + 1):
+                point = self.mesh_warp.get_point(row, col)
+                x = pixmap_rect.x() + (point[0] / 100.0) * pixmap_rect.width()
+                y = pixmap_rect.y() + (point[1] / 100.0) * pixmap_rect.height()
+
+                distance = ((event.position().x() - x) ** 2 + (event.position().y() - y) ** 2) ** 0.5
+                if distance <= self.handle_radius + 5:
+                    self.dragging_vertex = (row, col)
+                    self.update()
+                    return
 
     def mouseMoveEvent(self, event: QMouseEvent):
-        """Handle mouse move to drag corner"""
-        if self.dragging_corner is None:
+        """Handle mouse move to drag vertex"""
+        if not self.mesh_warp:
+            return
+
+        if self.dragging_vertex is None:
             # Update cursor if hovering over handle
             pixmap_rect = self._get_scaled_pixmap_rect()
             if not pixmap_rect.isEmpty():
-                for corner in self.corner_points:
-                    x = pixmap_rect.x() + (corner[0] / 100.0) * pixmap_rect.width()
-                    y = pixmap_rect.y() + (corner[1] / 100.0) * pixmap_rect.height()
+                grid_size = self.mesh_warp.grid_size
+                for row in range(grid_size + 1):
+                    for col in range(grid_size + 1):
+                        point = self.mesh_warp.get_point(row, col)
+                        x = pixmap_rect.x() + (point[0] / 100.0) * pixmap_rect.width()
+                        y = pixmap_rect.y() + (point[1] / 100.0) * pixmap_rect.height()
 
-                    distance = ((event.position().x() - x) ** 2 + (event.position().y() - y) ** 2) ** 0.5
-                    if distance <= self.handle_radius + 5:
-                        self.setCursor(Qt.PointingHandCursor)
-                        return
+                        distance = ((event.position().x() - x) ** 2 + (event.position().y() - y) ** 2) ** 0.5
+                        if distance <= self.handle_radius + 5:
+                            self.setCursor(Qt.PointingHandCursor)
+                            return
             self.setCursor(Qt.ArrowCursor)
             return
 
@@ -138,17 +168,18 @@ class InteractiveImageLabel(QLabel):
         x_percent = max(-50, min(150, x_percent))
         y_percent = max(-50, min(150, y_percent))
 
-        # Update corner
-        self.corner_points[self.dragging_corner] = [x_percent, y_percent]
+        # Update vertex in mesh
+        row, col = self.dragging_vertex
+        self.mesh_warp.set_point(row, col, x_percent, y_percent)
         self.update()
 
         # Emit signal
-        self.corner_moved.emit(self.dragging_corner, x_percent, y_percent)
+        self.vertex_moved.emit(row, col, x_percent, y_percent)
 
     def mouseReleaseEvent(self, event: QMouseEvent):
         """Handle mouse release to stop dragging"""
         if event.button() == Qt.LeftButton:
-            self.dragging_corner = None
+            self.dragging_vertex = None
             self.update()
 
 
@@ -170,14 +201,8 @@ class ProjectionMapperWindow(QMainWindow):
         self.current_frame = None
         self.transformed_frame = None
 
-        # Initialize corner points (as percentages of image size: 0-100)
-        # Format: [top-left, top-right, bottom-right, bottom-left]
-        self.corner_points = [
-            [0, 0],      # Top-left
-            [100, 0],    # Top-right
-            [100, 100],  # Bottom-right
-            [0, 100]     # Bottom-left
-        ]
+        # Initialize mesh warp system (4x4 grid by default)
+        self.mesh_warp = MeshWarp(grid_size=4)
 
         # Load saved configuration if it exists
         self.load_config()
@@ -193,6 +218,13 @@ class ProjectionMapperWindow(QMainWindow):
         self.fullscreen_window = None
         self.is_fullscreen = False
 
+        # Debounce timer for mesh updates
+        from PySide6.QtCore import QTimer
+        self.update_timer = QTimer()
+        self.update_timer.setSingleShot(True)
+        self.update_timer.timeout.connect(self.apply_transform)
+        self.is_dragging = False
+
     def setup_ui(self):
         """Setup the user interface"""
         # Central widget
@@ -205,12 +237,11 @@ class ProjectionMapperWindow(QMainWindow):
         left_layout = QVBoxLayout(left_widget)
         left_layout.setContentsMargins(0, 0, 0, 0)
 
-        self.image_label = InteractiveImageLabel()
+        self.image_label = InteractiveImageLabel(self.mesh_warp)
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setStyleSheet("background-color: black;")
         self.image_label.setMinimumSize(640, 480)
-        self.image_label.set_corners(self.corner_points)
-        self.image_label.corner_moved.connect(self.on_corner_dragged)
+        self.image_label.vertex_moved.connect(self.on_vertex_dragged)
         left_layout.addWidget(self.image_label)
 
         # Fullscreen button
@@ -237,50 +268,30 @@ class ProjectionMapperWindow(QMainWindow):
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
 
-        # Corner controls
-        corner_group = QGroupBox("Corner Adjustment")
-        corner_layout = QGridLayout()
+        # Grid resolution controls
+        grid_group = QGroupBox("Mesh Grid Settings")
+        grid_layout = QGridLayout()
 
-        self.corner_spinboxes = []
-        corner_labels = ["Top-Left", "Top-Right", "Bottom-Right", "Bottom-Left"]
+        grid_layout.addWidget(QLabel("Grid Resolution:"), 0, 0)
 
-        for i, label in enumerate(corner_labels):
-            # Label
-            corner_layout.addWidget(QLabel(f"{label}:"), i, 0)
+        self.grid_size_spinbox = QSpinBox()
+        self.grid_size_spinbox.setRange(2, 10)
+        self.grid_size_spinbox.setValue(self.mesh_warp.grid_size)
+        self.grid_size_spinbox.setSuffix(" x " + str(self.mesh_warp.grid_size))
+        self.grid_size_spinbox.valueChanged.connect(self.on_grid_size_changed)
+        grid_layout.addWidget(self.grid_size_spinbox, 0, 1)
 
-            # X coordinate
-            x_label = QLabel("X:")
-            corner_layout.addWidget(x_label, i, 1)
+        grid_layout.addWidget(QLabel("(Drag vertices to warp)"), 1, 0, 1, 2)
 
-            x_spinbox = QSpinBox()
-            x_spinbox.setRange(-50, 150)
-            x_spinbox.setValue(int(self.corner_points[i][0]))
-            x_spinbox.setSuffix("%")
-            x_spinbox.valueChanged.connect(lambda val, idx=i, coord=0: self.update_corner(idx, coord, val))
-            corner_layout.addWidget(x_spinbox, i, 2)
-
-            # Y coordinate
-            y_label = QLabel("Y:")
-            corner_layout.addWidget(y_label, i, 3)
-
-            y_spinbox = QSpinBox()
-            y_spinbox.setRange(-50, 150)
-            y_spinbox.setValue(int(self.corner_points[i][1]))
-            y_spinbox.setSuffix("%")
-            y_spinbox.valueChanged.connect(lambda val, idx=i, coord=1: self.update_corner(idx, coord, val))
-            corner_layout.addWidget(y_spinbox, i, 4)
-
-            self.corner_spinboxes.append((x_spinbox, y_spinbox))
-
-        corner_group.setLayout(corner_layout)
-        right_layout.addWidget(corner_group)
+        grid_group.setLayout(grid_layout)
+        right_layout.addWidget(grid_group)
 
         # Quick adjust buttons
         quick_group = QGroupBox("Quick Adjustments")
         quick_layout = QVBoxLayout()
 
-        reset_button = QPushButton("Reset to Default")
-        reset_button.clicked.connect(self.reset_corners)
+        reset_button = QPushButton("Reset Mesh to Default")
+        reset_button.clicked.connect(self.reset_mesh)
         quick_layout.addWidget(reset_button)
 
         save_button = QPushButton("Save Configuration")
@@ -298,45 +309,24 @@ class ProjectionMapperWindow(QMainWindow):
 
         main_layout.addWidget(right_widget, stretch=1)
 
-    def update_corner(self, corner_idx, coord_idx, value):
-        """Update a corner point coordinate from spinbox"""
-        self.corner_points[corner_idx][coord_idx] = value
-        self.image_label.set_corners(self.corner_points)
+    def on_vertex_dragged(self, row, col, x_percent, y_percent):
+        """Handle vertex being dragged on the image"""
+        # Vertex is already updated in mesh by InteractiveImageLabel
+        # Debounce: only update after dragging stops for 500ms (building is slow)
+        self.update_timer.stop()
+        self.update_timer.start(500)
+
+    def on_grid_size_changed(self, new_size):
+        """Handle grid resolution change"""
+        self.mesh_warp.set_grid_size(new_size)
+        self.grid_size_spinbox.setSuffix(" x " + str(new_size))
+        self.image_label.update()
         self.apply_transform()
 
-    def on_corner_dragged(self, corner_idx, x_percent, y_percent):
-        """Handle corner being dragged on the image"""
-        # Update the corner points
-        self.corner_points[corner_idx] = [x_percent, y_percent]
-
-        # Update spinboxes without triggering their signals
-        x_spinbox, y_spinbox = self.corner_spinboxes[corner_idx]
-        x_spinbox.blockSignals(True)
-        y_spinbox.blockSignals(True)
-        x_spinbox.setValue(int(x_percent))
-        y_spinbox.setValue(int(y_percent))
-        x_spinbox.blockSignals(False)
-        y_spinbox.blockSignals(False)
-
-        # Apply transform
-        self.apply_transform()
-
-    def reset_corners(self):
-        """Reset corners to default positions"""
-        self.corner_points = [
-            [0, 0],      # Top-left
-            [100, 0],    # Top-right
-            [100, 100],  # Bottom-right
-            [0, 100]     # Bottom-left
-        ]
-
-        # Update UI
-        for i, (x_spinbox, y_spinbox) in enumerate(self.corner_spinboxes):
-            x_spinbox.setValue(int(self.corner_points[i][0]))
-            y_spinbox.setValue(int(self.corner_points[i][1]))
-
-        # Update interactive label
-        self.image_label.set_corners(self.corner_points)
+    def reset_mesh(self):
+        """Reset mesh to default grid"""
+        self.mesh_warp.reset_to_default()
+        self.image_label.update()
         self.apply_transform()
 
     def update_frame(self, frame: np.ndarray):
@@ -348,34 +338,15 @@ class ProjectionMapperWindow(QMainWindow):
         self.apply_transform()
 
     def apply_transform(self):
-        """Apply perspective transform to the current frame"""
+        """Apply mesh-based warp to the current frame"""
         if self.current_frame is None:
             return
 
         frame = self.current_frame
-        height, width = frame.shape[:2]
 
-        # Convert corner percentages to pixel coordinates
-        src_points = np.float32([
-            [0, 0],
-            [width, 0],
-            [width, height],
-            [0, height]
-        ])
-
-        dst_points = np.float32([
-            [self.corner_points[0][0] * width / 100, self.corner_points[0][1] * height / 100],
-            [self.corner_points[1][0] * width / 100, self.corner_points[1][1] * height / 100],
-            [self.corner_points[2][0] * width / 100, self.corner_points[2][1] * height / 100],
-            [self.corner_points[3][0] * width / 100, self.corner_points[3][1] * height / 100]
-        ])
-
-        # Calculate perspective transform matrix
+        # Apply mesh warp
         try:
-            matrix = cv2.getPerspectiveTransform(src_points, dst_points)
-
-            # Apply transform
-            self.transformed_frame = cv2.warpPerspective(frame, matrix, (width, height))
+            self.transformed_frame = self.mesh_warp.apply_warp(frame)
 
             # Display the transformed frame in mapper window
             self.display_frame(self.transformed_frame)
@@ -384,7 +355,9 @@ class ProjectionMapperWindow(QMainWindow):
             if self.fullscreen_window and self.is_fullscreen:
                 self.fullscreen_window.update_frame(self.transformed_frame)
         except Exception as e:
-            print(f"[ProjectionMapper] Error applying transform: {e}")
+            print(f"[ProjectionMapper] Error applying mesh warp: {e}")
+            import traceback
+            traceback.print_exc()
             # If transform fails, display original frame
             self.display_frame(frame)
 
@@ -440,11 +413,9 @@ class ProjectionMapperWindow(QMainWindow):
         self.fullscreen_button.setText("Go Fullscreen")
 
     def save_config(self):
-        """Save corner configuration to JSON file"""
+        """Save mesh configuration to JSON file"""
         try:
-            config = {
-                "corner_points": self.corner_points
-            }
+            config = self.mesh_warp.to_dict()
             with open(self.config_path, 'w') as f:
                 json.dump(config, f, indent=2)
             print(f"[ProjectionMapper] Configuration saved to {self.config_path}")
@@ -452,23 +423,22 @@ class ProjectionMapperWindow(QMainWindow):
             print(f"[ProjectionMapper] Error saving configuration: {e}")
 
     def load_config(self):
-        """Load corner configuration from JSON file"""
+        """Load mesh configuration from JSON file"""
         try:
             if os.path.exists(self.config_path):
                 with open(self.config_path, 'r') as f:
                     config = json.load(f)
-                self.corner_points = config.get("corner_points", self.corner_points)
+                self.mesh_warp.from_dict(config)
                 print(f"[ProjectionMapper] Configuration loaded from {self.config_path}")
 
-                # Update UI if spinboxes exist
-                if hasattr(self, 'corner_spinboxes'):
-                    for i, (x_spinbox, y_spinbox) in enumerate(self.corner_spinboxes):
-                        x_spinbox.setValue(int(self.corner_points[i][0]))
-                        y_spinbox.setValue(int(self.corner_points[i][1]))
+                # Update UI if spinbox exists
+                if hasattr(self, 'grid_size_spinbox'):
+                    self.grid_size_spinbox.setValue(self.mesh_warp.grid_size)
+                    self.grid_size_spinbox.setSuffix(" x " + str(self.mesh_warp.grid_size))
 
                 # Update interactive label if it exists
                 if hasattr(self, 'image_label'):
-                    self.image_label.set_corners(self.corner_points)
+                    self.image_label.set_mesh(self.mesh_warp)
         except Exception as e:
             print(f"[ProjectionMapper] Error loading configuration: {e}")
 
