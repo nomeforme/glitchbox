@@ -244,6 +244,9 @@ class ProcessedDisplay(QWidget):
         if not self.is_fullscreen:
             if not self.projection_mapper:
                 self.projection_mapper = ProjectionMapperWindow()
+                # Connect close signal to update button state
+                self.projection_mapper.window_closed.connect(self.on_projection_mapper_closed)
+
             self.projection_mapper.show()
             # Don't go fullscreen immediately - user will do that from the mapper window
             self.is_fullscreen = True
@@ -254,6 +257,12 @@ class ProcessedDisplay(QWidget):
                 self.projection_mapper = None
             self.is_fullscreen = False
             self.fullscreen_button.setText("Projection Mapper")
+
+    def on_projection_mapper_closed(self):
+        """Handle projection mapper being closed via X button"""
+        self.projection_mapper = None
+        self.is_fullscreen = False
+        self.fullscreen_button.setText("Projection Mapper")
 
     def start_stream(self, user_id: str, server_uri: str = "http://localhost:7860"):
         """Start receiving the image stream

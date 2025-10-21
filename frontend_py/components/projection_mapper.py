@@ -155,6 +155,8 @@ class InteractiveImageLabel(QLabel):
 class ProjectionMapperWindow(QMainWindow):
     """A window for projection mapping with trapezoidal/keystone correction"""
 
+    window_closed = Signal()  # Signal emitted when window is closed
+
     def __init__(self, config_path=None):
         super().__init__()
         self.setWindowTitle("Projection Mapper")
@@ -411,6 +413,9 @@ class ProjectionMapperWindow(QMainWindow):
             # Create and show fullscreen window
             if not self.fullscreen_window:
                 self.fullscreen_window = FullscreenWindow()
+                # Connect close signal to update button state
+                self.fullscreen_window.window_closed.connect(self.on_fullscreen_closed)
+
             self.fullscreen_window.show()
             self.fullscreen_window.showFullScreen()
 
@@ -427,6 +432,12 @@ class ProjectionMapperWindow(QMainWindow):
                 self.fullscreen_window = None
             self.is_fullscreen = False
             self.fullscreen_button.setText("Go Fullscreen")
+
+    def on_fullscreen_closed(self):
+        """Handle fullscreen window being closed via X button"""
+        self.fullscreen_window = None
+        self.is_fullscreen = False
+        self.fullscreen_button.setText("Go Fullscreen")
 
     def save_config(self):
         """Save corner configuration to JSON file"""
@@ -485,6 +496,9 @@ class ProjectionMapperWindow(QMainWindow):
         if self.fullscreen_window:
             self.fullscreen_window.close()
             self.fullscreen_window = None
+
+        # Emit signal to notify parent
+        self.window_closed.emit()
         super().closeEvent(event)
 
     def resizeEvent(self, event):

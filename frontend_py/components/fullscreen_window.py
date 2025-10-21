@@ -1,11 +1,13 @@
 from PySide6.QtWidgets import QMainWindow, QWidget, QVBoxLayout, QLabel
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QImage, QPixmap
 import numpy as np
 
 class FullscreenWindow(QMainWindow):
     """A detachable window that displays just the output image"""
-    
+
+    window_closed = Signal()  # Signal emitted when window is closed
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Output Display")
@@ -93,4 +95,9 @@ class FullscreenWindow(QMainWindow):
         if self.image_label.pixmap():
             pixmap = self.image_label.pixmap()
             scaled_pixmap = pixmap.scaled(self.image_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
-            self.image_label.setPixmap(scaled_pixmap) 
+            self.image_label.setPixmap(scaled_pixmap)
+
+    def closeEvent(self, event):
+        """Handle window close event"""
+        self.window_closed.emit()
+        super().closeEvent(event) 
