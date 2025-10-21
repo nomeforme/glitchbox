@@ -213,7 +213,7 @@ class Pipeline:
                 output_type="pil",
                 warmup=10,
                 vae_id=None,
-                acceleration="xformers",
+                acceleration="tensorrt",
                 mode="img2img",
                 use_denoising_batch=True,
                 cfg_type="none",

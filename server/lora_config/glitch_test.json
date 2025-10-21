@@ -1,6 +1,6 @@
 {
-    "prompts_file_name": "glitch",
-    "loras": ["glitch", "glitch"],
+    "prompts_file_name": "mannequin",
+    "loras": ["mannequin", "mannequin"],
     "adapter_weights_sets": [
         [1.0, 1.0]
     ],
