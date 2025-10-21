@@ -407,25 +407,39 @@ class App:
                     print("[main.py] Initializing prompt travel service")
                     # Get the models from the pipeline - handle both single pipe and multiple pipes
                     if hasattr(self.pipeline, 'pipe'):
+                        # Standard pipeline (e.g., controlnetSDTurbot2i)
                         text_encoder = self.pipeline.pipe.text_encoder
                         tokenizer = self.pipeline.pipe.tokenizer
+                    elif hasattr(self.pipeline, 'pipes'):
+                        # Check if pipes contains StreamDiffusionWrapper or standard pipes
+                        first_pipe = self.pipeline.pipes[0]
+                        if hasattr(first_pipe, 'stream'):
+                            # StreamDiffusionWrapper - access through stream.text_encoder
+                            text_encoder = first_pipe.stream.text_encoder
+                            tokenizer = first_pipe.stream.pipe.tokenizer
+                        else:
+                            # Standard pipe
+                            text_encoder = first_pipe.text_encoder
+                            tokenizer = first_pipe.tokenizer
                     else:
-                        # Use the first pipe from the array
-                        text_encoder = self.pipeline.pipes[0].text_encoder
-                        tokenizer = self.pipeline.pipes[0].tokenizer
-                    
+                        raise AttributeError("Pipeline has neither 'pipe' nor 'pipes' attribute")
+
                     # # Initialize the embeddings service
                     # await embeddings_service.initialize(
                     #     text_encoder=text_encoder,
                     #     tokenizer=tokenizer,
                     #     device=device.type
                     # )
-                    
+
                     # # Start background tasks for the embeddings service
                     # await start_background_tasks()
-                    print("[main.py] Prompt travel service initialized and background tasks started")
+                    print("[main.py] Prompt travel service initialized successfully")
+                    print(f"[main.py] text_encoder type: {type(text_encoder)}")
+                    print(f"[main.py] tokenizer type: {type(tokenizer)}")
                 except Exception as e:
                     print(f"[main.py] Error initializing embeddings service: {e}")
+                    import traceback
+                    traceback.print_exc()
                     if getattr(self.args, 'mock_server_mode', False):
                         print("[main.py] Mock server mode enabled - keeping prompt travel enabled despite initialization error")
                     else:

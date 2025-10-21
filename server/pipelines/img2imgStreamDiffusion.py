@@ -26,6 +26,9 @@ from pydantic import BaseModel, Field
 from PIL import Image
 import math
 
+# NOTE: this is a custom prompt travel module
+from modules.prompt_travel.prompt_travel import PromptTravel
+
 base_model = "stabilityai/sd-turbo"
 # base_model = "stabilityai/sd-turbo"
 # base_model = "stabilityai/stable-diffusion-2-1-base"
@@ -70,6 +73,13 @@ class Pipeline:
             field="textarea",
             id="prompt",
         )
+        target_prompt: str = Field(
+            default_prompt,
+            title="Target Prompt",
+            field="textarea",
+            id="target_prompt",
+            hide=True,
+        )
         # negative_prompt: str = Field(
         #     default_negative_prompt,
         #     title="Negative Prompt",
@@ -85,6 +95,22 @@ class Pipeline:
             field="range",
             id="pipe_index",
             description="Select which pipe (LoRA combination) to use"
+        )
+        use_prompt_travel: bool = Field(
+            True,
+            title="Use Prompt Travel",
+            field="checkbox",
+            id="use_prompt_travel",
+        )
+        prompt_travel_factor: float = Field(
+            0.5,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Prompt Travel Factor",
+            field="range",
+            id="prompt_travel_factor",
+            hide=True,
         )
         width: int = Field(
             512, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
@@ -203,6 +229,13 @@ class Pipeline:
                 guidance_scale=1.2,
             )
 
+            # Initialize PromptTravel for this pipe to enable prompt embedding interpolation
+            # Access text_encoder and tokenizer from the inner stream object
+            stream.prompt_travel = PromptTravel(
+                text_encoder=stream.stream.text_encoder,
+                tokenizer=stream.stream.pipe.tokenizer,
+            )
+
             self.pipes.append(stream)
 
         # Store current pipe index
@@ -218,32 +251,83 @@ class Pipeline:
             print(f"[img2imgStreamDiffusion.py] Warning: pipe_index {pipe_index} out of bounds, using 0")
             pipe_index = 0
 
-        # Select the appropriate stream
-        stream = self.pipes[pipe_index]
+        # Select the appropriate stream wrapper
+        stream_wrapper = self.pipes[pipe_index]
 
         # Generate image from input image and prompt
         print(f"[img2imgStreamDiffusion.py] Params: {params}")
 
-        # If prompt changed, update it via prepare()
-        prompt = params.prompt
-        if prompt != self.last_prompt:
-            stream.prepare(
-                prompt=prompt,
-                negative_prompt=default_negative_prompt,
-                num_inference_steps=50,
-                guidance_scale=1.2,
+        # Handle prompt travel if enabled
+        use_prompt_travel = getattr(params, "use_prompt_travel", False)
+        print(f"[img2imgStreamDiffusion.py] use_prompt_travel: {use_prompt_travel}")
+
+        if use_prompt_travel:
+            # Get prompts and factor
+            source_prompt = params.prompt
+            target_prompt = getattr(params, 'target_prompt', params.prompt)
+            prompt_travel_factor = getattr(params, 'prompt_travel_factor', 0.5)
+
+            print(f"[img2imgStreamDiffusion.py] Calculating prompt travel embeddings")
+            print(f"[img2imgStreamDiffusion.py] source: {source_prompt}")
+            print(f"[img2imgStreamDiffusion.py] target: {target_prompt}")
+            print(f"[img2imgStreamDiffusion.py] factor: {prompt_travel_factor}")
+
+            # Encode source and target prompts
+            source_embeds, _ = stream_wrapper.prompt_travel.encode_prompt(
+                prompt=source_prompt,
+                device=stream_wrapper.stream.device,
+                num_images_per_prompt=1,
+                do_classifier_free_guidance=False,
             )
-            self.last_prompt = prompt
+
+            target_embeds, _ = stream_wrapper.prompt_travel.encode_prompt(
+                prompt=target_prompt,
+                device=stream_wrapper.stream.device,
+                num_images_per_prompt=1,
+                do_classifier_free_guidance=False,
+            )
+
+            # Interpolate between embeddings
+            interpolated_embeds = stream_wrapper.prompt_travel.interpolate_embeddings(
+                embeds_from=source_embeds,
+                embeds_to=target_embeds,
+                factor=prompt_travel_factor,
+            )
+
+            print(f"[img2imgStreamDiffusion.py] Interpolated embeddings shape: {interpolated_embeds.shape}")
+
+            # StreamDiffusion repeats embeddings for batch_size, so we need to match that
+            batch_size = stream_wrapper.stream.batch_size
+            interpolated_embeds_batched = interpolated_embeds.repeat(batch_size, 1, 1)
+
+            # Directly set the embeddings on the inner stream object
+            stream_wrapper.stream.prompt_embeds = interpolated_embeds_batched
+
+            print(f"[img2imgStreamDiffusion.py] Set prompt_embeds with shape: {interpolated_embeds_batched.shape}")
+
+        else:
+            # If prompt changed and not using prompt travel, update it via prepare()
+            prompt = params.prompt
+            if prompt != self.last_prompt:
+                stream_wrapper.prepare(
+                    prompt=prompt,
+                    negative_prompt=default_negative_prompt,
+                    num_inference_steps=50,
+                    guidance_scale=1.2,
+                )
+                self.last_prompt = prompt
+
+            print(f"[img2imgStreamDiffusion.py] NOTE: No prompt travel used, prepared prompt: {prompt}")
 
         # Update ControlNet control image (use input image for structural guidance)
         # ControlNet is statically enabled for this pipeline
         control_image = getattr(params, 'control_image', params.image)
         if control_image is not None:
             print(f"[img2imgStreamDiffusion.py] Updating control image for ControlNet structural guidance")
-            stream.update_control_image(index=0, image=control_image)
+            stream_wrapper.update_control_image(index=0, image=control_image)
 
         # Preprocess input image and generate
-        image_tensor = stream.preprocess_image(params.image)
-        output_image = stream(image=image_tensor)
+        image_tensor = stream_wrapper.preprocess_image(params.image)
+        output_image = stream_wrapper(image=image_tensor)
 
         return output_image
