@@ -589,7 +589,7 @@ parser.add_argument(
     "--upscaler-scale-factor",
     dest="upscaler_scale_factor",
     type=float,
-    default=4.0,
+    default=2.0,
     help="Scale factor for upscaler (default: 2.0)",
 )
 parser.add_argument(

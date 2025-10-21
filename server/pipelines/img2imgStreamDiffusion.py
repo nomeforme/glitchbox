@@ -194,6 +194,16 @@ class Pipeline:
             hide=True,
             id="controlnet_end",
         )
+        upscaler_scale_factor: int = Field(
+            2,
+            min=2,
+            max=4,
+            step=2,
+            title="Upscaler Scale",
+            field="range",
+            hide=True,
+            id="upscaler_scale_factor",
+        )
 
     def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype, lora_config=None):
         # Store lora_config for later use
@@ -202,8 +212,9 @@ class Pipeline:
 
         # Check if upscaler is enabled
         self.use_upscaler = getattr(args, 'use_upscaler', False)
+        self.upscaler_scale_factor = getattr(args, 'upscaler_scale_factor', 2)
         if self.use_upscaler:
-            print(f"[img2imgStreamDiffusion.py] RealESRGAN 2x upscaler enabled (TensorRT)")
+            print(f"[img2imgStreamDiffusion.py] RealESRGAN {self.upscaler_scale_factor}x upscaler enabled (TensorRT)")
 
         # Get adapter weights sets from lora_config to determine number of pipes
         if lora_config is not None:
@@ -237,13 +248,14 @@ class Pipeline:
                     {
                         'type': 'realesrgan_trt',
                         'params': {
+                            'scale_factor': self.upscaler_scale_factor,
                             'enable_tensorrt': True,
                             'force_rebuild': False
                         }
                     }
                 ]
             }
-            print(f"[img2imgStreamDiffusion.py] Image postprocessing configured with RealESRGAN 2x upscaler")
+            print(f"[img2imgStreamDiffusion.py] Image postprocessing configured with RealESRGAN {self.upscaler_scale_factor}x upscaler")
 
         # Create one pipe for each adapter weights set
         for idx, adapter_weights in enumerate(adapter_weights_sets):
