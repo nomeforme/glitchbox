@@ -49,6 +49,10 @@ class PromptScheduler:
         self.current_index = 0
         self.current_prompt = None
         self.next_prompt = None
+
+        # Progress ratio: tracks position in prompt cycle as 0.0-1.0
+        # This preserves progress when switching between different prompt files
+        self.progress_ratio = 0.0
         
         # Setup logging if enabled
         if logging_enabled:
@@ -180,17 +184,24 @@ class PromptScheduler:
             for i, prompt in enumerate(self.prompts):
                 self.logger.info(f"Prompt {i+1}: {prompt}")
 
-        # Initialize current and next prompts if we have at least 2 prompts
+        # Initialize current and next prompts using progress_ratio to preserve position
         if len(self.prompts) >= 2:
-            self.current_prompt = self.prompts[0]
-            self.next_prompt = self.prompts[1]
-            self.current_index = 0
+            # Calculate index from progress_ratio to preserve position when switching files
+            self.current_index = int(self.progress_ratio * (len(self.prompts) - 1))
+            self.current_index = max(0, min(len(self.prompts) - 1, self.current_index))
+
+            self.current_prompt = self.prompts[self.current_index]
+            next_index = (self.current_index + 1) % len(self.prompts)
+            self.next_prompt = self.prompts[next_index]
+
             if self.logging_enabled:
-                self.logger.info(f"Initialized with prompts: source={self.current_prompt}, target={self.next_prompt}")
+                self.logger.info(f"Initialized with prompts at ratio {self.progress_ratio:.2f}: source={self.current_prompt}, target={self.next_prompt}")
+            if self.debug:
+                print(f"[PromptScheduler] Restored position from ratio {self.progress_ratio:.2f} → index {self.current_index}/{len(self.prompts)-1}")
         elif len(self.prompts) == 1:
+            self.current_index = 0
             self.current_prompt = self.prompts[0]
             self.next_prompt = self.prompts[0]  # Use the same prompt for both
-            self.current_index = 0
             if self.logging_enabled:
                 self.logger.info(f"Initialized with single prompt: {self.current_prompt}")
         else:
@@ -219,9 +230,13 @@ class PromptScheduler:
             # Keep the target prompt (next_prompt) as is
             self.current_index = (self.current_index + 1) % len(self.prompts)
             self.current_prompt = self.prompts[self.current_index]
-            
+
+            # Update progress ratio to preserve position across prompt file switches
+            if len(self.prompts) > 1:
+                self.progress_ratio = self.current_index / (len(self.prompts) - 1)
+
             if self.debug:
-                print(f"[PromptScheduler] At max boundary, updated source prompt: {self.current_prompt}")
+                print(f"[PromptScheduler] At max boundary, updated source prompt: {self.current_prompt} (ratio: {self.progress_ratio:.2f})")
             if self.logging_enabled:
                 self.logger.info(f"At max boundary, updated source prompt: {self.current_prompt}")
                 
@@ -302,11 +317,13 @@ class PromptScheduler:
             self.current_prompt = self.prompts[0]
             self.next_prompt = self.prompts[1]
             self.current_index = 0
+            self.progress_ratio = 0.0
         elif len(self.prompts) == 1:
             self.current_prompt = self.prompts[0]
             self.next_prompt = self.prompts[0]
             self.current_index = 0
-            
+            self.progress_ratio = 0.0
+
         if self.debug:
             print(f"[PromptScheduler] Reset to initial prompts: source={self.current_prompt}, target={self.next_prompt}")
         if self.logging_enabled:
