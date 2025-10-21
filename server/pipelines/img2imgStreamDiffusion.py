@@ -200,6 +200,11 @@ class Pipeline:
         self.lora_config = lora_config
         self.pipes = []
 
+        # Check if upscaler is enabled
+        self.use_upscaler = getattr(args, 'use_upscaler', False)
+        if self.use_upscaler:
+            print(f"[img2imgStreamDiffusion.py] RealESRGAN 2x upscaler enabled (TensorRT)")
+
         # Get adapter weights sets from lora_config to determine number of pipes
         if lora_config is not None:
             adapter_weights_sets = lora_config.get_default_adapter_weights()
@@ -222,6 +227,23 @@ class Pipeline:
             'control_guidance_end': 1.0,
         }
         print(f"[img2imgStreamDiffusion.py] ControlNet enabled with SDXL model: {controlnet_config['model_id']}")
+
+        # Define image postprocessing configuration (RealESRGAN upscaler)
+        image_postprocessing_config = None
+        if self.use_upscaler:
+            image_postprocessing_config = {
+                'enabled': True,
+                'processors': [
+                    {
+                        'type': 'realesrgan_trt',
+                        'params': {
+                            'enable_tensorrt': True,
+                            'force_rebuild': False
+                        }
+                    }
+                ]
+            }
+            print(f"[img2imgStreamDiffusion.py] Image postprocessing configured with RealESRGAN 2x upscaler")
 
         # Create one pipe for each adapter weights set
         for idx, adapter_weights in enumerate(adapter_weights_sets):
@@ -251,6 +273,7 @@ class Pipeline:
                 use_safety_checker=args.safety_checker,
                 use_controlnet=use_controlnet,
                 controlnet_config=controlnet_config,
+                image_postprocessing_config=image_postprocessing_config,
             )
 
             # Load LoRAs manually with adapter weights (like controlnetSDTurbot2i)
