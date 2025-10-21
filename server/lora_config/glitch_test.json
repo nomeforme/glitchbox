@@ -2,10 +2,6 @@
     "prompts_file_name": "glitch",
     "loras": ["glitch", "glitch"],
     "adapter_weights_sets": [
-        [1.0, 1.0],
-        [1.0, 1.0],
-        [1.0, 1.0],
-        [1.0, 1.0],
         [1.0, 1.0]
     ],
     "input_params": {

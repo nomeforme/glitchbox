@@ -56,7 +56,7 @@ class Pipeline:
         name: str = "txt2imgStreamDiffusion"
         title: str = "Text-to-Image StreamDiffusion + ControlNet"
         description: str = "Generates an image from a text prompt using StreamDiffusion with ControlNet guidance and LoRAs"
-        input_mode: str = "text"
+        input_mode: str = "image"
         page_content: str = page_content
 
     class InputParams(BaseModel):

@@ -26,14 +26,14 @@ from pydantic import BaseModel, Field
 from PIL import Image
 import math
 
-base_model = "stabilityai/stable-diffusion-xl-base-1.0"
+base_model = "stabilityai/sd-turbo"
 # base_model = "stabilityai/sd-turbo"
 # base_model = "stabilityai/stable-diffusion-2-1-base"
 # base_model = "KBlueLeaf/kohaku-v2.1"
 # base_model = "SimianLuo/LCM_Dreamshaper_v7"
-taesd_model = "madebyollin/taesdxl"
+taesd_model = "madebyollin/taesd"
 
-default_prompt = "Portrait of The Joker halloween costume, face painting, with , glare pose, detailed, intricate, full of colour, cinematic lighting, trending on artstation, 8k, hyperrealistic, focused, extreme details, unreal engine 5 cinematic, masterpiece"
+default_prompt = "mrnabrmv style, Fragmented digital portrait blending abstract textures and vivid colors, creating a surreal, pixelated visage."
 default_negative_prompt = "black and white, blurry, low resolution, pixelated,  pixel art, low quality, low fidelity"
 
 page_content = """<h1 class="text-3xl font-bold">StreamDiffusion</h1>
@@ -87,10 +87,10 @@ class Pipeline:
             description="Select which pipe (LoRA combination) to use"
         )
         width: int = Field(
-            640, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
+            512, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
         )
         height: int = Field(
-            480, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
+            512, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
         )
         controlnet_scale: float = Field(
             0.87,
@@ -142,7 +142,7 @@ class Pipeline:
         # Define ControlNet configuration (static, for structural guidance in img2img)
         use_controlnet = True
         controlnet_config = {
-            'model_id': 'diffusers/controlnet-depth-sdxl-1.0',
+            'model_id': 'thibaud/controlnet-sd21-depth-diffusers',
             'preprocessor': 'depth',  # 'depth', 'canny', 'pose', etc.
             'conditioning_scale': 0.87,
             'enabled': True,
@@ -187,7 +187,7 @@ class Pipeline:
                 output_type="pil",
                 warmup=10,
                 vae_id=None,
-                acceleration="tensorrt",
+                acceleration="xformers",
                 mode="img2img",
                 use_denoising_batch=True,
                 cfg_type="none",
