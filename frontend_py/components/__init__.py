@@ -9,5 +9,6 @@ from .video_display import VideoDisplay
 from .control_panel import ControlPanel
 from .status_bar import StatusBar
 from .fullscreen_window import FullscreenWindow
+from .projection_mapper import ProjectionMapperWindow
 
-__all__ = ['CameraDisplay', 'ProcessedDisplay', 'VideoDisplay', 'ControlPanel', 'StatusBar', 'FullscreenWindow']
+__all__ = ['CameraDisplay', 'ProcessedDisplay', 'VideoDisplay', 'ControlPanel', 'StatusBar', 'FullscreenWindow', 'ProjectionMapperWindow']

@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import DISPLAY_WIDTH, DISPLAY_HEIGHT, DISPLAY_SCALE
 from .fullscreen_window import FullscreenWindow
+from .projection_mapper import ProjectionMapperWindow
 
 # Load environment variables
 load_dotenv(override=True)
@@ -203,9 +204,9 @@ class ProcessedDisplay(QWidget):
         self.image_label.setAlignment(Qt.AlignCenter)
         self.layout.addWidget(self.image_label)
         
-        # Fullscreen button
+        # Projection Mapper button
         self.button_layout = QHBoxLayout()
-        self.fullscreen_button = QPushButton("Fullscreen")
+        self.fullscreen_button = QPushButton("Projection Mapper")
         self.fullscreen_button.clicked.connect(self.toggle_fullscreen)
         self.fullscreen_button.setStyleSheet("""
             QPushButton {
@@ -227,8 +228,8 @@ class ProcessedDisplay(QWidget):
         self.stream_thread = None
         self.zmq_thread = None
         
-        # Fullscreen window
-        self.fullscreen_window = None
+        # Projection mapper window
+        self.projection_mapper = None
         self.is_fullscreen = False
         
         # Black frame mode
@@ -239,20 +240,20 @@ class ProcessedDisplay(QWidget):
         self.is_mirrored = False
         
     def toggle_fullscreen(self):
-        """Toggle fullscreen window"""
+        """Toggle projection mapper window"""
         if not self.is_fullscreen:
-            if not self.fullscreen_window:
-                self.fullscreen_window = FullscreenWindow()
-            self.fullscreen_window.show()
-            self.fullscreen_window.showFullScreen()
+            if not self.projection_mapper:
+                self.projection_mapper = ProjectionMapperWindow()
+            self.projection_mapper.show()
+            # Don't go fullscreen immediately - user will do that from the mapper window
             self.is_fullscreen = True
-            self.fullscreen_button.setText("Exit Fullscreen")
+            self.fullscreen_button.setText("Close Projection Mapper")
         else:
-            if self.fullscreen_window:
-                self.fullscreen_window.close()
-                self.fullscreen_window = None
+            if self.projection_mapper:
+                self.projection_mapper.close()
+                self.projection_mapper = None
             self.is_fullscreen = False
-            self.fullscreen_button.setText("Fullscreen")
+            self.fullscreen_button.setText("Projection Mapper")
 
     def start_stream(self, user_id: str, server_uri: str = "http://localhost:7860"):
         """Start receiving the image stream
@@ -387,10 +388,10 @@ class ProcessedDisplay(QWidget):
         scaled_pixmap = pixmap.scaled(available_size, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         
         self.image_label.setPixmap(scaled_pixmap)
-        
-        # Update fullscreen window if active
-        if self.fullscreen_window and self.is_fullscreen:
-            self.fullscreen_window.update_frame(frame)
+
+        # Update projection mapper if active
+        if self.projection_mapper and self.is_fullscreen:
+            self.projection_mapper.update_frame(frame)
         
         # Update FPS counter in status bar
         main_window = self.window()
@@ -401,8 +402,8 @@ class ProcessedDisplay(QWidget):
         """Clear the display and stop stream"""
         self.stop_stream()
         self.image_label.clear()
-        if self.fullscreen_window:
-            self.fullscreen_window.clear_display()
+        if self.projection_mapper:
+            self.projection_mapper.clear_display()
 
     def clear_zmq_queue(self):
         """Clear any pending messages in the ZMQ queue"""
@@ -454,10 +455,10 @@ class ProcessedDisplay(QWidget):
         """Clean up all resources"""
         print("[Display] Starting cleanup...")
         self.stop_stream()
-        if self.fullscreen_window:
-            print("[Display] Closing fullscreen window...")
-            self.fullscreen_window.close()
-            self.fullscreen_window = None
+        if self.projection_mapper:
+            print("[Display] Closing projection mapper window...")
+            self.projection_mapper.close()
+            self.projection_mapper = None
         print("[Display] Cleanup completed")
 
     def set_mirror_mode(self, enabled: bool):
@@ -486,8 +487,8 @@ class ProcessedDisplay(QWidget):
                 self.zmq_thread.running = False
                 if self.zmq_thread.isRunning():
                     self.zmq_thread.terminate()
-                    
-            if hasattr(self, 'fullscreen_window') and self.fullscreen_window:
-                self.fullscreen_window.close()
+
+            if hasattr(self, 'projection_mapper') and self.projection_mapper:
+                self.projection_mapper.close()
         except Exception as e:
             print(f"[Display] Error during destruction: {e}")
