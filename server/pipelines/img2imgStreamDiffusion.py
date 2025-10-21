@@ -128,6 +128,52 @@ class Pipeline:
             hide=True,
             id="controlnet_scale",
         )
+        # Add boost factor parameters
+        boost_factor_bass: float = Field(
+            1.0,
+            min=0.0,
+            max=3.0,
+            step=0.1,
+            title="Boost - Bass",
+            field="range",
+            id="boost_factor_bass",
+        )
+        boost_factor_low_mids: float = Field(
+            1.0,
+            min=0.0,
+            max=3.0,
+            step=0.1,
+            title="Boost - Low Mids",
+            field="range",
+            id="boost_factor_low_mids",
+        )
+        boost_factor_mids: float = Field(
+            1.5,
+            min=0.0,
+            max=3.0,
+            step=0.1,
+            title="Boost - Mids",
+            field="range",
+            id="boost_factor_mids",
+        )
+        boost_factor_high_mids: float = Field(
+            2.0,
+            min=0.0,
+            max=3.0,
+            step=0.1,
+            title="Boost - High Mids",
+            field="range",
+            id="boost_factor_high_mids",
+        )
+        boost_factor_treble: float = Field(
+            2.5,
+            min=0.0,
+            max=3.0,
+            step=0.1,
+            title="Boost - Treble",
+            field="range",
+            id="boost_factor_treble",
+        )
         controlnet_start: float = Field(
             0.0,
             min=0,
