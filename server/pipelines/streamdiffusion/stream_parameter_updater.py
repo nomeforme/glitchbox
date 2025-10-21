@@ -1399,13 +1399,13 @@ class StreamParameterUpdater(OrchestratorUser):
             # Create the appropriate hook module
             try:
                 if hook_type in ["image_preprocessing", "image_postprocessing"]:
-                    from streamdiffusion.modules.image_processing_module import ImagePreprocessingModule, ImagePostprocessingModule
+                    from .modules.image_processing_module import ImagePreprocessingModule, ImagePostprocessingModule
                     if hook_type == "image_preprocessing":
                         hook_module = ImagePreprocessingModule()
                     else:
                         hook_module = ImagePostprocessingModule()
                 elif hook_type in ["latent_preprocessing", "latent_postprocessing"]:
-                    from streamdiffusion.modules.latent_processing_module import LatentPreprocessingModule, LatentPostprocessingModule
+                    from .modules.latent_processing_module import LatentPreprocessingModule, LatentPostprocessingModule
                     if hook_type == "latent_preprocessing":
                         hook_module = LatentPreprocessingModule()
                     else:
@@ -1443,7 +1443,7 @@ class StreamParameterUpdater(OrchestratorUser):
                 if current_type.lower() != processor_type.lower() and not current_type.lower().startswith(processor_type.lower()):
                     logger.info(f"_update_hook_config: Type changed, replacing processor {i}")
                     try:
-                        from streamdiffusion.preprocessing.processors import get_preprocessor
+                        from .preprocessing.processors import get_preprocessor
                         new_processor = get_preprocessor(processor_type)
                         
                         # Copy attributes from old processor

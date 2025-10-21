@@ -97,7 +97,7 @@ class ControlNetModule(OrchestratorUser):
 
         preproc = None
         if cfg.preprocessor:
-            from streamdiffusion.preprocessing.processors import get_preprocessor
+            from ..preprocessing.processors import get_preprocessor
             preproc = get_preprocessor(cfg.preprocessor, pipeline_ref=self._stream)
             # Apply provided parameters to the preprocessor instance
             if cfg.preprocessor_params:

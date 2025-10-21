@@ -66,7 +66,10 @@ class Pipeline:
             480, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
         )
 
-    def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype):
+    def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype, lora_config=None):
+        # Store lora_config for later use
+        self.lora_config = lora_config
+
         params = self.InputParams()
         self.stream = StreamDiffusionWrapper(
             model_id_or_path=base_model,

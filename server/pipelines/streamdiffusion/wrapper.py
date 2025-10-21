@@ -1107,22 +1107,26 @@ class StreamDiffusionWrapper:
                 stream.pipe.enable_xformers_memory_efficient_attention()
             if acceleration == "tensorrt":
                 from polygraphy import cuda
-                from streamdiffusion.acceleration.tensorrt import TorchVAEEncoder
-                from streamdiffusion.acceleration.tensorrt.runtime_engines.unet_engine import AutoencoderKLEngine, NSFWDetectorEngine
-                from streamdiffusion.acceleration.tensorrt.models.models import (
+                from .acceleration.tensorrt import TorchVAEEncoder
+                from .acceleration.tensorrt.runtime_engines.unet_engine import AutoencoderKLEngine, NSFWDetectorEngine
+                from .acceleration.tensorrt.models.models import (
                     VAE,
                     UNet,
                     VAEEncoder,
                     NSFWDetector,
                 )
-                from streamdiffusion.acceleration.tensorrt.engine_manager import EngineManager, EngineType
+                from .acceleration.tensorrt.engine_manager import EngineManager, EngineType
                 # Add ControlNet detection and support
-                from streamdiffusion.model_detection import (
+                from .model_detection import (
                     extract_unet_architecture,
                     validate_architecture
                 )
-                from streamdiffusion.acceleration.tensorrt.export_wrappers.unet_controlnet_export import create_controlnet_wrapper
-                from streamdiffusion.acceleration.tensorrt.export_wrappers.unet_ipadapter_export import create_ipadapter_wrapper
+                from .acceleration.tensorrt.export_wrappers.unet_controlnet_export import create_controlnet_wrapper
+                # IPAdapter wrapper is optional
+                try:
+                    from .acceleration.tensorrt.export_wrappers.unet_ipadapter_export import create_ipadapter_wrapper
+                except ImportError:
+                    create_ipadapter_wrapper = None
 
                 # Legacy TensorRT implementation (fallback)
                 # Initialize engine manager
@@ -1309,7 +1313,7 @@ class StreamDiffusionWrapper:
                 # If using TensorRT with IP-Adapter, ensure processors and weights are installed BEFORE export
                 if use_ipadapter_trt and has_ipadapter and ipadapter_config and not hasattr(stream, '_ipadapter_module'):
                     try:
-                        from streamdiffusion.modules.ipadapter_module import IPAdapterModule, IPAdapterConfig, IPAdapterType
+                        from .modules.ipadapter_module import IPAdapterModule, IPAdapterConfig, IPAdapterType
                         cfg = ipadapter_config[0] if isinstance(ipadapter_config, list) else ipadapter_config
                         ip_cfg = IPAdapterConfig(
                             style_image_key=cfg.get('style_image_key') or 'ipadapter_main',
@@ -1338,7 +1342,7 @@ class StreamDiffusionWrapper:
                 # then construct UNet model with that value.
 
                 # Build a temporary unified wrapper to install processors and discover num_ip_layers
-                from streamdiffusion.acceleration.tensorrt.export_wrappers.unet_unified_export import UnifiedExportWrapper
+                from .acceleration.tensorrt.export_wrappers.unet_unified_export import UnifiedExportWrapper
                 temp_wrapped_unet = UnifiedExportWrapper(
                     stream.unet,
                     use_controlnet=use_controlnet_trt,
@@ -1596,7 +1600,7 @@ class StreamDiffusionWrapper:
                         )
                     
             if acceleration == "sfast":
-                from streamdiffusion.acceleration.sfast import (
+                from .acceleration.sfast import (
                     accelerate_with_stable_fast,
                 )
 
@@ -1609,7 +1613,7 @@ class StreamDiffusionWrapper:
         # Install modules via hooks instead of patching (wrapper keeps forwarding updates only)
         if use_controlnet:
             try:
-                from streamdiffusion.modules.controlnet_module import ControlNetModule, ControlNetConfig
+                from .modules.controlnet_module import ControlNetModule, ControlNetConfig
                 cn_module = ControlNetModule(device=self.device, dtype=self.dtype)
                 cn_module.install(stream)
                 # Normalize to list of configs
@@ -1680,7 +1684,7 @@ class StreamDiffusionWrapper:
 
         if use_ipadapter and ipadapter_config and not hasattr(stream, '_ipadapter_module'):
             try:
-                from streamdiffusion.modules.ipadapter_module import IPAdapterModule, IPAdapterConfig, IPAdapterType
+                from .modules.ipadapter_module import IPAdapterModule, IPAdapterConfig, IPAdapterType
                 # Use first config if list provided
                 cfg = ipadapter_config[0] if isinstance(ipadapter_config, list) else ipadapter_config
                 
@@ -1710,7 +1714,7 @@ class StreamDiffusionWrapper:
         # Install pipeline hook modules (Phase 4: Configuration Integration)
         if image_preprocessing_config and image_preprocessing_config.get('enabled', True):
             try:
-                from streamdiffusion.modules.image_processing_module import ImagePreprocessingModule
+                from .modules.image_processing_module import ImagePreprocessingModule
                 img_pre_module = ImagePreprocessingModule()
                 img_pre_module.install(stream)
                 for proc_config in image_preprocessing_config.get('processors', []):
@@ -1721,7 +1725,7 @@ class StreamDiffusionWrapper:
         
         if image_postprocessing_config and image_postprocessing_config.get('enabled', True):
             try:
-                from streamdiffusion.modules.image_processing_module import ImagePostprocessingModule
+                from .modules.image_processing_module import ImagePostprocessingModule
                 img_post_module = ImagePostprocessingModule()
                 img_post_module.install(stream)
                 for proc_config in image_postprocessing_config.get('processors', []):
@@ -1732,7 +1736,7 @@ class StreamDiffusionWrapper:
         
         if latent_preprocessing_config and latent_preprocessing_config.get('enabled', True):
             try:
-                from streamdiffusion.modules.latent_processing_module import LatentPreprocessingModule
+                from .modules.latent_processing_module import LatentPreprocessingModule
                 latent_pre_module = LatentPreprocessingModule()
                 latent_pre_module.install(stream)
                 for proc_config in latent_preprocessing_config.get('processors', []):
@@ -1743,7 +1747,7 @@ class StreamDiffusionWrapper:
         
         if latent_postprocessing_config and latent_postprocessing_config.get('enabled', True):
             try:
-                from streamdiffusion.modules.latent_processing_module import LatentPostprocessingModule
+                from .modules.latent_processing_module import LatentPostprocessingModule
                 latent_post_module = LatentPostprocessingModule()
                 latent_post_module.install(stream)
                 for proc_config in latent_postprocessing_config.get('processors', []):

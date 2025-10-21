@@ -24,7 +24,7 @@ except ImportError:
 # Try to import TensorRT dependencies
 try:
     import tensorrt as trt
-    from streamdiffusion.acceleration.tensorrt.utilities import engine_from_bytes, bytes_from_path
+    from ...acceleration.tensorrt.utilities import engine_from_bytes, bytes_from_path
     TRT_AVAILABLE = True
     
     # Numpy to PyTorch dtype mapping (same as depth_tensorrt.py)

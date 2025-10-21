@@ -128,7 +128,7 @@ class IPAdapterModule(OrchestratorUser):
             logger.error(f"IPAdapterModule.install: Failed to import IPAdapter: {e}")
             raise
         try:
-            from streamdiffusion.preprocessing.processors.ipadapter_embedding import IPAdapterEmbeddingPreprocessor
+            from ..preprocessing.processors.ipadapter_embedding import IPAdapterEmbeddingPreprocessor
         except Exception as e:
             logger.error(f"IPAdapterModule.install: Failed to import IPAdapterEmbeddingPreprocessor: {e}")
             raise
@@ -157,7 +157,7 @@ class IPAdapterModule(OrchestratorUser):
         # Use FaceID preprocessor if applicable
         if self.config.type == IPAdapterType.FACEID:
             try:
-                from streamdiffusion.preprocessing.processors.faceid_embedding import FaceIDEmbeddingPreprocessor
+                from ..preprocessing.processors.faceid_embedding import FaceIDEmbeddingPreprocessor
                 embedding_preprocessor = FaceIDEmbeddingPreprocessor(
                     ipadapter=ipadapter,
                     device=stream.device,

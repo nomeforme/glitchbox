@@ -2,7 +2,12 @@ import torch
 from diffusers import UNet2DConditionModel
 from typing import Optional, List
 from .unet_controlnet_export import create_controlnet_wrapper
-from .unet_ipadapter_export import create_ipadapter_wrapper
+
+# Make IPAdapter wrapper optional
+try:
+    from .unet_ipadapter_export import create_ipadapter_wrapper
+except ImportError:
+    create_ipadapter_wrapper = None
 
 class UnifiedExportWrapper(torch.nn.Module):
     """
@@ -25,10 +30,12 @@ class UnifiedExportWrapper(torch.nn.Module):
         
         # Apply IPAdapter first (installs processors into UNet)
         if use_ipadapter:
+            if create_ipadapter_wrapper is None:
+                raise ImportError("IPAdapter support requires diffusers_ipadapter package to be installed")
             ipadapter_kwargs = {k: v for k, v in kwargs.items() if k in ['install_processors']}
             if 'install_processors' not in ipadapter_kwargs:
                 ipadapter_kwargs['install_processors'] = True
-            
+
 
             self.ipadapter_wrapper = create_ipadapter_wrapper(unet, num_tokens=num_tokens, **ipadapter_kwargs)
             self.unet = self.ipadapter_wrapper.unet

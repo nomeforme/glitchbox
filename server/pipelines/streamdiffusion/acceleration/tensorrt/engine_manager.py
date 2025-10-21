@@ -31,13 +31,13 @@ class EngineManager:
         self.engine_dir.mkdir(parents=True, exist_ok=True)
         
         # Import the existing compile functions from tensorrt/__init__.py
-        from streamdiffusion.acceleration.tensorrt import (
+        from . import (
             compile_unet, compile_vae_encoder, compile_vae_decoder, compile_safety_checker, compile_controlnet
         )
-        from streamdiffusion.acceleration.tensorrt.runtime_engines.unet_engine import (
+        from .runtime_engines.unet_engine import (
             UNet2DConditionModelEngine
         )
-        from streamdiffusion.acceleration.tensorrt.runtime_engines.controlnet_engine import (
+        from .runtime_engines.controlnet_engine import (
             ControlNetModelEngine
         )
         
@@ -150,7 +150,7 @@ class EngineManager:
     
     def _prepare_controlnet_models(self, kwargs: Dict):
         """Prepare ControlNet models for compilation."""
-        from streamdiffusion.acceleration.tensorrt.models.controlnet_models import create_controlnet_model
+        from .models.controlnet_models import create_controlnet_model
         import torch
         
         model_type = kwargs.get('model_type', 'sd15')

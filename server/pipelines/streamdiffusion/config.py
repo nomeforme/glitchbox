@@ -47,7 +47,7 @@ def create_wrapper_from_config(config: Dict[str, Any], **overrides) -> Any:
     - If both are provided, 'prompt_blending' takes precedence and 'prompt' is ignored
     - negative_prompt: Currently a single string (not list) for all prompt types
     """
-    from streamdiffusion import StreamDiffusionWrapper
+    from . import StreamDiffusionWrapper
     import torch
 
     final_config = {**config, **overrides}

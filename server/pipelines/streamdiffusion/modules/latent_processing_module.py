@@ -32,7 +32,7 @@ class LatentProcessingModule(OrchestratorUser):
     
     def add_processor(self, proc_config: Dict[str, Any]) -> None:
         """Add a processor using the existing registry, following ControlNet pattern."""
-        from streamdiffusion.preprocessing.processors import get_preprocessor
+        from ..preprocessing.processors import get_preprocessor
         
         processor_type = proc_config.get('type')
         if not processor_type:

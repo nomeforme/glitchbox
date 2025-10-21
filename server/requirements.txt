@@ -49,6 +49,7 @@ replicate==1.0.7
 ffmpeg-python==0.2.0
 # Git-based packages
 git+https://github.com/lunarring/lunar_tools.git
+git+https://github.com/tencent-ailab/IP-Adapter.git
 # Uncomment if stable-fast is needed (requires special build flags)
 # git+https://github.com/chengzeyi/stable-fast.git@main#egg=stable-fast
 
