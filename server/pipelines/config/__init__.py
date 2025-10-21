@@ -116,8 +116,10 @@ class LoRACurationConfig:
                     with open(filepath, 'r') as f:
                         config_data = json.load(f)
                     
-                    if not all(k in config_data for k in ["prompts_file_name", "loras", "adapter_weights_sets", "input_params"]):
-                        print(f"[LoRACurationConfig] Warning: Skipping {filename}. Missing one or more required keys (prompts_file_name, loras, adapter_weights_sets, input_params).")
+                    # Support both old (prompts_file_name) and new (prompts_file_names) format
+                    has_prompts_field = "prompts_file_name" in config_data or "prompts_file_names" in config_data
+                    if not (has_prompts_field and all(k in config_data for k in ["loras", "adapter_weights_sets", "input_params"])):
+                        print(f"[LoRACurationConfig] Warning: Skipping {filename}. Missing one or more required keys (prompts_file_name/prompts_file_names, loras, adapter_weights_sets, input_params).")
                         continue
                     if not isinstance(config_data.get("adapter_weights_sets"), list) or \
                        (config_data.get("adapter_weights_sets") and not all(isinstance(i, list) for i in config_data.get("adapter_weights_sets"))):
@@ -164,6 +166,46 @@ class LoRACurationConfig:
 
     def get_config_for_curation(self, curation_key: str) -> dict | None:
         return self._all_curations.get(curation_key)
-        
+
+    def get_prompts_file_name_for_pipe_index(self, pipe_index: int, curation_key: str = None) -> str:
+        """
+        Get the prompts file name for a specific pipe index.
+        Supports both old format (single string) and new format (array).
+
+        Args:
+            pipe_index: The pipe index to get the prompts file name for
+            curation_key: Optional curation key (uses default if not provided)
+
+        Returns:
+            The prompts file name for the given pipe index
+        """
+        if curation_key is None:
+            curation_key = self.default_curation_key
+
+        config = self._all_curations.get(curation_key)
+        if not config:
+            print(f"[LoRACurationConfig] Warning: No config found for curation '{curation_key}'")
+            return "glitch"  # fallback
+
+        # New format: array of prompts file names (one per pipe)
+        if "prompts_file_names" in config:
+            prompts_file_names = config["prompts_file_names"]
+            if isinstance(prompts_file_names, list):
+                if pipe_index < len(prompts_file_names):
+                    return prompts_file_names[pipe_index]
+                else:
+                    print(f"[LoRACurationConfig] Warning: pipe_index {pipe_index} out of range for prompts_file_names (len={len(prompts_file_names)}), using last entry")
+                    return prompts_file_names[-1]
+            else:
+                print(f"[LoRACurationConfig] Warning: prompts_file_names is not a list, falling back to old format")
+
+        # Old format: single prompts file name for all pipes
+        if "prompts_file_name" in config:
+            return config["prompts_file_name"]
+
+        # Ultimate fallback
+        print(f"[LoRACurationConfig] Warning: No prompts_file_name or prompts_file_names found in config '{curation_key}'")
+        return "glitch"
+
     def get_default_curation_input_params(self) -> dict:
         return self.default_curation_input_params 

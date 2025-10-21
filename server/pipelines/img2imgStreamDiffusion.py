@@ -180,28 +180,13 @@ class Pipeline:
         # Create one pipe for each adapter weights set
         for idx, adapter_weights in enumerate(adapter_weights_sets):
             print(f"[img2imgStreamDiffusion.py] Creating pipe {idx + 1}/{len(adapter_weights_sets)}")
+            print(f"[img2imgStreamDiffusion.py] Pipe {idx}: adapter_weights = {adapter_weights}")
 
-            # Build lora_dict from lora_config
-            lora_dict = None
-            if lora_config is not None:
-                curation_key = lora_config.get_curation_keys()[0]
-                lora_models_list = lora_config.get_lora_curation()[curation_key]
-                lora_models_dict = lora_config.get_lora_models()
-
-                # Build lora_dict: {lora_path: scale}
-                lora_dict = {}
-                for i, lora_name in enumerate(lora_models_list):
-                    if lora_name != "None":
-                        lora_path = lora_models_dict[lora_name]
-                        # Use adapter_weights to determine scale for this LoRA
-                        scale = adapter_weights[i] if i < len(adapter_weights) else 1.0
-                        lora_dict[lora_path] = scale
-
-                print(f"[img2imgStreamDiffusion.py] Pipe {idx}: Built lora_dict with {len(lora_dict)} LoRAs")
-
+            # Create the StreamDiffusionWrapper WITHOUT lora_dict
+            # We'll load LoRAs manually afterwards to support per-pipe adapter weights
             stream = StreamDiffusionWrapper(
                 model_id_or_path=base_model,
-                lora_dict=lora_dict,
+                lora_dict=None,  # Don't use lora_dict - we'll load manually
                 use_tiny_vae=args.taesd,
                 device=device,
                 dtype=torch_dtype,
@@ -221,6 +206,44 @@ class Pipeline:
                 use_controlnet=use_controlnet,
                 controlnet_config=controlnet_config,
             )
+
+            # Load LoRAs manually with adapter weights (like controlnetSDTurbot2i)
+            if lora_config is not None:
+                curation_key = lora_config.get_curation_keys()[0]
+                lora_models_list = lora_config.get_lora_curation()[curation_key]
+                lora_models_dict = lora_config.get_lora_models()
+
+                # Filter out "None" entries
+                selected_loras = [name for name in lora_models_list if name != "None"]
+
+                if selected_loras:
+                    print(f"[img2imgStreamDiffusion.py] Loading {len(selected_loras)} LoRAs: {selected_loras}")
+
+                    # Ensure adapter_weights matches the number of loras
+                    if len(adapter_weights) < len(selected_loras):
+                        adapter_weights = adapter_weights + [1.0] * (len(selected_loras) - len(adapter_weights))
+                    elif len(adapter_weights) > len(selected_loras):
+                        adapter_weights = adapter_weights[:len(selected_loras)]
+
+                    # Load each LoRA with an adapter name
+                    adapter_names = []
+                    for i, lora_name in enumerate(selected_loras):
+                        adapter_name = f"lora_{i}"
+                        lora_path = lora_models_dict[lora_name]
+                        print(f"[img2imgStreamDiffusion.py] Loading LoRA {i}: {lora_name} as {adapter_name} with weight {adapter_weights[i]}")
+                        stream.stream.pipe.load_lora_weights(lora_path, adapter_name=adapter_name)
+                        adapter_names.append(adapter_name)
+
+                    # Set adapter weights and fuse
+                    print(f"[img2imgStreamDiffusion.py] Setting adapters with weights: {adapter_weights}")
+                    stream.stream.pipe.set_adapters(adapter_names=adapter_names, adapter_weights=adapter_weights)
+
+                    print(f"[img2imgStreamDiffusion.py] Fusing LoRAs with scale 1.0")
+                    stream.stream.pipe.fuse_lora(adapter_names=adapter_names, lora_scale=1.0)
+
+                    # Unload after fusing to free memory
+                    stream.stream.pipe.unload_lora_weights()
+                    print(f"[img2imgStreamDiffusion.py] LoRAs loaded and fused successfully")
 
             stream.prepare(
                 prompt=default_prompt,
@@ -245,6 +268,7 @@ class Pipeline:
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
         # Get pipe_index from params, default to 0 if not provided
         pipe_index = getattr(params, 'pipe_index', 0)
+        print(f"[img2imgStreamDiffusion.py] USING PIPE INDEX: {pipe_index}")
 
         # Ensure pipe_index is within bounds
         if pipe_index >= len(self.pipes):

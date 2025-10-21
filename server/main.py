@@ -125,10 +125,9 @@ class App:
             print(f"[main.py] Use latent travel: {self.use_latent_travel}")
             # The actual initialization happens in the startup event
             
-            # Get the prompts_file_name from the current curation config
-            current_config = self.lora_config.get_config_for_curation(self.lora_config.default_curation_key)
-            prompts_file_name = current_config.get('prompts_file_name') if current_config else getattr(self.args, 'prompts_file_name', 'glitch')
-            print(f"[main.py] Using prompts_file_name from curation config: {prompts_file_name}")
+            # Get the prompts_file_name from the current curation config (defaults to pipe_index 0)
+            prompts_file_name = self.lora_config.get_prompts_file_name_for_pipe_index(0)
+            print(f"[main.py] Using prompts_file_name from curation config for pipe_index 0: {prompts_file_name}")
             
             # Initialize prompt travel scheduler
             self.prompt_travel_scheduler = PromptTravelScheduler(
@@ -590,7 +589,17 @@ class App:
                             try:
                                 # Set user_id on params for the pipeline to use
                                 user_id_str = str(user_id)
-                                
+
+                                # Update prompts file based on pipe_index
+                                if hasattr(self, 'prompt_travel_scheduler') and hasattr(self, 'lora_config'):
+                                    pipe_index = getattr(params, 'pipe_index', 0)
+                                    prompts_file_name = self.lora_config.get_prompts_file_name_for_pipe_index(pipe_index)
+
+                                    # Only update if it changed
+                                    if prompts_file_name != self.prompt_travel_scheduler.prompts_file_name:
+                                        print(f"[main.py] Switching prompts file from '{self.prompt_travel_scheduler.prompts_file_name}' to '{prompts_file_name}' for pipe_index {pipe_index}")
+                                        self.prompt_travel_scheduler.update_prompts_file_name(prompts_file_name)
+
                                 # Update prompt travel factor with scheduler if enabled
                                 if hasattr(self, 'prompt_travel_scheduler') and self.prompt_travel_scheduler.enabled:
                                     # Get the next factor value and seed from the scheduler
@@ -889,9 +898,9 @@ class App:
                 
                 # Update the PromptTravelScheduler's prompts_file_name if it exists
                 if hasattr(self, 'prompt_travel_scheduler') and self.prompt_travel_scheduler is not None:
-                    current_config = self.lora_config.get_config_for_curation(self.lora_config.default_curation_key)
-                    new_prompts_file_name = current_config.get('prompts_file_name') if current_config else getattr(self.args, 'prompts_file_name', 'glitch')
-                    print(f"[main.py] Updating PromptTravelScheduler with new prompts_file_name: {new_prompts_file_name}")
+                    # Use pipe_index 0 as default when curation changes
+                    new_prompts_file_name = self.lora_config.get_prompts_file_name_for_pipe_index(0)
+                    print(f"[main.py] Updating PromptTravelScheduler with new prompts_file_name for pipe_index 0: {new_prompts_file_name}")
                     self.prompt_travel_scheduler.update_prompts_file_name(new_prompts_file_name)
                 
                 # Properly cleanup the old pipeline before creating new one
