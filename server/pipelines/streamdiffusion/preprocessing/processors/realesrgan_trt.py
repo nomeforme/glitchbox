@@ -434,19 +434,54 @@ class RealESRGANProcessor(BasePreprocessor):
     
     def _ensure_target_size_tensor(self, tensor: torch.Tensor) -> torch.Tensor:
         """
-        Override base class method - for upscaling, we want to keep the upscaled size
-        Don't resize back to original dimensions
+        Override base class method - for upscaling, we want to keep the upscaled size.
+        Don't resize back to original dimensions, and preserve batch dimension.
         """
-        return tensor
-    
-    def _process_tensor_core(self, tensor: torch.Tensor) -> torch.Tensor:
-        """Core tensor processing"""
+        # Ensure batch dimension is preserved for postprocessing hooks
         if tensor.dim() == 3:
             tensor = tensor.unsqueeze(0)
-            squeeze_output = True
-        else:
-            squeeze_output = False
-        
+        return tensor
+    
+    def process_tensor(self, image_tensor: torch.Tensor) -> torch.Tensor:
+        """
+        Override process_tensor to preserve batch dimension for postprocessing hooks.
+
+        The postprocessing orchestrator expects 4D tensors (BCHW), but the base class
+        validate_tensor_input removes the batch dimension. We need to preserve it.
+        """
+        # Store original batch dimension state
+        had_batch_dim = image_tensor.dim() == 4
+        batch_size = image_tensor.shape[0] if had_batch_dim else 1
+
+        # Ensure tensor is 4D for processing
+        if not had_batch_dim:
+            image_tensor = image_tensor.unsqueeze(0)
+
+        # Normalize to [0,1] range if needed
+        if image_tensor.max() > 1.0:
+            image_tensor = image_tensor / 255.0
+        elif image_tensor.min() < 0:
+            # Handle [-1, 1] range (already converted by orchestrator, but just in case)
+            image_tensor = (image_tensor / 2.0 + 0.5).clamp(0, 1)
+
+        # Move to correct device
+        image_tensor = image_tensor.to(device=self.device, dtype=self.dtype)
+
+        # Process with _process_tensor_core (will maintain 4D shape)
+        processed = self._process_tensor_core(image_tensor)
+
+        # Ensure output remains 4D for postprocessing orchestrator
+        if processed.dim() == 3:
+            processed = processed.unsqueeze(0)
+
+        return processed
+
+    def _process_tensor_core(self, tensor: torch.Tensor) -> torch.Tensor:
+        """Core tensor processing - expects and returns 4D tensors"""
+        # Ensure input is 4D
+        if tensor.dim() == 3:
+            tensor = tensor.unsqueeze(0)
+
         # Process with available backend
         if self.enable_tensorrt and TRT_AVAILABLE and self.engine_path.exists():
             try:
@@ -458,15 +493,13 @@ class RealESRGANProcessor(BasePreprocessor):
         else:
             # Fallback using interpolation
             output_tensor = torch.nn.functional.interpolate(
-                tensor, 
+                tensor,
                 scale_factor=self.scale_factor,
                 mode='bicubic',
                 align_corners=False
             )
-        
-        if squeeze_output:
-            output_tensor = output_tensor.squeeze(0)
-        
+
+        # Always return 4D tensor
         return output_tensor
     
     def get_target_dimensions(self) -> Tuple[int, int]:
