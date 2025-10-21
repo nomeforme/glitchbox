@@ -314,6 +314,11 @@ class Pipeline:
         )
 
     def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype, lora_config=None):
+        # Enable PyTorch optimizations for inference performance
+        torch.backends.cudnn.benchmark = True  # Optimize convolution algorithms (fixed input size)
+        torch.backends.cuda.matmul.allow_tf32 = True  # Enable TF32 on Ampere+ GPUs
+        torch.backends.cudnn.allow_tf32 = True  # Enable TF32 for cuDNN operations
+
         # Add current_curation_index to track changes
         self.current_curation_index = None
         
@@ -372,12 +377,13 @@ class Pipeline:
             # pipe.unet.load_state_dict(unet_state_dict)
 
             if args.taesd:
+                print(f"[controlnetSDTurbot2i.py] Loading TAESD model from {taesd_model}")
                 pipe.vae = AutoencoderTiny.from_pretrained(
                     taesd_model, torch_dtype=torch_dtype, use_safetensors=True
                 ).to(device)
 
             if args.sfast:
-                print("Using sfast compile\n")
+                print(f"[controlnetSDTurbot2i.py] Using sfast compile")
                 from sfast.compilers.stable_diffusion_pipeline_compiler import (
                     compile,
                     CompilationConfig,

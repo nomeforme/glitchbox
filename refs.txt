@@ -1,5 +1,5 @@
 # Ubuntu packages
-sudo apt-get update && sudo apt-get install -y portaudio19-dev libasound2-dev libportaudio2 libportaudiocpp0 libsndfile1-dev libpulse-dev ffmpeg
+sudo apt-get update && sudo apt-get install -y portaudio19-dev libasound2-dev libportaudio2 libportaudiocpp0 libsndfile1-dev libpulse-dev ffmpeg python3.10-dev
 
 # UV instructions
 uv init --python 3.11
@@ -74,7 +74,7 @@ uv pip install -v -U git+https://github.com/chengzeyi/stable-fast.git@main#egg=s
 
 # NEW VERSION PINNING AFTER UV RESOLVES TO 2.8.0+ by default
 uv pip install "torch==2.7.0" "torchvision==0.22.0" "torchaudio==2.7.0" --index-url https://download.pytorch.org/whl/cu128
-uv pip install xformers --index-url https://download.pytorch.org/whl/cu128 --no-deps
+uv pip install "xformers==0.0.30" --index-url https://download.pytorch.org/whl/cu128 --no-deps
 uv pip install -v -U git+https://github.com/chengzeyi/stable-fast.git@main#egg=stable-fast --no-build-isolation --no-deps
 
 #Depth Anything TRT compile
@@ -270,3 +270,17 @@ server/modules/depth_anything/depth_anything_v2/checkpoints/*
 server/modules/bg_removal/pretrained/*
 server/loras/*
 server/prompts/*.txt (add back prompt prefix)
+
+# Cuda Toolkit
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-ubuntu2404.pin
+sudo mv cuda-ubuntu2404.pin /etc/apt/preferences.d/cuda-repository-pin-600
+wget https://developer.download.nvidia.com/compute/cuda/12.8.0/local_installers/cuda-repo-ubuntu2404-12-8-local_12.8.0-570.86.10-1_amd64.deb
+sudo dpkg -i cuda-repo-ubuntu2404-12-8-local_12.8.0-570.86.10-1_amd64.deb
+sudo cp /var/cuda-repo-ubuntu2404-12-8-local/cuda-*-keyring.gpg /usr/share/keyrings/
+sudo apt-get update
+sudo apt-get -y install cuda-toolkit-12-8
+
+# For shell vars (bashrc etc)
+# CUDA 12.8 paths
+export PATH=/usr/local/cuda-12.8/bin${PATH:+:${PATH}}
+export LD_LIBRARY_PATH=/usr/local/cuda-12.8/lib64${LD_LIBRARY_PATH:+:${LD_LIBRARY_PATH}}
