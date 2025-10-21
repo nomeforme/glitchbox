@@ -59,6 +59,16 @@ class Pipeline:
         #     field="textarea",
         #     id="negative_prompt",
         # )
+        pipe_index: int = Field(
+            0,
+            min=0,
+            max=10,
+            step=1,
+            title="Pipe Index",
+            field="range",
+            id="pipe_index",
+            description="Select which pipe (LoRA combination) to use"
+        )
         width: int = Field(
             640, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
         )
@@ -69,41 +79,72 @@ class Pipeline:
     def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype, lora_config=None):
         # Store lora_config for later use
         self.lora_config = lora_config
+        self.pipes = []
+
+        # Get adapter weights sets from lora_config to determine number of pipes
+        if lora_config is not None:
+            adapter_weights_sets = lora_config.get_default_adapter_weights()
+            print(f"[img2imgStreamDiffusion.py] Creating {len(adapter_weights_sets)} pipes based on lora_config")
+        else:
+            # Default to single pipe if no lora_config provided
+            adapter_weights_sets = [[]]
+            print(f"[img2imgStreamDiffusion.py] No lora_config provided, creating single pipe")
 
         params = self.InputParams()
-        self.stream = StreamDiffusionWrapper(
-            model_id_or_path=base_model,
-            use_tiny_vae=args.taesd,
-            device=device,
-            dtype=torch_dtype,
-            t_index_list=[35, 45],
-            frame_buffer_size=1,
-            width=params.width,
-            height=params.height,
-            use_lcm_lora=False, #False,
-            output_type="pil",
-            warmup=10,
-            vae_id=None,
-            acceleration="tensorrt",#args.acceleration,
-            mode="img2img",
-            use_denoising_batch=True,
-            cfg_type="none",
-            use_safety_checker=args.safety_checker,
-            # enable_similar_image_filter=True,
-            # similar_image_filter_threshold=0.98,
-            # engine_dir=args.engine_dir,
-        )
 
+        # Create one pipe for each adapter weights set
+        for idx, adapter_weights in enumerate(adapter_weights_sets):
+            print(f"[img2imgStreamDiffusion.py] Creating pipe {idx + 1}/{len(adapter_weights_sets)}")
+
+            stream = StreamDiffusionWrapper(
+                model_id_or_path=base_model,
+                use_tiny_vae=args.taesd,
+                device=device,
+                dtype=torch_dtype,
+                t_index_list=[35, 45],
+                frame_buffer_size=1,
+                width=params.width,
+                height=params.height,
+                use_lcm_lora=False,
+                output_type="pil",
+                warmup=10,
+                vae_id=None,
+                acceleration="tensorrt",
+                mode="img2img",
+                use_denoising_batch=True,
+                cfg_type="none",
+                use_safety_checker=args.safety_checker,
+            )
+
+            stream.prepare(
+                prompt=default_prompt,
+                negative_prompt=default_negative_prompt,
+                num_inference_steps=50,
+                guidance_scale=1.2,
+            )
+
+            # TODO: Load LoRAs here based on adapter_weights (not implemented yet)
+
+            self.pipes.append(stream)
+
+        # Store current pipe index
+        self.current_pipe_idx = 0
         self.last_prompt = default_prompt
-        self.stream.prepare(
-            prompt=default_prompt,
-            negative_prompt=default_negative_prompt,
-            num_inference_steps=50,
-            guidance_scale=1.2,
-        )
 
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
-        image_tensor = self.stream.preprocess_image(params.image)
-        output_image = self.stream(image=image_tensor, prompt=params.prompt)
+        # Get pipe_index from params, default to 0 if not provided
+        pipe_index = getattr(params, 'pipe_index', 0)
+
+        # Ensure pipe_index is within bounds
+        if pipe_index >= len(self.pipes):
+            print(f"[img2imgStreamDiffusion.py] Warning: pipe_index {pipe_index} out of bounds, using 0")
+            pipe_index = 0
+
+        # Select the appropriate stream
+        stream = self.pipes[pipe_index]
+
+        # Preprocess image and generate
+        image_tensor = stream.preprocess_image(params.image)
+        output_image = stream(image=image_tensor, prompt=params.prompt)
 
         return output_image
