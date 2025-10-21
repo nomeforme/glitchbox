@@ -10,13 +10,13 @@ from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion_img2img impo
     retrieve_latents,
 )
 
-from streamdiffusion.model_detection import detect_model
-from streamdiffusion.hooks import (
+from .model_detection import detect_model
+from .hooks import (
     EmbedsCtx, StepCtx, UnetKwargsDelta, ImageCtx, LatentCtx,
     EmbeddingHook, UnetHook, ImageHook, LatentHook
 )
-from streamdiffusion.image_filter import SimilarImageFilter
-from streamdiffusion.stream_parameter_updater import StreamParameterUpdater
+from .image_filter import SimilarImageFilter
+from .stream_parameter_updater import StreamParameterUpdater
 
 import logging
 

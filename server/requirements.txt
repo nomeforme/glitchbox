@@ -33,6 +33,7 @@ PyOpenGL-accelerate==3.1.9
 timm==1.0.15
 einops==0.8.1
 xformers==0.0.30
+controlnet-aux==0.0.10
 # Additional packages
 moviepy==2.2.1
 sounddevice==0.5.2

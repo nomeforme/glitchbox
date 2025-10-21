@@ -1,8 +1,8 @@
 import sys
 import os
 
-# Update import to use server prefix
-from streamdiffusion.utils.wrapper import StreamDiffusionWrapper
+# Update import to use local pipelines directory
+from pipelines.streamdiffusion.wrapper import StreamDiffusionWrapper
 
 import torch
 

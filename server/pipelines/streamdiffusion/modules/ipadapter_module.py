@@ -5,11 +5,11 @@ from typing import Optional, Tuple, Any
 from enum import Enum
 import torch
 
-from streamdiffusion.hooks import EmbedsCtx, EmbeddingHook, StepCtx, UnetKwargsDelta, UnetHook
+from ..hooks import EmbedsCtx, EmbeddingHook, StepCtx, UnetKwargsDelta, UnetHook
 import os
-from streamdiffusion.preprocessing.orchestrator_user import OrchestratorUser
+from ..preprocessing.orchestrator_user import OrchestratorUser
 import logging
-from streamdiffusion.utils.reporting import report_error
+from ..utils.reporting import report_error
 
 logger = logging.getLogger(__name__)
 

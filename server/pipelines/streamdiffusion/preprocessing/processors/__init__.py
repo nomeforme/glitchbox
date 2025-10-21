@@ -3,7 +3,6 @@ from typing import Any
 from .canny import CannyPreprocessor
 from .depth import DepthPreprocessor
 from .openpose import OpenPosePreprocessor
-from .lineart import LineartPreprocessor
 from .standard_lineart import StandardLineartPreprocessor
 from .passthrough import PassthroughPreprocessor
 from .external import ExternalPreprocessor
@@ -17,6 +16,14 @@ from .sharpen import SharpenPreprocessor
 from .upscale import UpscalePreprocessor
 from .blur import BlurPreprocessor
 from .realesrgan_trt import RealESRGANProcessor
+
+# Try to import lineart preprocessor - requires controlnet_aux
+try:
+    from .lineart import LineartPreprocessor
+    LINEART_AVAILABLE = True
+except ImportError:
+    LineartPreprocessor = None
+    LINEART_AVAILABLE = False
 
 # Try to import TensorRT preprocessors - might not be available on all systems
 try:
@@ -59,7 +66,6 @@ _preprocessor_registry = {
     "canny": CannyPreprocessor,
     "depth": DepthPreprocessor,
     "openpose": OpenPosePreprocessor,
-    "lineart": LineartPreprocessor,
     "standard_lineart": StandardLineartPreprocessor,
     "passthrough": PassthroughPreprocessor,
     "external": ExternalPreprocessor,
@@ -71,7 +77,11 @@ _preprocessor_registry = {
     "upscale": UpscalePreprocessor,
     "blur": BlurPreprocessor,
     "realesrgan_trt": RealESRGANProcessor,
-}   
+}
+
+# Add lineart preprocessor if available
+if LINEART_AVAILABLE:
+    _preprocessor_registry["lineart"] = LineartPreprocessor   
 
 # Add TensorRT preprocessors if available
 if DEPTH_TENSORRT_AVAILABLE:
@@ -156,9 +166,8 @@ __all__ = [
     "BasePreprocessor",
     "PipelineAwareProcessor",
     "CannyPreprocessor",
-    "DepthPreprocessor", 
+    "DepthPreprocessor",
     "OpenPosePreprocessor",
-    "LineartPreprocessor",
     "StandardLineartPreprocessor",
     "PassthroughPreprocessor",
     "ExternalPreprocessor",
@@ -173,6 +182,9 @@ __all__ = [
     "register_preprocessor",
     "list_preprocessors",
 ]
+
+if LINEART_AVAILABLE:
+    __all__.append("LineartPreprocessor")
 
 if DEPTH_TENSORRT_AVAILABLE:
     __all__.append("DepthAnythingTensorrtPreprocessor")

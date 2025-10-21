@@ -2,7 +2,7 @@ from typing import Tuple, Any
 import torch
 from PIL import Image
 from .ipadapter_embedding import IPAdapterEmbeddingPreprocessor
-from streamdiffusion.utils.reporting import report_error
+from ...utils.reporting import report_error
 
 
 class FaceIDEmbeddingPreprocessor(IPAdapterEmbeddingPreprocessor):

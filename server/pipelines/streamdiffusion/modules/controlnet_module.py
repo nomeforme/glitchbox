@@ -8,11 +8,11 @@ import torch
 from diffusers.models import ControlNetModel
 import logging
 
-from streamdiffusion.hooks import StepCtx, UnetKwargsDelta, UnetHook
-from streamdiffusion.preprocessing.preprocessing_orchestrator import (
+from ..hooks import StepCtx, UnetKwargsDelta, UnetHook
+from ..preprocessing.preprocessing_orchestrator import (
     PreprocessingOrchestrator,
 )
-from streamdiffusion.preprocessing.orchestrator_user import OrchestratorUser
+from ..preprocessing.orchestrator_user import OrchestratorUser
 
 
 @dataclass
