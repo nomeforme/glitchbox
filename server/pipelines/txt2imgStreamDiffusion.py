@@ -118,11 +118,34 @@ class Pipeline:
             hide=True,
             id="controlnet_end",
         )
+        upscaler_scale_factor: int = Field(
+            2,
+            min=2,
+            max=4,
+            step=2,
+            title="Upscaler Scale",
+            field="range",
+            hide=True,
+            id="upscaler_scale_factor",
+        )
+        debug_controlnet: bool = Field(
+            False,
+            title="Debug ControlNet",
+            field="checkbox",
+            hide=True,
+            id="debug_controlnet",
+        )
 
     def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype, lora_config=None):
         # Store lora_config for later use
         self.lora_config = lora_config
         self.pipes = []
+
+        # Check if upscaler is enabled
+        self.use_upscaler = getattr(args, 'use_upscaler', False)
+        self.upscaler_scale_factor = getattr(args, 'upscaler_scale_factor', 2)
+        if self.use_upscaler:
+            print(f"[txt2imgStreamDiffusion.py] RealESRGAN {self.upscaler_scale_factor}x upscaler enabled (TensorRT)")
 
         # Get adapter weights sets from lora_config to determine number of pipes
         if lora_config is not None:
@@ -140,12 +163,34 @@ class Pipeline:
         controlnet_config = {
             'model_id': 'thibaud/controlnet-sd21-depth-diffusers',
             'preprocessor': 'depth',  # 'depth', 'canny', 'pose', etc.
+            'preprocessor_params': {
+                'model_name': 'Intel/dpt-swinv2-tiny-256',  # ~165MB, fastest
+                # 'model_name': 'Intel/dpt-large',  # ~1.3GB, slower but higher quality
+            },
             'conditioning_scale': 0.87,
             'enabled': True,
             'control_guidance_start': 0.0,
             'control_guidance_end': 1.0,
         }
         print(f"[txt2imgStreamDiffusion.py] ControlNet enabled with model: {controlnet_config['model_id']}")
+
+        # Define image postprocessing configuration (RealESRGAN upscaler)
+        image_postprocessing_config = None
+        if self.use_upscaler:
+            image_postprocessing_config = {
+                'enabled': True,
+                'processors': [
+                    {
+                        'type': 'realesrgan_trt',
+                        'params': {
+                            'scale_factor': self.upscaler_scale_factor,
+                            'enable_tensorrt': False,
+                            'force_rebuild': False
+                        }
+                    }
+                ]
+            }
+            print(f"[txt2imgStreamDiffusion.py] Image postprocessing configured with RealESRGAN {self.upscaler_scale_factor}x upscaler")
 
         # Create one pipe for each adapter weights set
         for idx, adapter_weights in enumerate(adapter_weights_sets):
@@ -191,6 +236,7 @@ class Pipeline:
                 use_safety_checker=args.safety_checker,
                 use_controlnet=use_controlnet,
                 controlnet_config=controlnet_config,
+                image_postprocessing_config=image_postprocessing_config,
             )
 
             stream.prepare(
@@ -249,5 +295,21 @@ class Pipeline:
 
         # Generate final image
         output_image = stream()
+
+        # Debug controlnet: paste preprocessed control image in bottom-right corner
+        if params.debug_controlnet:
+            # Get the preprocessed control image (depth map) that ControlNet is using
+            preprocessed_control = stream.get_last_processed_image(index=0)
+
+            if preprocessed_control is not None:
+                if self.use_upscaler:
+                    scale_factor = 2  # Use server default scale (2x instead of 4x)
+                else:
+                    scale_factor = 1
+
+                w0, h0 = (scale_factor * 200, scale_factor * 200)
+                control_image_resized = preprocessed_control.resize((w0, h0))
+                w1, h1 = output_image.size
+                output_image.paste(control_image_resized, (w1 - w0, h1 - h0))
 
         return output_image

@@ -286,7 +286,7 @@ class Pipeline:
                 # 'model_name': 'Intel/dpt-large',  # ~1.3GB, slower but higher quality
             },
             'conditioning_scale': 0.87,
-            'enabled': True,
+            'enabled': False,
             'control_guidance_start': 0.0,
             'control_guidance_end': 1.0,
         }
