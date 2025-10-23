@@ -1,5 +1,5 @@
 # Ubuntu packages
-sudo apt-get update && sudo apt-get install -y portaudio19-dev libasound2-dev libportaudio2 libportaudiocpp0 libsndfile1-dev libpulse-dev ffmpeg python3.10-dev
+sudo apt-get update && sudo apt-get install -y portaudio19-dev libasound2-dev libportaudio2 libportaudiocpp0 libsndfile1-dev libpulse-dev ffmpeg
 
 # UV instructions
 uv init --python 3.11

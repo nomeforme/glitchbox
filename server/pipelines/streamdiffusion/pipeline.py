@@ -798,12 +798,51 @@ class StreamDiffusion:
         return x_t_latent
 
     def decode_image(self, x_0_pred_out: torch.Tensor) -> torch.Tensor:
-        
+
         scaled_latent = x_0_pred_out / self.vae.config.scaling_factor
-        
+
         output_latent = self.vae.decode(scaled_latent, return_dict=False)[0]
-        
+
         return output_latent
+
+    def get_last_processed_image(self, index: int) -> Optional[PIL.Image.Image]:
+        """
+        Get the last preprocessed control image for debugging purposes.
+
+        Args:
+            index: Index of the controlnet to get the image from
+
+        Returns:
+            PIL Image of the preprocessed control image, or None if not available
+        """
+        if not hasattr(self, '_controlnet_module'):
+            return None
+
+        if index < 0 or index >= len(self._controlnet_module.controlnet_images):
+            return None
+
+        tensor = self._controlnet_module.controlnet_images[index]
+        if tensor is None:
+            return None
+
+        # Convert tensor to PIL using same logic as preprocessing orchestrator
+        if tensor.dim() == 4:
+            tensor = tensor.squeeze(0)  # Remove batch dimension
+        if tensor.dim() == 3 and tensor.shape[0] == 3:
+            # Convert from CHW to HWC
+            tensor = tensor.permute(1, 2, 0)
+
+        # Handle VAE output range [-1, 1] -> [0, 1] -> [0, 255]
+        if tensor.min() < 0:
+            tensor = (tensor / 2.0 + 0.5).clamp(0, 1)
+
+        # Ensure proper range [0, 1] -> [0, 255]
+        if tensor.max() <= 1.0:
+            tensor = tensor * 255.0
+
+        # Convert to numpy and then PIL
+        numpy_image = tensor.detach().cpu().numpy().astype(np.uint8)
+        return PIL.Image.fromarray(numpy_image)
 
     def predict_x0_batch(self, x_t_latent: torch.Tensor) -> torch.Tensor:
         prev_latent_batch = self.x_t_latent_buffer

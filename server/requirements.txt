@@ -1,7 +1,7 @@
 --find-links https://download.pytorch.org/whl/cu128
-torch==2.7.0
-torchvision==0.22.0
-torchaudio==2.7.0
+torch==2.7.0+cu128
+torchvision==0.22.0+cu128
+torchaudio==2.7.0+cu128
 accelerate==1.7.0
 colored==2.3.0
 compel==2.1.1
@@ -49,7 +49,7 @@ replicate==1.0.7
 ffmpeg-python==0.2.0
 # Git-based packages
 git+https://github.com/lunarring/lunar_tools.git
-git+https://github.com/tencent-ailab/IP-Adapter.git
+# git+https://github.com/tencent-ailab/IP-Adapter.git
 # Uncomment if stable-fast is needed (requires special build flags)
 # git+https://github.com/chengzeyi/stable-fast.git@main#egg=stable-fast
 

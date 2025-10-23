@@ -25,9 +25,27 @@ from config import Args
 from pydantic import BaseModel, Field
 from PIL import Image
 import math
+import glob
 
 # NOTE: this is a custom prompt travel module
 from modules.prompt_travel.prompt_travel import PromptTravel
+
+# Function to read prompt prefix from .txt files
+def get_prompt_prefix():
+    prompts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "prompts")
+    prompt_files = glob.glob(os.path.join(prompts_dir, "*.txt"))
+    
+    if not prompt_files:
+        # Default prompt prefix if no files are found
+        return ""
+    
+    # Read the first prompt file
+    with open(prompt_files[0], 'r') as f:
+        return f.read().strip()
+
+prompt_prefix = get_prompt_prefix()
+default_prompt = prompt_prefix + "mrnabrmv style, Fragmented digital portrait blending abstract textures and vivid colors, creating a surreal, pixelated visage."
+default_negative_prompt = "black and white, blurry, low resolution, pixelated,  pixel art, low quality, low fidelity"
 
 base_model = "stabilityai/sd-turbo"
 # base_model = "stabilityai/sd-turbo"
@@ -35,9 +53,6 @@ base_model = "stabilityai/sd-turbo"
 # base_model = "KBlueLeaf/kohaku-v2.1"
 # base_model = "SimianLuo/LCM_Dreamshaper_v7"
 taesd_model = "madebyollin/taesd"
-
-default_prompt = "mrnabrmv style, Fragmented digital portrait blending abstract textures and vivid colors, creating a surreal, pixelated visage."
-default_negative_prompt = "black and white, blurry, low resolution, pixelated,  pixel art, low quality, low fidelity"
 
 page_content = """<h1 class="text-3xl font-bold">StreamDiffusion</h1>
 <h3 class="text-xl font-bold">Image-to-Image SDXL + ControlNet</h3>
@@ -79,6 +94,13 @@ class Pipeline:
             field="textarea",
             id="target_prompt",
             hide=True,
+        )
+        client_prompt_prefix: str = Field(
+            prompt_prefix,
+            title="Client Prompt Prefix",
+            field="textarea",
+            id="client_prompt_prefix",
+            description="Prefix to prepend to client-provided prompts from STT",
         )
         # negative_prompt: str = Field(
         #     default_negative_prompt,
@@ -204,6 +226,33 @@ class Pipeline:
             hide=True,
             id="upscaler_scale_factor",
         )
+        use_output_bg_removal: bool = Field(
+            False,
+            title="Use Output Background Removal",
+            field="checkbox",
+            id="use_output_bg_removal",
+        )
+        use_prompt_indexing: bool = Field(
+            False,
+            title="Use Prompt Indexing",
+            field="checkbox",
+            id="use_prompt_indexing",
+            description="Use pipe index to select prompts from file instead of sequential scheduling",
+        )
+        use_client_prompts: bool = Field(
+            False,
+            title="Use Client Prompts",
+            field="checkbox",
+            id="use_client_prompts",
+            description="Use client-provided prompts instead of scheduled prompts for prompt travel",
+        )
+        debug_controlnet: bool = Field(
+            False,
+            title="Debug ControlNet",
+            field="checkbox",
+            hide=True,
+            id="debug_controlnet",
+        )
 
     def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype, lora_config=None):
         # Store lora_config for later use
@@ -232,6 +281,10 @@ class Pipeline:
         controlnet_config = {
             'model_id': 'thibaud/controlnet-sd21-depth-diffusers',
             'preprocessor': 'depth',  # 'depth', 'canny', 'pose', etc.
+            'preprocessor_params': {
+                'model_name': 'Intel/dpt-swinv2-tiny-256',  # ~165MB, fastest
+                # 'model_name': 'Intel/dpt-large',  # ~1.3GB, slower but higher quality
+            },
             'conditioning_scale': 0.87,
             'enabled': True,
             'control_guidance_start': 0.0,
@@ -434,5 +487,21 @@ class Pipeline:
         # Preprocess input image and generate
         image_tensor = stream_wrapper.preprocess_image(params.image)
         output_image = stream_wrapper(image=image_tensor)
+
+        # Debug controlnet: paste preprocessed control image in bottom-right corner
+        if params.debug_controlnet:
+            # Get the preprocessed control image (depth map) that ControlNet is using
+            preprocessed_control = stream_wrapper.get_last_processed_image(index=0)
+
+            if preprocessed_control is not None:
+                if self.use_upscaler:
+                    scale_factor = 2  # Use server default scale (2x instead of 4x)
+                else:
+                    scale_factor = 1
+
+                w0, h0 = (scale_factor * 200, scale_factor * 200)
+                control_image_resized = preprocessed_control.resize((w0, h0))
+                w1, h1 = output_image.size
+                output_image.paste(control_image_resized, (w1 - w0, h1 - h0))
 
         return output_image
