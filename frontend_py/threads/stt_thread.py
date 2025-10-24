@@ -35,6 +35,10 @@ class SpeechToTextThread(QThread):
                 on_realtime_transcription_update=self.on_transcription_update,
                 no_log_file=True,  # Disable log file generation
                 device=STT_DEVICE,
+                # VAD parameters for utterance segmentation
+                post_speech_silence_duration=0.4,  # Shorter silence duration to detect pauses faster
+                silero_deactivity_detection=True,  # Enable automatic reset after silence
+                silero_sensitivity=0.5,  # Slightly more sensitive VAD (0-1, lower = more sensitive to speech)
             )
             
             print("[STT] Speech-to-text system initialized, wait until it says 'speak now'")
