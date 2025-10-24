@@ -1,0 +1,5 @@
+papercut -subject/scene- a red monkey in a jungle
+papercut -subject/scene- a blue dog in a city
+papercut -subject/scene- a jellyfish man
+papercut -subject/scene- glitchy pixel pink elephant
+papercut -subject/scene- a cybernetic pixel room of animals in green vats
