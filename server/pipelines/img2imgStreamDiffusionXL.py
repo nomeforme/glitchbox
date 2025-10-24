@@ -75,7 +75,7 @@ Image to Image pipeline using
 
 class Pipeline:
     class Info(BaseModel):
-        name: str = "img2imgStreamDiffusion"
+        name: str = "img2imgStreamDiffusionXL"
         title: str = "Image-to-Image SDXL StreamDiffusion + ControlNet"
         description: str = "Generates an image from an input image using SDXL StreamDiffusion with ControlNet guidance and LoRAs"
         input_mode: str = "image"
@@ -119,7 +119,7 @@ class Pipeline:
             description="Select which pipe (LoRA combination) to use"
         )
         use_prompt_travel: bool = Field(
-            False,
+            True,
             title="Use Prompt Travel",
             field="checkbox",
             id="use_prompt_travel",
@@ -323,7 +323,7 @@ class Pipeline:
                 use_tiny_vae=args.taesd,
                 device=device,
                 dtype=torch_dtype,
-                t_index_list=[22, 32, 45],
+                t_index_list=[32],
                 frame_buffer_size=1,
                 width=params.width,
                 height=params.height,
@@ -387,10 +387,12 @@ class Pipeline:
             )
 
             # Initialize PromptTravel for this pipe to enable prompt embedding interpolation
-            # Access text_encoder and tokenizer from the inner stream object
+            # For SDXL, pass both text encoders and tokenizers
             stream.prompt_travel = PromptTravel(
-                text_encoder=stream.stream.text_encoder,
+                text_encoder=stream.stream.pipe.text_encoder,
                 tokenizer=stream.stream.pipe.tokenizer,
+                text_encoder_2=stream.stream.pipe.text_encoder_2,
+                tokenizer_2=stream.stream.pipe.tokenizer_2,
             )
 
             self.pipes.append(stream)
@@ -425,43 +427,46 @@ class Pipeline:
             target_prompt = getattr(params, 'target_prompt', params.prompt)
             prompt_travel_factor = getattr(params, 'prompt_travel_factor', 0.5)
 
-            print(f"[img2imgStreamDiffusion.py] Calculating prompt travel embeddings")
-            print(f"[img2imgStreamDiffusion.py] source: {source_prompt}")
-            print(f"[img2imgStreamDiffusion.py] target: {target_prompt}")
-            print(f"[img2imgStreamDiffusion.py] factor: {prompt_travel_factor}")
+            print(f"[img2imgStreamDiffusionXL.py] Calculating SDXL prompt travel embeddings")
+            print(f"[img2imgStreamDiffusionXL.py] source: {source_prompt}")
+            print(f"[img2imgStreamDiffusionXL.py] target: {target_prompt}")
+            print(f"[img2imgStreamDiffusionXL.py] factor: {prompt_travel_factor}")
 
-            # Encode source and target prompts
-            source_embeds, _ = stream_wrapper.prompt_travel.encode_prompt(
+            # Encode source and target prompts using SDXL dual encoders
+            source_embeds, _, source_pooled, _ = stream_wrapper.prompt_travel.encode_prompt_sdxl(
                 prompt=source_prompt,
                 device=stream_wrapper.stream.device,
                 num_images_per_prompt=1,
                 do_classifier_free_guidance=False,
             )
 
-            target_embeds, _ = stream_wrapper.prompt_travel.encode_prompt(
+            target_embeds, _, target_pooled, _ = stream_wrapper.prompt_travel.encode_prompt_sdxl(
                 prompt=target_prompt,
                 device=stream_wrapper.stream.device,
                 num_images_per_prompt=1,
                 do_classifier_free_guidance=False,
             )
 
-            # Interpolate between embeddings
-            interpolated_embeds = stream_wrapper.prompt_travel.interpolate_embeddings(
-                embeds_from=source_embeds,
-                embeds_to=target_embeds,
+            # Interpolate between embeddings (both concatenated and pooled)
+            interpolated_embeds, interpolated_pooled = stream_wrapper.prompt_travel.interpolate_embeddings_sdxl(
+                embeds_from=(source_embeds, source_pooled),
+                embeds_to=(target_embeds, target_pooled),
                 factor=prompt_travel_factor,
             )
 
-            print(f"[img2imgStreamDiffusion.py] Interpolated embeddings shape: {interpolated_embeds.shape}")
+            print(f"[img2imgStreamDiffusionXL.py] Interpolated embeddings shape: {interpolated_embeds.shape}")
+            print(f"[img2imgStreamDiffusionXL.py] Interpolated pooled embeddings shape: {interpolated_pooled.shape}")
 
             # StreamDiffusion repeats embeddings for batch_size, so we need to match that
             batch_size = stream_wrapper.stream.batch_size
             interpolated_embeds_batched = interpolated_embeds.repeat(batch_size, 1, 1)
 
-            # Directly set the embeddings on the inner stream object
+            # Directly set both the concatenated embeddings and pooled embeddings
             stream_wrapper.stream.prompt_embeds = interpolated_embeds_batched
+            stream_wrapper.stream.add_text_embeds = interpolated_pooled  # SDXL pooled embeddings
 
-            print(f"[img2imgStreamDiffusion.py] Set prompt_embeds with shape: {interpolated_embeds_batched.shape}")
+            print(f"[img2imgStreamDiffusionXL.py] Set prompt_embeds with shape: {interpolated_embeds_batched.shape}")
+            print(f"[img2imgStreamDiffusionXL.py] Set add_text_embeds with shape: {interpolated_pooled.shape}")
 
         else:
             # If prompt changed and not using prompt travel, update it via prepare()

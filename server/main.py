@@ -331,9 +331,7 @@ class App:
             try:
                 params = base_params.copy()
                 params['pipe_index'] = pipe_idx
-                # Disable prompt travel during warmup - use simple prompt instead
-                params['use_prompt_travel'] = False
-                params['prompt'] = "a simple test image"  # Simple prompt for warmup
+                # Use default settings from pipeline InputParams for warmup
                 params = SimpleNamespace(**self.pipeline.InputParams(**params).__dict__)
 
                 if self.pipeline.Info().input_mode == "image":

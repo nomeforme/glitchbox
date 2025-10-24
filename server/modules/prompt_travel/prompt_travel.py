@@ -13,25 +13,36 @@ from diffusers.pipelines.controlnet.pipeline_controlnet_img2img import unscale_l
 class PromptTravel:
     """
     A module for interpolating between two text prompts in the embedding space.
-    
-    This allows for smooth transitions between different prompts by linearly 
+
+    This allows for smooth transitions between different prompts by linearly
     interpolating their embeddings.
+
+    Supports both SD 1.5/2.1 (single text encoder) and SDXL (dual text encoders).
     """
-    
+
     def __init__(
         self,
         text_encoder: CLIPTextModel,
         tokenizer: CLIPTokenizer,
+        text_encoder_2: Optional[CLIPTextModel] = None,
+        tokenizer_2: Optional[CLIPTokenizer] = None,
     ):
         """
         Initialize the PromptTravel module.
-        
+
         Args:
-            text_encoder: The CLIP text encoder model
+            text_encoder: The CLIP text encoder model (ViT-L for SDXL)
             tokenizer: The CLIP tokenizer
+            text_encoder_2: Optional second text encoder (OpenCLIP ViT-bigG for SDXL)
+            tokenizer_2: Optional second tokenizer for SDXL
         """
         self.text_encoder = text_encoder
         self.tokenizer = tokenizer
+        self.text_encoder_2 = text_encoder_2
+        self.tokenizer_2 = tokenizer_2
+
+        # Detect if this is SDXL mode
+        self.is_sdxl = text_encoder_2 is not None and tokenizer_2 is not None
         
     def encode_prompt_OLD(
         self,
@@ -342,7 +353,152 @@ class PromptTravel:
                 unscale_lora_layers(self.text_encoder, lora_scale)
 
         return prompt_embeds, negative_prompt_embeds
-    
+
+    def encode_prompt_sdxl(
+        self,
+        prompt: Union[str, List[str]],
+        device: torch.device,
+        num_images_per_prompt: int = 1,
+        do_classifier_free_guidance: bool = False,
+        negative_prompt: Optional[Union[str, List[str]]] = None,
+        prompt_2: Optional[Union[str, List[str]]] = None,
+        negative_prompt_2: Optional[Union[str, List[str]]] = None,
+        prompt_embeds: Optional[torch.Tensor] = None,
+        negative_prompt_embeds: Optional[torch.Tensor] = None,
+        pooled_prompt_embeds: Optional[torch.Tensor] = None,
+        negative_pooled_prompt_embeds: Optional[torch.Tensor] = None,
+    ):
+        """
+        Encode prompts for SDXL using dual text encoders.
+
+        This method encodes prompts using both text_encoder (CLIP ViT-L) and
+        text_encoder_2 (OpenCLIP ViT-bigG), then concatenates the embeddings
+        and returns pooled embeddings from text_encoder_2.
+
+        Args:
+            prompt: The prompt(s) to encode
+            device: Device to use
+            num_images_per_prompt: Number of images per prompt
+            do_classifier_free_guidance: Whether to use CFG
+            negative_prompt: Negative prompt(s)
+            prompt_2: Second prompt for text_encoder_2 (if None, uses prompt)
+            negative_prompt_2: Second negative prompt (if None, uses negative_prompt)
+            prompt_embeds: Pre-computed prompt embeddings
+            negative_prompt_embeds: Pre-computed negative prompt embeddings
+            pooled_prompt_embeds: Pre-computed pooled embeddings
+            negative_pooled_prompt_embeds: Pre-computed negative pooled embeddings
+
+        Returns:
+            Tuple of (prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds)
+        """
+        if not self.is_sdxl:
+            raise RuntimeError("encode_prompt_sdxl called but module not initialized with SDXL encoders")
+
+        # Use same prompt for both encoders if prompt_2 not specified
+        prompt_2 = prompt_2 or prompt
+        negative_prompt_2 = negative_prompt_2 or negative_prompt
+
+        # Determine batch size
+        if prompt is not None and isinstance(prompt, str):
+            batch_size = 1
+        elif prompt is not None and isinstance(prompt, list):
+            batch_size = len(prompt)
+        else:
+            batch_size = prompt_embeds.shape[0]
+
+        # Encode with first text encoder (CLIP ViT-L, 768 dim)
+        if prompt_embeds is None:
+            text_inputs = self.tokenizer(
+                prompt,
+                padding="max_length",
+                max_length=self.tokenizer.model_max_length,
+                truncation=True,
+                return_tensors="pt",
+            )
+            text_input_ids = text_inputs.input_ids.to(device)
+
+            prompt_embeds = self.text_encoder(text_input_ids, output_hidden_states=True)
+            # Use penultimate layer from text_encoder for SDXL
+            pooled_prompt_embeds_1 = prompt_embeds[0]  # Last hidden state
+            prompt_embeds = prompt_embeds.hidden_states[-2]  # Penultimate layer
+
+        # Encode with second text encoder (OpenCLIP ViT-bigG, 1280 dim)
+        text_inputs_2 = self.tokenizer_2(
+            prompt_2,
+            padding="max_length",
+            max_length=self.tokenizer_2.model_max_length,
+            truncation=True,
+            return_tensors="pt",
+        )
+        text_input_ids_2 = text_inputs_2.input_ids.to(device)
+
+        prompt_embeds_2 = self.text_encoder_2(text_input_ids_2, output_hidden_states=True)
+        # Use pooled output from text_encoder_2
+        pooled_prompt_embeds = prompt_embeds_2[0]  # Pooled output
+        prompt_embeds_2 = prompt_embeds_2.hidden_states[-2]  # Penultimate layer
+
+        # Concatenate embeddings from both encoders
+        prompt_embeds = torch.cat([prompt_embeds, prompt_embeds_2], dim=-1)
+
+        # Duplicate embeddings for each image per prompt
+        bs_embed, seq_len, _ = prompt_embeds.shape
+        prompt_embeds = prompt_embeds.repeat(1, num_images_per_prompt, 1)
+        prompt_embeds = prompt_embeds.view(bs_embed * num_images_per_prompt, seq_len, -1)
+
+        pooled_prompt_embeds = pooled_prompt_embeds.repeat(1, num_images_per_prompt).view(
+            bs_embed * num_images_per_prompt, -1
+        )
+
+        # Encode negative prompts if CFG is enabled
+        negative_prompt_embeds = None
+        negative_pooled_prompt_embeds = None
+
+        if do_classifier_free_guidance:
+            uncond_tokens = [""] * batch_size if negative_prompt is None else negative_prompt
+            uncond_tokens_2 = [""] * batch_size if negative_prompt_2 is None else negative_prompt_2
+
+            if isinstance(uncond_tokens, str):
+                uncond_tokens = [uncond_tokens]
+            if isinstance(uncond_tokens_2, str):
+                uncond_tokens_2 = [uncond_tokens_2]
+
+            # Encode negative prompts with first encoder
+            uncond_input = self.tokenizer(
+                uncond_tokens,
+                padding="max_length",
+                max_length=self.tokenizer.model_max_length,
+                truncation=True,
+                return_tensors="pt",
+            )
+            negative_prompt_embeds = self.text_encoder(uncond_input.input_ids.to(device), output_hidden_states=True)
+            negative_prompt_embeds = negative_prompt_embeds.hidden_states[-2]
+
+            # Encode negative prompts with second encoder
+            uncond_input_2 = self.tokenizer_2(
+                uncond_tokens_2,
+                padding="max_length",
+                max_length=self.tokenizer_2.model_max_length,
+                truncation=True,
+                return_tensors="pt",
+            )
+            negative_prompt_embeds_2 = self.text_encoder_2(uncond_input_2.input_ids.to(device), output_hidden_states=True)
+            negative_pooled_prompt_embeds = negative_prompt_embeds_2[0]
+            negative_prompt_embeds_2 = negative_prompt_embeds_2.hidden_states[-2]
+
+            # Concatenate negative embeddings
+            negative_prompt_embeds = torch.cat([negative_prompt_embeds, negative_prompt_embeds_2], dim=-1)
+
+            # Duplicate negative embeddings
+            seq_len = negative_prompt_embeds.shape[1]
+            negative_prompt_embeds = negative_prompt_embeds.repeat(1, num_images_per_prompt, 1)
+            negative_prompt_embeds = negative_prompt_embeds.view(batch_size * num_images_per_prompt, seq_len, -1)
+
+            negative_pooled_prompt_embeds = negative_pooled_prompt_embeds.repeat(1, num_images_per_prompt).view(
+                batch_size * num_images_per_prompt, -1
+            )
+
+        return prompt_embeds, negative_prompt_embeds, pooled_prompt_embeds, negative_pooled_prompt_embeds
+
     def interpolate_embeddings(
         self,
         embeds_from: torch.Tensor,
@@ -351,20 +507,52 @@ class PromptTravel:
     ) -> torch.Tensor:
         """
         Linearly interpolate between two embeddings.
-        
+
         Args:
             embeds_from: Source embeddings
             embeds_to: Target embeddings
             factor: Interpolation factor (0.0 = source, 1.0 = target)
-            
+
         Returns:
             Interpolated embeddings
         """
         # Ensure factor is within [0, 1]
         factor = max(0.0, min(1.0, factor))
-        
+
         # Linear interpolation: (1-t)*A + t*B
         return (1 - factor) * embeds_from + factor * embeds_to
+
+    def interpolate_embeddings_sdxl(
+        self,
+        embeds_from: Tuple[torch.Tensor, torch.Tensor],
+        embeds_to: Tuple[torch.Tensor, torch.Tensor],
+        factor: float,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Linearly interpolate between two SDXL embedding tuples.
+
+        For SDXL, each embedding is a tuple of (concatenated_embeds, pooled_embeds).
+        This method interpolates both types of embeddings.
+
+        Args:
+            embeds_from: Source embeddings (concatenated_embeds, pooled_embeds)
+            embeds_to: Target embeddings (concatenated_embeds, pooled_embeds)
+            factor: Interpolation factor (0.0 = source, 1.0 = target)
+
+        Returns:
+            Interpolated embeddings as (concatenated_embeds, pooled_embeds)
+        """
+        # Ensure factor is within [0, 1]
+        factor = max(0.0, min(1.0, factor))
+
+        # Interpolate concatenated embeddings
+        concat_embeds_from, pooled_embeds_from = embeds_from
+        concat_embeds_to, pooled_embeds_to = embeds_to
+
+        interpolated_concat = (1 - factor) * concat_embeds_from + factor * concat_embeds_to
+        interpolated_pooled = (1 - factor) * pooled_embeds_from + factor * pooled_embeds_to
+
+        return interpolated_concat, interpolated_pooled
     
     def travel_between_prompts(
         self,

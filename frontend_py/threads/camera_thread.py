@@ -23,8 +23,9 @@ class CameraThread(QThread):
         """Main thread loop for capturing camera frames"""
         try:
             self.camera = cv2.VideoCapture(self.device_index)
-            self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, DISPLAY_WIDTH)
-            self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, DISPLAY_HEIGHT)
+            # Camera resolution settings disabled - use native camera resolution
+            # self.camera.set(cv2.CAP_PROP_FRAME_WIDTH, DISPLAY_WIDTH)
+            # self.camera.set(cv2.CAP_PROP_FRAME_HEIGHT, DISPLAY_HEIGHT)
             if not self.camera.isOpened():
                 print("[Camera] Failed to open camera")
                 return

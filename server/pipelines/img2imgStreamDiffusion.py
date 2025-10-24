@@ -286,7 +286,7 @@ class Pipeline:
                 # 'model_name': 'Intel/dpt-large',  # ~1.3GB, slower but higher quality
             },
             'conditioning_scale': 0.87,
-            'enabled': True,
+            'enabled': False,
             'control_guidance_start': 0.0,
             'control_guidance_end': 1.0,
         }
@@ -323,7 +323,7 @@ class Pipeline:
                 use_tiny_vae=args.taesd,
                 device=device,
                 dtype=torch_dtype,
-                t_index_list=[22, 32, 45],
+                t_index_list=[22, 45],
                 frame_buffer_size=1,
                 width=params.width,
                 height=params.height,

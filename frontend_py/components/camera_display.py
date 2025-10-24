@@ -25,8 +25,10 @@ class CameraDisplay(QLabel):
         height, width = frame.shape[:2]
         bytes_per_line = 3 * width
         q_image = QImage(frame.data, width, height, bytes_per_line, QImage.Format_RGB888)
-        self.setPixmap(QPixmap.fromImage(q_image).scaled(
-            DISPLAY_WIDTH, DISPLAY_HEIGHT, Qt.KeepAspectRatio))
+        self.setPixmap(QPixmap.fromImage(q_image))
+        # Scaling disabled - display at native camera resolution
+        # self.setPixmap(QPixmap.fromImage(q_image).scaled(
+        #     DISPLAY_WIDTH, DISPLAY_HEIGHT, Qt.KeepAspectRatio))
 
     def clear_display(self):
         """Clear the display"""
