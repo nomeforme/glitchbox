@@ -401,6 +401,13 @@ class Pipeline:
         self.current_pipe_idx = 0
         self.last_prompt = default_prompt
 
+        # Cache for prompt travel embeddings (per pipe)
+        self.prompt_embeds_cache = {}  # {pipe_idx: {prompt: (embeds, pooled)}}
+
+        # Initialize cache for each pipe
+        for idx in range(len(self.pipes)):
+            self.prompt_embeds_cache[idx] = {}
+
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
         # Get pipe_index from params, default to 0 if not provided
         pipe_index = getattr(params, 'pipe_index', 0)
@@ -427,25 +434,38 @@ class Pipeline:
             target_prompt = getattr(params, 'target_prompt', params.prompt)
             prompt_travel_factor = getattr(params, 'prompt_travel_factor', 0.5)
 
-            print(f"[img2imgStreamDiffusionXL.py] Calculating SDXL prompt travel embeddings")
-            print(f"[img2imgStreamDiffusionXL.py] source: {source_prompt}")
-            print(f"[img2imgStreamDiffusionXL.py] target: {target_prompt}")
-            print(f"[img2imgStreamDiffusionXL.py] factor: {prompt_travel_factor}")
+            print(f"[img2imgStreamDiffusionXL.py] SDXL prompt travel - factor: {prompt_travel_factor}")
+            print(f"[img2imgStreamDiffusionXL.py] source: {source_prompt[:50]}...")
+            print(f"[img2imgStreamDiffusionXL.py] target: {target_prompt[:50]}...")
 
-            # Encode source and target prompts using SDXL dual encoders
-            source_embeds, _, source_pooled, _ = stream_wrapper.prompt_travel.encode_prompt_sdxl(
-                prompt=source_prompt,
-                device=stream_wrapper.stream.device,
-                num_images_per_prompt=1,
-                do_classifier_free_guidance=False,
-            )
+            # Get or compute source embeddings (with caching)
+            cache = self.prompt_embeds_cache[pipe_index]
+            if source_prompt not in cache:
+                print(f"[img2imgStreamDiffusionXL.py] Cache MISS - encoding source prompt")
+                source_embeds, _, source_pooled, _ = stream_wrapper.prompt_travel.encode_prompt_sdxl(
+                    prompt=source_prompt,
+                    device=stream_wrapper.stream.device,
+                    num_images_per_prompt=1,
+                    do_classifier_free_guidance=False,
+                )
+                cache[source_prompt] = (source_embeds, source_pooled)
+            else:
+                print(f"[img2imgStreamDiffusionXL.py] Cache HIT - reusing source embeddings")
+                source_embeds, source_pooled = cache[source_prompt]
 
-            target_embeds, _, target_pooled, _ = stream_wrapper.prompt_travel.encode_prompt_sdxl(
-                prompt=target_prompt,
-                device=stream_wrapper.stream.device,
-                num_images_per_prompt=1,
-                do_classifier_free_guidance=False,
-            )
+            # Get or compute target embeddings (with caching)
+            if target_prompt not in cache:
+                print(f"[img2imgStreamDiffusionXL.py] Cache MISS - encoding target prompt")
+                target_embeds, _, target_pooled, _ = stream_wrapper.prompt_travel.encode_prompt_sdxl(
+                    prompt=target_prompt,
+                    device=stream_wrapper.stream.device,
+                    num_images_per_prompt=1,
+                    do_classifier_free_guidance=False,
+                )
+                cache[target_prompt] = (target_embeds, target_pooled)
+            else:
+                print(f"[img2imgStreamDiffusionXL.py] Cache HIT - reusing target embeddings")
+                target_embeds, target_pooled = cache[target_prompt]
 
             # Interpolate between embeddings (both concatenated and pooled)
             interpolated_embeds, interpolated_pooled = stream_wrapper.prompt_travel.interpolate_embeddings_sdxl(
