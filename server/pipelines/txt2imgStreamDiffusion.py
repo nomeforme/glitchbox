@@ -24,7 +24,10 @@ from pydantic import BaseModel, Field
 from PIL import Image
 import math
 
-base_model = "stabilityai/sd-turbo"
+# NOTE: this is a custom prompt travel module
+from modules.prompt_travel.prompt_travel import PromptTravel
+
+base_model = "stabilityai/sd-sdxl"
 # base_model = "KBlueLeaf/kohaku-v2.1"
 # base_model = "SimianLuo/LCM_Dreamshaper_v7"
 taesd_model = "madebyollin/taesd"
@@ -66,6 +69,13 @@ class Pipeline:
             field="textarea",
             id="prompt",
         )
+        target_prompt: str = Field(
+            default_prompt,
+            title="Target Prompt",
+            field="textarea",
+            id="target_prompt",
+            hide=True,
+        )
         # negative_prompt: str = Field(
         #     default_negative_prompt,
         #     title="Negative Prompt",
@@ -81,6 +91,22 @@ class Pipeline:
             field="range",
             id="pipe_index",
             description="Select which pipe (LoRA combination) to use"
+        )
+        use_prompt_travel: bool = Field(
+            True,
+            title="Use Prompt Travel",
+            field="checkbox",
+            id="use_prompt_travel",
+        )
+        prompt_travel_factor: float = Field(
+            0.5,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Prompt Travel Factor",
+            field="range",
+            id="prompt_travel_factor",
+            hide=True,
         )
         width: int = Field(
             512, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
@@ -162,12 +188,13 @@ class Pipeline:
         use_controlnet = True
         controlnet_config = {
             'model_id': 'thibaud/controlnet-sd21-depth-diffusers',
-            'preprocessor': 'depth',  # 'depth', 'canny', 'pose', etc.
-            'preprocessor_params': {
-                'model_name': 'Intel/dpt-swinv2-tiny-256',  # ~165MB, fastest
-                # 'model_name': 'Intel/dpt-large',  # ~1.3GB, slower but higher quality
-            },
-            'conditioning_scale': 0.87,
+            'preprocessor': 'passthrough',  # Uses input image directly (for physical depth camera)
+            # 'preprocessor': 'depth',  # Uncomment to calculate depth from RGB
+            # 'preprocessor_params': {
+            #     'model_name': 'Intel/dpt-swinv2-tiny-256',  # ~165MB, fastest
+            #     # 'model_name': 'Intel/dpt-large',  # ~1.3GB, slower but higher quality
+            # },
+            'conditioning_scale': 0.67,
             'enabled': True,
             'control_guidance_start': 0.0,
             'control_guidance_end': 1.0,
@@ -178,13 +205,13 @@ class Pipeline:
         image_postprocessing_config = None
         if self.use_upscaler:
             image_postprocessing_config = {
-                'enabled': True,
+                'enabled': False,
                 'processors': [
                     {
                         'type': 'realesrgan_trt',
                         'params': {
                             'scale_factor': self.upscaler_scale_factor,
-                            'enable_tensorrt': False,
+                            'enable_tensorrt': True,
                             'force_rebuild': False
                         }
                     }
@@ -195,33 +222,17 @@ class Pipeline:
         # Create one pipe for each adapter weights set
         for idx, adapter_weights in enumerate(adapter_weights_sets):
             print(f"[txt2imgStreamDiffusion.py] Creating pipe {idx + 1}/{len(adapter_weights_sets)}")
+            print(f"[txt2imgStreamDiffusion.py] Pipe {idx}: adapter_weights = {adapter_weights}")
 
-            # Build lora_dict from lora_config
-            lora_dict = None
-            if lora_config is not None:
-                curation_key = lora_config.get_curation_keys()[0]
-                lora_models_list = lora_config.get_lora_curation()[curation_key]
-                lora_models_dict = lora_config.get_lora_models()
-
-                # Build lora_dict: {lora_path: scale}
-                lora_dict = {}
-                for i, lora_name in enumerate(lora_models_list):
-                    if lora_name != "None":
-                        lora_path = lora_models_dict[lora_name]
-                        # Use adapter_weights to determine scale for this LoRA
-                        scale = adapter_weights[i] if i < len(adapter_weights) else 1.0
-                        lora_dict[lora_path] = scale
-
-                print(f"[txt2imgStreamDiffusion.py] Pipe {idx}: Built lora_dict with {len(lora_dict)} LoRAs")
-                print(f"[txt2imgStreamDiffusion.py] lora_dict: {lora_dict}")
-
+            # Create the StreamDiffusionWrapper WITHOUT lora_dict
+            # We'll load LoRAs manually afterwards to support per-pipe adapter weights
             stream = StreamDiffusionWrapper(
                 model_id_or_path=base_model,
-                lora_dict=lora_dict,
+                lora_dict=None,  # Don't use lora_dict - we'll load manually
                 use_tiny_vae=args.taesd,
                 device=device,
                 dtype=torch_dtype,
-                t_index_list=[0, 16, 32, 45],
+                t_index_list=[0, 12, 32],
                 frame_buffer_size=1,
                 width=params.width,
                 height=params.height,
@@ -239,9 +250,54 @@ class Pipeline:
                 image_postprocessing_config=image_postprocessing_config,
             )
 
+            # # Load LoRAs manually with adapter weights (like controlnetSDTurbot2i)
+            # if lora_config is not None:
+            #     curation_key = lora_config.get_curation_keys()[0]
+            #     lora_models_list = lora_config.get_lora_curation()[curation_key]
+            #     lora_models_dict = lora_config.get_lora_models()
+
+            #     # Filter out "None" entries
+            #     selected_loras = [name for name in lora_models_list if name != "None"]
+
+            #     if selected_loras:
+            #         print(f"[txt2imgStreamDiffusion.py] Loading {len(selected_loras)} LoRAs: {selected_loras}")
+
+            #         # Ensure adapter_weights matches the number of loras
+            #         if len(adapter_weights) < len(selected_loras):
+            #             adapter_weights = adapter_weights + [1.0] * (len(selected_loras) - len(adapter_weights))
+            #         elif len(adapter_weights) > len(selected_loras):
+            #             adapter_weights = adapter_weights[:len(selected_loras)]
+
+            #         # Load each LoRA with an adapter name
+            #         adapter_names = []
+            #         for i, lora_name in enumerate(selected_loras):
+            #             adapter_name = f"lora_{i}"
+            #             lora_path = lora_models_dict[lora_name]
+            #             print(f"[txt2imgStreamDiffusion.py] Loading LoRA {i}: {lora_name} as {adapter_name} with weight {adapter_weights[i]}")
+            #             stream.stream.pipe.load_lora_weights(lora_path, adapter_name=adapter_name)
+            #             adapter_names.append(adapter_name)
+
+            #         # Set adapter weights and fuse
+            #         print(f"[txt2imgStreamDiffusion.py] Setting adapters with weights: {adapter_weights}")
+            #         stream.stream.pipe.set_adapters(adapter_names=adapter_names, adapter_weights=adapter_weights)
+
+            #         print(f"[txt2imgStreamDiffusion.py] Fusing LoRAs with scale 1.0")
+            #         stream.stream.pipe.fuse_lora(adapter_names=adapter_names, lora_scale=1.0)
+
+            #         # Unload after fusing to free memory
+            #         stream.stream.pipe.unload_lora_weights()
+            #         print(f"[txt2imgStreamDiffusion.py] LoRAs loaded and fused successfully")
+
             stream.prepare(
                 prompt=default_prompt,
                 num_inference_steps=50,
+            )
+
+            # Initialize PromptTravel for this pipe to enable prompt embedding interpolation
+            # Access text_encoder and tokenizer from the inner stream object
+            stream.prompt_travel = PromptTravel(
+                text_encoder=stream.stream.text_encoder,
+                tokenizer=stream.stream.pipe.tokenizer,
             )
 
             self.pipes.append(stream)
@@ -270,19 +326,70 @@ class Pipeline:
         # Generate image from prompt
         print(f"[txt2imgStreamDiffusion.py] Params: {params}")
 
-        # If prompt changed, update it via prepare()
-        prompt = params.prompt
-        if prompt != self.last_prompt:
-            stream.prepare(
-                prompt=prompt,
-                num_inference_steps=50,
+        # Handle prompt travel if enabled
+        use_prompt_travel = getattr(params, "use_prompt_travel", False)
+        print(f"[txt2imgStreamDiffusion.py] use_prompt_travel: {use_prompt_travel}")
+
+        if use_prompt_travel:
+            # Get prompts and factor
+            source_prompt = params.prompt
+            target_prompt = getattr(params, 'target_prompt', params.prompt)
+            prompt_travel_factor = getattr(params, 'prompt_travel_factor', 0.5)
+
+            print(f"[txt2imgStreamDiffusion.py] Calculating prompt travel embeddings")
+            print(f"[txt2imgStreamDiffusion.py] source: {source_prompt}")
+            print(f"[txt2imgStreamDiffusion.py] target: {target_prompt}")
+            print(f"[txt2imgStreamDiffusion.py] factor: {prompt_travel_factor}")
+
+            # Encode source and target prompts
+            source_embeds, _ = stream.prompt_travel.encode_prompt(
+                prompt=source_prompt,
+                device=stream.stream.device,
+                num_images_per_prompt=1,
+                do_classifier_free_guidance=False,
             )
-            self.last_prompt = prompt
+
+            target_embeds, _ = stream.prompt_travel.encode_prompt(
+                prompt=target_prompt,
+                device=stream.stream.device,
+                num_images_per_prompt=1,
+                do_classifier_free_guidance=False,
+            )
+
+            # Interpolate between embeddings
+            interpolated_embeds = stream.prompt_travel.interpolate_embeddings(
+                embeds_from=source_embeds,
+                embeds_to=target_embeds,
+                factor=prompt_travel_factor,
+            )
+
+            print(f"[txt2imgStreamDiffusion.py] Interpolated embeddings shape: {interpolated_embeds.shape}")
+
+            # StreamDiffusion repeats embeddings for batch_size, so we need to match that
+            batch_size = stream.stream.batch_size
+            interpolated_embeds_batched = interpolated_embeds.repeat(batch_size, 1, 1)
+
+            # Directly set the embeddings on the inner stream object
+            stream.stream.prompt_embeds = interpolated_embeds_batched
+
+            print(f"[txt2imgStreamDiffusion.py] Set prompt_embeds with shape: {interpolated_embeds_batched.shape}")
+
+        else:
+            # If prompt changed and not using prompt travel, update it via prepare()
+            prompt = params.prompt
+            if prompt != self.last_prompt:
+                stream.prepare(
+                    prompt=prompt,
+                    num_inference_steps=50,
+                )
+                self.last_prompt = prompt
+
+            print(f"[txt2imgStreamDiffusion.py] NOTE: No prompt travel used, prepared prompt: {prompt}")
 
         # Update ControlNet control image if provided (for aesthetic guidance)
         # ControlNet is statically enabled for this pipeline
         print(f"[txt2imgStreamDiffusion.py] params: {params}")
-        
+
         control_image = getattr(params, 'control_image', None)
         if control_image is not None:
             print(f"[txt2imgStreamDiffusion.py] Updating control image for ControlNet guidance")

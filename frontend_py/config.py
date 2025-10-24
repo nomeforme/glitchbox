@@ -5,7 +5,7 @@ Configuration settings for the Glitch Machine Engine.
 # Display and camera dimensions
 DISPLAY_WIDTH = 512#480
 DISPLAY_HEIGHT = 512#480
-DISPLAY_SCALE = 2.0 #4.0
+DISPLAY_SCALE = 1.0 #4.0
 CAMERA_DEVICE_INDEX = 0 #0 #42
 MIC_DEVICE_INDEX = 0 #16
 MAX_CAMERA_INDEX = 50  # Maximum camera index to check (supports virtual cameras like /dev/video42)

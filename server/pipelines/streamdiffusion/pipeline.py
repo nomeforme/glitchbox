@@ -1044,7 +1044,7 @@ class StreamDiffusion:
             device=self.device,
             dtype=self.dtype,
         )
-        
+
         # Prepare UNet call arguments
         unet_kwargs = {
             'sample': x_t_latent,
@@ -1052,29 +1052,131 @@ class StreamDiffusion:
             'encoder_hidden_states': self.prompt_embeds,
             'return_dict': False,
         }
-        
+
         # Add SDXL-specific conditioning if this is an SDXL model
         if self.is_sdxl and hasattr(self, 'add_text_embeds') and hasattr(self, 'add_time_ids'):
             if self.add_text_embeds is not None and self.add_time_ids is not None:
                 # For txt2img, replicate conditioning to match batch size
                 add_text_embeds = self.add_text_embeds[1:2].repeat(batch_size, 1) if self.add_text_embeds.shape[0] > 1 else self.add_text_embeds.repeat(batch_size, 1)
                 add_time_ids = self.add_time_ids[1:2].repeat(batch_size, 1) if self.add_time_ids.shape[0] > 1 else self.add_time_ids.repeat(batch_size, 1)
-                
+
                 unet_kwargs['added_cond_kwargs'] = {
                     'text_embeds': add_text_embeds,
                     'time_ids': add_time_ids
                 }
 
+        # Apply UNet hooks (ControlNet, IPAdapter, etc.)
+        if self.unet_hooks:
+            step_ctx = StepCtx(
+                x_t_latent=x_t_latent,
+                t_list=self.sub_timesteps_tensor,
+                step_index=0,
+                guidance_mode="none",
+                sdxl_cond=unet_kwargs.get('added_cond_kwargs', None)
+            )
+
+            try:
+                extra_from_hooks = {}
+                for hook in self.unet_hooks:
+                    delta: UnetKwargsDelta = hook(step_ctx)
+                    if delta is None:
+                        continue
+                    if delta.down_block_additional_residuals is not None:
+                        unet_kwargs['down_block_additional_residuals'] = delta.down_block_additional_residuals
+                    if delta.mid_block_additional_residual is not None:
+                        unet_kwargs['mid_block_additional_residual'] = delta.mid_block_additional_residual
+                    if delta.added_cond_kwargs is not None:
+                        # Merge SDXL cond if both exist
+                        base_added = unet_kwargs.get('added_cond_kwargs', {})
+                        base_added.update(delta.added_cond_kwargs)
+                        unet_kwargs['added_cond_kwargs'] = base_added
+                    if getattr(delta, 'extra_unet_kwargs', None):
+                        # Merge extra kwargs from hooks (e.g., ipadapter_scale)
+                        try:
+                            extra_from_hooks.update(delta.extra_unet_kwargs)
+                        except Exception:
+                            pass
+                if extra_from_hooks:
+                    unet_kwargs['extra_unet_kwargs'] = extra_from_hooks
+            except Exception as e:
+                logger.error(f"txt2img_sd_turbo: unet hook failed: {e}")
+                raise
+
+        # Extract potential ControlNet residual kwargs and generic extra kwargs
+        hook_down_res = unet_kwargs.get('down_block_additional_residuals', None)
+        hook_mid_res = unet_kwargs.get('mid_block_additional_residual', None)
+        hook_extra_kwargs = unet_kwargs.get('extra_unet_kwargs', None) if 'extra_unet_kwargs' in unet_kwargs else None
+
         # Call UNet with appropriate conditioning
         if self.is_sdxl:
-            model_pred = self.unet(**unet_kwargs)[0]
+            try:
+                added_cond_kwargs = unet_kwargs.get('added_cond_kwargs', {})
+
+                # Check if this is a TensorRT engine or PyTorch UNet
+                is_tensorrt_engine = self._check_unet_tensorrt()
+
+                if is_tensorrt_engine:
+                    # TensorRT engine expects positional args + kwargs
+                    extra_kwargs = {}
+                    if isinstance(hook_extra_kwargs, dict):
+                        extra_kwargs.update(hook_extra_kwargs)
+
+                    # Include ControlNet residuals if provided by hooks
+                    if hook_down_res is not None:
+                        extra_kwargs['down_block_additional_residuals'] = hook_down_res
+                    if hook_mid_res is not None:
+                        extra_kwargs['mid_block_additional_residual'] = hook_mid_res
+
+                    model_pred = self.unet(
+                        unet_kwargs['sample'],
+                        unet_kwargs['timestep'],
+                        unet_kwargs['encoder_hidden_states'],
+                        **extra_kwargs,
+                        **added_cond_kwargs
+                    )[0]
+                else:
+                    # PyTorch UNet expects diffusers-style named arguments
+                    extra_kwargs = {}
+                    if isinstance(hook_extra_kwargs, dict):
+                        extra_kwargs.update(hook_extra_kwargs)
+
+                    # Include ControlNet residuals if present
+                    if hook_down_res is not None:
+                        extra_kwargs['down_block_additional_residuals'] = hook_down_res
+                    if hook_mid_res is not None:
+                        extra_kwargs['mid_block_additional_residual'] = hook_mid_res
+
+                    model_pred = self.unet(
+                        unet_kwargs['sample'],
+                        unet_kwargs['timestep'],
+                        encoder_hidden_states=unet_kwargs['encoder_hidden_states'],
+                        added_cond_kwargs=added_cond_kwargs,
+                        return_dict=False,
+                        **extra_kwargs,
+                    )[0]
+            except Exception as e:
+                logger.error(f"[PIPELINE] txt2img_sd_turbo: *** ERROR: SDXL UNet call failed: {e} ***")
+                import traceback
+                traceback.print_exc()
+                raise
         else:
             # For SD1.5/SD2.1, use the old calling convention for compatibility
+            ip_scale_kw = {}
+            if isinstance(hook_extra_kwargs, dict):
+                ip_scale_kw.update(hook_extra_kwargs)
+
+            # Include ControlNet residuals if present
+            if hook_down_res is not None:
+                ip_scale_kw['down_block_additional_residuals'] = hook_down_res
+            if hook_mid_res is not None:
+                ip_scale_kw['mid_block_additional_residual'] = hook_mid_res
+
             model_pred = self.unet(
                 x_t_latent,
                 self.sub_timesteps_tensor,
                 encoder_hidden_states=self.prompt_embeds,
                 return_dict=False,
+                **ip_scale_kw,
             )[0]
             
         x_0_pred_out = (
