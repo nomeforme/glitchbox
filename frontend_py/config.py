@@ -11,7 +11,7 @@ MIC_DEVICE_INDEX = 0 #16
 MAX_CAMERA_INDEX = 50  # Maximum camera index to check (supports virtual cameras like /dev/video42)
 
 # Speech-to-text settings
-STT_DEVICE = "cpu"  # Device for STT processing: "cpu" or "cuda"
+STT_DEVICE = "cuda"  # Device for STT processing: "cpu" or "cuda"
 
 # Audio settings
 NUM_FFT_BINS = 50
