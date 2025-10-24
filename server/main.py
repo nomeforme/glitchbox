@@ -331,8 +331,11 @@ class App:
             try:
                 params = base_params.copy()
                 params['pipe_index'] = pipe_idx
+                # Disable prompt travel during warmup - use simple prompt instead
+                params['use_prompt_travel'] = False
+                params['prompt'] = "a simple test image"  # Simple prompt for warmup
                 params = SimpleNamespace(**self.pipeline.InputParams(**params).__dict__)
-                
+
                 if self.pipeline.Info().input_mode == "image":
                     params.image = dummy_image
                     if self.use_depth_estimator and hasattr(self, 'depth_estimator'):
@@ -340,9 +343,9 @@ class App:
                             params.control_image = self.depth_estimator.get_depth(dummy_image)
                         except:
                             pass
-                
+
                 self.pipeline.predict(params)
-                
+
             except Exception as e:
                 print(f"[main.py] Error warming up pipe {pipe_idx}: {e}")
                 continue
