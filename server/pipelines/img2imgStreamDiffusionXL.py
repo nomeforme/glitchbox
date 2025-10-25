@@ -30,6 +30,9 @@ import glob
 # NOTE: this is a custom prompt travel module
 from modules.prompt_travel.prompt_travel import PromptTravel
 
+# Import psychedelic activation patching
+from modules.psychedelic_patching import PatchCfg, patch_denoiser, restore_denoiser
+
 # Function to read prompt prefix from .txt files
 def get_prompt_prefix():
     prompts_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "prompts")
@@ -253,6 +256,94 @@ class Pipeline:
             hide=True,
             id="debug_controlnet",
         )
+        # Psychedelic activation patching parameters
+        use_psy_patching: bool = Field(
+            False,
+            title="Use Psychedelic Patching",
+            field="checkbox",
+            hide=True,
+            id="use_psy_patching",
+            description="Enable psychedelic activation function patching on UNet",
+        )
+        psy_act: str = Field(
+            "silu",
+            title="Psy Activation",
+            field="text",
+            hide=True,
+            id="psy_act",
+            description="Activation function: silu, gelu, relu, leakyrelu, mish, hswish, etc.",
+        )
+        psy_tau: float = Field(
+            1.0,
+            min=0.1,
+            max=5.0,
+            step=0.1,
+            title="Psy Tau (Temperature)",
+            field="range",
+            hide=True,
+            id="psy_tau",
+            description="Temperature scaling: >1.0 flattens, <1.0 sharpens",
+        )
+        psy_beta: float = Field(
+            0.0,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Psy Beta (Identity Blend)",
+            field="range",
+            hide=True,
+            id="psy_beta",
+            description="Identity blend: 0=pure activation, 1=passthrough",
+        )
+        psy_gamma: float = Field(
+            1.0,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Psy Gamma (Act Blend)",
+            field="range",
+            hide=True,
+            id="psy_gamma",
+            description="Blend SiLU→new activation: 0=keep SiLU, 1=full replacement",
+        )
+        psy_stages: str = Field(
+            "down,mid,up",
+            title="Psy Stages",
+            field="text",
+            hide=True,
+            id="psy_stages",
+            description="Comma-separated stages to patch: down,mid,up",
+        )
+        psy_start_idx: int = Field(
+            0,
+            min=0,
+            max=10,
+            step=1,
+            title="Psy Start Index",
+            field="range",
+            hide=True,
+            id="psy_start_idx",
+            description="First resblock to patch",
+        )
+        psy_end_idx: int = Field(
+            -1,
+            min=-1,
+            max=10,
+            step=1,
+            title="Psy End Index",
+            field="range",
+            hide=True,
+            id="psy_end_idx",
+            description="Last resblock to patch (-1 = all)",
+        )
+        psy_patch_mlp: bool = Field(
+            False,
+            title="Psy Patch MLP",
+            field="checkbox",
+            hide=True,
+            id="psy_patch_mlp",
+            description="Also patch attention MLP activations",
+        )
 
     def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype, lora_config=None):
         # Store lora_config for later use
@@ -408,6 +499,15 @@ class Pipeline:
         for idx in range(len(self.pipes)):
             self.prompt_embeds_cache[idx] = {}
 
+        # Psychedelic patching state (per pipe)
+        self.psy_replacements = {}  # {pipe_idx: replacements_list}
+        self.psy_patched_modules = {}  # {pipe_idx: patched_dict}
+        self.psy_active = {}  # {pipe_idx: bool}
+        for idx in range(len(self.pipes)):
+            self.psy_replacements[idx] = []
+            self.psy_patched_modules[idx] = {}
+            self.psy_active[idx] = False
+
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
         # Get pipe_index from params, default to 0 if not provided
         pipe_index = getattr(params, 'pipe_index', 0)
@@ -423,6 +523,83 @@ class Pipeline:
 
         # Generate image from input image and prompt
         print(f"[img2imgStreamDiffusion.py] Params: {params}")
+
+        # Handle psychedelic patching if enabled
+        use_psy = getattr(params, 'use_psy_patching', False)
+        if use_psy:
+            # Get psychedelic parameters
+            psy_act = getattr(params, 'psy_act', 'silu')
+            psy_tau = getattr(params, 'psy_tau', 1.0)
+            psy_beta = getattr(params, 'psy_beta', 0.0)
+            psy_gamma = getattr(params, 'psy_gamma', 1.0)
+            psy_stages_str = getattr(params, 'psy_stages', 'down,mid,up')
+            psy_start_idx = getattr(params, 'psy_start_idx', 0)
+            psy_end_idx = getattr(params, 'psy_end_idx', -1)
+            psy_patch_mlp = getattr(params, 'psy_patch_mlp', False)
+
+            # Parse stages
+            psy_stages = [s.strip() for s in psy_stages_str.split(',') if s.strip()]
+
+            # Convert -1 end_idx to None
+            psy_end_idx_val = None if psy_end_idx == -1 else psy_end_idx
+
+            # Check if we need to (re)patch
+            need_patch = not self.psy_active[pipe_index]
+
+            if need_patch:
+                # Restore previous patches if any
+                if self.psy_replacements[pipe_index]:
+                    print(f"[img2imgStreamDiffusionXL.py] Restoring previous psychedelic patches for pipe {pipe_index}")
+                    restore_denoiser(self.psy_replacements[pipe_index])
+                    self.psy_replacements[pipe_index] = []
+                    self.psy_patched_modules[pipe_index] = {}
+
+                # Create patch configuration
+                psy_cfg = PatchCfg(
+                    stages=psy_stages,
+                    start_idx=psy_start_idx,
+                    start_idx_per_stage={
+                        'down': psy_start_idx,
+                        'mid': psy_start_idx,
+                        'up': psy_start_idx,
+                    },
+                    end_idx=psy_end_idx_val,
+                    end_idx_per_stage={
+                        'down': psy_end_idx_val,
+                        'mid': psy_end_idx_val,
+                        'up': psy_end_idx_val,
+                    },
+                    act_kind=psy_act,
+                    tau=psy_tau,
+                    beta=psy_beta,
+                    gamma=psy_gamma,
+                    patch_attn_mlp=psy_patch_mlp,
+                    calibrate=False,  # Don't use calibration in real-time mode
+                )
+
+                # Apply patching to the UNet
+                unet = stream_wrapper.stream.pipe.unet
+                print(f"[img2imgStreamDiffusionXL.py] Applying psychedelic patching to pipe {pipe_index}")
+                print(f"[img2imgStreamDiffusionXL.py]   act={psy_act}, tau={psy_tau}, beta={psy_beta}, gamma={psy_gamma}")
+                print(f"[img2imgStreamDiffusionXL.py]   stages={psy_stages}, start={psy_start_idx}, end={psy_end_idx_val}, patch_mlp={psy_patch_mlp}")
+
+                count, patched, replacements, stage_depths = patch_denoiser(unet, psy_cfg)
+
+                print(f"[img2imgStreamDiffusionXL.py] Patched {count} activation modules")
+                print(f"[img2imgStreamDiffusionXL.py] Stage depths: {stage_depths}")
+
+                # Store state
+                self.psy_replacements[pipe_index] = replacements
+                self.psy_patched_modules[pipe_index] = patched
+                self.psy_active[pipe_index] = True
+        else:
+            # Psychedelic patching disabled - restore if was active
+            if self.psy_active[pipe_index]:
+                print(f"[img2imgStreamDiffusionXL.py] Disabling psychedelic patching for pipe {pipe_index}")
+                restore_denoiser(self.psy_replacements[pipe_index])
+                self.psy_replacements[pipe_index] = []
+                self.psy_patched_modules[pipe_index] = {}
+                self.psy_active[pipe_index] = False
 
         # Handle prompt travel if enabled
         use_prompt_travel = getattr(params, "use_prompt_travel", False)

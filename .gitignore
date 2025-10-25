@@ -30,5 +30,8 @@ server/input/*
 server/output/*
 server/sd_checkpoints/*
 
+server/SD-Psychedelic-Lab
+
+
 # Ignore log files
 *.log
