@@ -255,6 +255,12 @@ class Pipeline:
         )
 
     def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype, lora_config=None):
+
+        # Enable PyTorch optimizations for inference performance
+        torch.backends.cudnn.benchmark = True  # Optimize convolution algorithms (fixed input size)
+        torch.backends.cuda.matmul.allow_tf32 = True  # Enable TF32 on Ampere+ GPUs
+        torch.backends.cudnn.allow_tf32 = True  # Enable TF32 for cuDNN operations
+
         # Store lora_config for later use
         self.lora_config = lora_config
         self.pipes = []
@@ -373,7 +379,7 @@ class Pipeline:
                     stream.stream.pipe.set_adapters(adapter_names=adapter_names, adapter_weights=adapter_weights)
 
                     print(f"[img2imgStreamDiffusion.py] Fusing LoRAs with scale 1.0")
-                    stream.stream.pipe.fuse_lora(adapter_names=adapter_names, lora_scale=1.0)
+                    stream.stream.pipe.fuse_lora(adapter_names=adapter_names, lora_scale=1.05)
 
                     # Unload after fusing to free memory
                     stream.stream.pipe.unload_lora_weights()
@@ -383,7 +389,7 @@ class Pipeline:
                 prompt=default_prompt,
                 negative_prompt=default_negative_prompt,
                 num_inference_steps=50,
-                guidance_scale=1.2,
+                guidance_scale=1.0,
             )
 
             # Initialize PromptTravel for this pipe to enable prompt embedding interpolation
@@ -496,7 +502,7 @@ class Pipeline:
                     prompt=prompt,
                     negative_prompt=default_negative_prompt,
                     num_inference_steps=50,
-                    guidance_scale=1.2,
+                    guidance_scale=1.0,
                 )
                 self.last_prompt = prompt
 

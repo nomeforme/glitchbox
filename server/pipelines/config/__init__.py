@@ -1,5 +1,6 @@
 import os
 import json
+import re
 
 class LoRACurationConfig:
     """
@@ -48,7 +49,9 @@ class LoRACurationConfig:
             "ker-blue": "loras/ker_blue-step00001100.safetensors",
             "lila-blue": "loras/lila_blue-step00001800.safetensors",
             "pixel-art-xl": "loras/pixel-art_XL.safetensors",
-            "papercut-xl": "loras/papercut_XL.safetensors"
+            "papercut-xl": "loras/papercut_XL.safetensors",
+            "melies-bw-xl": "loras/melies_bw_XL-step00000800.safetensors",
+            "melies-col-xl": "loras/melies_col_XL-step00000500.safetensors"
         }
 
         self._all_curations = {} # Stores all loaded JSON data {key: data}
@@ -112,7 +115,9 @@ class LoRACurationConfig:
         for filename in os.listdir(lora_config_dir):
             if filename.endswith(".json"):
                 filepath = os.path.join(lora_config_dir, filename)
-                curation_key = filename[:-5] 
+                # Strip .json extension and optional numeric prefix (e.g., "00_melies.json" -> "melies")
+                curation_key = filename[:-5]
+                curation_key = re.sub(r'^\d+_', '', curation_key) 
                 try:
                     with open(filepath, 'r') as f:
                         config_data = json.load(f)
