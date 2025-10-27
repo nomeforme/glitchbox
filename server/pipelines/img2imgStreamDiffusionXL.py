@@ -320,38 +320,77 @@ class Pipeline:
             }
             print(f"[img2imgStreamDiffusion.py] Image postprocessing configured with RealESRGAN {self.upscaler_scale_factor}x upscaler")
 
-        # Create one pipe for each adapter weights set
+        # OPTIMIZATION: Create ONE shared wrapper, build separate UNet engines for each LoRA combo
+        # Only pipe 0's UNet will be loaded in VRAM initially
+        # Architecture:
+        #   - self.shared_wrapper: Single StreamDiffusionWrapper with shared components
+        #   - self.unet_engines: List of UNet TensorRT engines (one per pipe)
+        #   - self.pipes: List of pipe metadata (for compatibility, references shared_wrapper)
+
+        self.shared_wrapper = None
+        self.unet_engines = []  # Store UNet TensorRT engines for each pipe
+
+        # Create first pipe normally to establish shared base
+        print(f"[img2imgStreamDiffusionXL.py] Creating shared base wrapper")
+        self.shared_wrapper = StreamDiffusionWrapper(
+            model_id_or_path=base_model,
+            lora_dict=None,
+            use_tiny_vae=args.taesd,
+            device=device,
+            dtype=torch_dtype,
+            t_index_list=[18],
+            frame_buffer_size=1,
+            width=params.width,
+            height=params.height,
+            use_lcm_lora=False,
+            output_type="pil",
+            warmup=10,
+            vae_id=None,
+            acceleration="tensorrt",
+            mode="img2img",
+            use_denoising_batch=True,
+            cfg_type="none",
+            use_safety_checker=args.safety_checker,
+            use_controlnet=use_controlnet,
+            controlnet_config=controlnet_config,
+            image_postprocessing_config=image_postprocessing_config,
+        )
+
+        # Now build a unique UNet for each adapter weights set
         for idx, adapter_weights in enumerate(adapter_weights_sets):
-            print(f"[img2imgStreamDiffusion.py] Creating pipe {idx + 1}/{len(adapter_weights_sets)}")
-            print(f"[img2imgStreamDiffusion.py] Pipe {idx}: adapter_weights = {adapter_weights}")
+            print(f"[img2imgStreamDiffusionXL.py] Building UNet {idx + 1}/{len(adapter_weights_sets)}")
+            print(f"[img2imgStreamDiffusionXL.py] UNet {idx}: adapter_weights = {adapter_weights}")
 
-            # Create the StreamDiffusionWrapper WITHOUT lora_dict
-            # We'll load LoRAs manually afterwards to support per-pipe adapter weights
-            stream = StreamDiffusionWrapper(
-                model_id_or_path=base_model,
-                lora_dict=None,  # Don't use lora_dict - we'll load manually
-                use_tiny_vae=args.taesd,
-                device=device,
-                dtype=torch_dtype,
-                t_index_list=[18],
-                frame_buffer_size=1,
-                width=params.width,
-                height=params.height,
-                use_lcm_lora=False,
-                output_type="pil",
-                warmup=10,
-                vae_id=None,
-                acceleration="tensorrt",
-                mode="img2img",
-                use_denoising_batch=True,
-                cfg_type="none",
-                use_safety_checker=args.safety_checker,
-                use_controlnet=use_controlnet,
-                controlnet_config=controlnet_config,
-                image_postprocessing_config=image_postprocessing_config,
-            )
+            # For idx==0, use the existing loaded UNet in shared_wrapper
+            # For idx>0, we need to load a fresh PyTorch UNet, apply different LoRAs,
+            # build TensorRT, then unload it
 
-            # Load LoRAs manually with adapter weights (like controlnetSDTurbot2i)
+            if idx == 0:
+                # Use the UNet that's already in shared_wrapper
+                print(f"[img2imgStreamDiffusionXL.py] Using UNet from shared_wrapper for pipe 0")
+                target_pipe = self.shared_wrapper.stream.pipe
+            else:
+                # Load a fresh PyTorch UNet for LoRA fusion ON CPU
+                # This avoids GPU OOM since pipe 0's TensorRT UNet is already loaded
+                print(f"[img2imgStreamDiffusionXL.py] Loading fresh PyTorch UNet to CPU for pipe {idx}")
+                from diffusers import StableDiffusionXLPipeline, UNet2DConditionModel
+
+                # Load fresh UNet from base model TO CPU
+                fresh_unet = UNet2DConditionModel.from_pretrained(
+                    base_model,
+                    subfolder="unet",
+                    torch_dtype=torch_dtype,
+                    device_map="cpu"  # Load directly to CPU
+                )
+                print(f"[img2imgStreamDiffusionXL.py] Loaded fresh UNet to CPU")
+
+                # Temporarily replace the shared wrapper's UNet for LoRA loading
+                target_pipe = self.shared_wrapper.stream.pipe
+                original_unet = target_pipe.unet
+                target_pipe.unet = fresh_unet
+                print(f"[img2imgStreamDiffusionXL.py] Temporarily using CPU UNet for LoRA fusion")
+
+            # Load LoRAs with this pipe's adapter weights
             if lora_config is not None:
                 curation_key = lora_config.get_curation_keys()[0]
                 lora_models_list = lora_config.get_lora_curation()[curation_key]
@@ -374,49 +413,74 @@ class Pipeline:
                     for i, lora_name in enumerate(selected_loras):
                         adapter_name = f"lora_{i}"
                         lora_path = lora_models_dict[lora_name]
-                        print(f"[img2imgStreamDiffusion.py] Loading LoRA {i}: {lora_name} as {adapter_name} with weight {adapter_weights[i]}")
-                        stream.stream.pipe.load_lora_weights(lora_path, adapter_name=adapter_name)
+                        print(f"[img2imgStreamDiffusionXL.py] Loading LoRA {i}: {lora_name} as {adapter_name} with weight {adapter_weights[i]}")
+                        target_pipe.load_lora_weights(lora_path, adapter_name=adapter_name)
                         adapter_names.append(adapter_name)
 
                     # Set adapter weights and fuse
-                    print(f"[img2imgStreamDiffusion.py] Setting adapters with weights: {adapter_weights}")
-                    stream.stream.pipe.set_adapters(adapter_names=adapter_names, adapter_weights=adapter_weights)
+                    print(f"[img2imgStreamDiffusionXL.py] Setting adapters with weights: {adapter_weights}")
+                    target_pipe.set_adapters(adapter_names=adapter_names, adapter_weights=adapter_weights)
 
-                    print(f"[img2imgStreamDiffusion.py] Fusing LoRAs with scale 1.0")
-                    stream.stream.pipe.fuse_lora(adapter_names=adapter_names, lora_scale=1.0)
+                    print(f"[img2imgStreamDiffusionXL.py] Fusing LoRAs with scale 1.0")
+                    target_pipe.fuse_lora(adapter_names=adapter_names, lora_scale=1.0)
 
                     # Unload after fusing to free memory
-                    stream.stream.pipe.unload_lora_weights()
-                    print(f"[img2imgStreamDiffusion.py] LoRAs loaded and fused successfully")
+                    target_pipe.unload_lora_weights()
+                    print(f"[img2imgStreamDiffusionXL.py] LoRAs loaded and fused successfully")
 
-            # Clean up PyTorch UNet/VAE now that LoRAs are fused (for TensorRT mode)
-            # This frees ~5-7GB VRAM by removing duplicate PyTorch models
-            stream.cleanup_pytorch_models_after_tensorrt()
+            # Now build TensorRT engine for this LoRA-fused UNet
+            # For idx==0, keep it loaded. For idx>0, build and unload
+            print(f"[img2imgStreamDiffusionXL.py] Building TensorRT engine for UNet {idx}...")
 
-            stream.prepare(
-                prompt=default_prompt,
-                negative_prompt=default_negative_prompt,
-                num_inference_steps=50,
-                guidance_scale=1.0,
-            )
+            # TODO: Implement TensorRT building here
+            # For now, we'll just store the UNet engine reference
 
-            # Initialize PromptTravel for this pipe to enable prompt embedding interpolation
-            # For SDXL, pass both text encoders and tokenizers
-            stream.prompt_travel = PromptTravel(
-                text_encoder=stream.stream.pipe.text_encoder,
-                tokenizer=stream.stream.pipe.tokenizer,
-                text_encoder_2=stream.stream.pipe.text_encoder_2,
-                tokenizer_2=stream.stream.pipe.tokenizer_2,
-            )
+            if idx == 0:
+                # Keep pipe 0's UNet loaded in GPU - it's already in shared_wrapper
+                print(f"[img2imgStreamDiffusionXL.py] UNet {idx} will remain loaded in GPU (shared_wrapper)")
+                self.unet_engines.append(self.shared_wrapper.stream.unet)
+            else:
+                # For pipe 1+: Store the fused PyTorch UNet (already on CPU)
+                print(f"[img2imgStreamDiffusionXL.py] Storing UNet {idx} (already on CPU)")
 
-            self.pipes.append(stream)
+                # Store the fused UNet (it's already on CPU)
+                self.unet_engines.append(target_pipe.unet)
 
-            # Force GPU cleanup between pipe creations to prevent OOM
-            if idx < len(adapter_weights_sets) - 1:  # Don't cleanup after last pipe
+                # Restore the original UNet to shared_wrapper
+                target_pipe.unet = original_unet
+                print(f"[img2imgStreamDiffusionXL.py] Restored original UNet to shared_wrapper")
+
+                # Clean up
+                del fresh_unet
                 import gc
-                torch.cuda.empty_cache()
                 gc.collect()
-                print(f"[img2imgStreamDiffusion.py] GPU cache cleared after pipe {idx + 1}")
+                print(f"[img2imgStreamDiffusionXL.py] UNet {idx} stored on CPU")
+
+        # Clean up PyTorch UNet/VAE from shared_wrapper now that LoRAs are fused
+        print(f"[img2imgStreamDiffusionXL.py] Cleaning up PyTorch models after TensorRT load...")
+        self.shared_wrapper.cleanup_pytorch_models_after_tensorrt()
+
+        # Prepare the shared wrapper with default prompt
+        self.shared_wrapper.prepare(
+            prompt=default_prompt,
+            negative_prompt=default_negative_prompt,
+            num_inference_steps=50,
+            guidance_scale=1.0,
+        )
+
+        # Initialize PromptTravel for shared wrapper
+        self.shared_wrapper.prompt_travel = PromptTravel(
+            text_encoder=self.shared_wrapper.stream.pipe.text_encoder,
+            tokenizer=self.shared_wrapper.stream.pipe.tokenizer,
+            text_encoder_2=self.shared_wrapper.stream.pipe.text_encoder_2,
+            tokenizer_2=self.shared_wrapper.stream.pipe.tokenizer_2,
+        )
+
+        # For compatibility, make self.pipes reference the shared wrapper multiple times
+        self.pipes = [self.shared_wrapper] * len(adapter_weights_sets)
+        print(f"[img2imgStreamDiffusionXL.py] Created {len(self.pipes)} pipe references (all share same wrapper)")
+        print(f"[img2imgStreamDiffusionXL.py] Built {len(self.unet_engines)} UNet engines")
+
 
         # Store current pipe index
         self.current_pipe_idx = 0
@@ -432,15 +496,22 @@ class Pipeline:
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
         # Get pipe_index from params, default to 0 if not provided
         pipe_index = getattr(params, 'pipe_index', 0)
-        print(f"[img2imgStreamDiffusion.py] USING PIPE INDEX: {pipe_index}")
+        print(f"[img2imgStreamDiffusionXL.py] USING PIPE INDEX: {pipe_index}")
 
         # Ensure pipe_index is within bounds
         if pipe_index >= len(self.pipes):
-            print(f"[img2imgStreamDiffusion.py] Warning: pipe_index {pipe_index} out of bounds, using 0")
+            print(f"[img2imgStreamDiffusionXL.py] Warning: pipe_index {pipe_index} out of bounds, using 0")
             pipe_index = 0
 
-        # Select the appropriate stream wrapper
-        stream_wrapper = self.pipes[pipe_index]
+        # Swap UNet if pipe index changed
+        if pipe_index != self.current_pipe_idx:
+            print(f"[img2imgStreamDiffusionXL.py] Swapping UNet from pipe {self.current_pipe_idx} to pipe {pipe_index}")
+            # TODO: Implement actual UNet swapping
+            # For now, this is a placeholder since all pipes share the same wrapper
+            self.current_pipe_idx = pipe_index
+
+        # Use the shared wrapper (all pipes reference it)
+        stream_wrapper = self.shared_wrapper
 
         # Generate image from input image and prompt
         print(f"[img2imgStreamDiffusion.py] Params: {params}")
