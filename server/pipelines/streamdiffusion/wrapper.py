@@ -1621,7 +1621,13 @@ class StreamDiffusionWrapper:
                             cuda_stream,
                             use_cuda_graph=True,
                         )
-                    
+
+                # NOTE: Don't clean up PyTorch UNet/VAE here yet!
+                # LoRAs need to be loaded and fused first, which requires PyTorch UNet
+                # Use cleanup_pytorch_models_after_tensorrt() method after LoRA loading
+                if load_engine:
+                    logger.info("TensorRT engines loaded. PyTorch UNet/VAE cleanup deferred until after LoRA loading.")
+
             if acceleration == "sfast":
                 from .acceleration.sfast import (
                     accelerate_with_stable_fast,
@@ -1936,7 +1942,45 @@ class StreamDiffusionWrapper:
                 state['caches'] = None
 
         return state
-    
+
+    def cleanup_pytorch_models_after_tensorrt(self) -> None:
+        """
+        Clean up PyTorch UNet and VAE after TensorRT engines are loaded and LoRAs are fused.
+        This should be called AFTER LoRA loading/fusing is complete.
+        Frees ~5-7GB VRAM by removing duplicate PyTorch models.
+        """
+        import gc
+        import torch
+
+        if not hasattr(self, 'stream') or not self.stream:
+            return
+
+        if not hasattr(self.stream, 'pipe'):
+            return
+
+        logger.info("Cleaning up PyTorch UNet and VAE after TensorRT load to save VRAM...")
+        vram_before = torch.cuda.memory_allocated() / 1024**3
+
+        # Delete large PyTorch components now replaced by TensorRT
+        if hasattr(self.stream.pipe, 'unet'):
+            del self.stream.pipe.unet
+            logger.info("   Deleted PyTorch UNet")
+
+        if hasattr(self.stream.pipe, 'vae'):
+            # Check if we're using TinyVAE or TensorRT VAE
+            vae_is_tensorrt = hasattr(self.stream, 'vae') and 'Engine' in type(self.stream.vae).__name__
+            if vae_is_tensorrt:
+                del self.stream.pipe.vae
+                logger.info("   Deleted PyTorch VAE (using TensorRT VAE)")
+
+        # Force garbage collection
+        gc.collect()
+        torch.cuda.empty_cache()
+
+        vram_after = torch.cuda.memory_allocated() / 1024**3
+        vram_saved = vram_before - vram_after
+        logger.info(f"   VRAM freed: {vram_saved:.2f}GB (was {vram_before:.2f}GB, now {vram_after:.2f}GB)")
+
     def cleanup_gpu_memory(self) -> None:
         """Comprehensive GPU memory cleanup for model switching."""
         import gc

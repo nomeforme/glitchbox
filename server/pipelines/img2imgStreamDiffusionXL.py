@@ -341,7 +341,7 @@ class Pipeline:
                 output_type="pil",
                 warmup=10,
                 vae_id=None,
-                acceleration="xformers",
+                acceleration="tensorrt",
                 mode="img2img",
                 use_denoising_batch=True,
                 cfg_type="none",
@@ -388,6 +388,10 @@ class Pipeline:
                     # Unload after fusing to free memory
                     stream.stream.pipe.unload_lora_weights()
                     print(f"[img2imgStreamDiffusion.py] LoRAs loaded and fused successfully")
+
+            # Clean up PyTorch UNet/VAE now that LoRAs are fused (for TensorRT mode)
+            # This frees ~5-7GB VRAM by removing duplicate PyTorch models
+            stream.cleanup_pytorch_models_after_tensorrt()
 
             stream.prepare(
                 prompt=default_prompt,
