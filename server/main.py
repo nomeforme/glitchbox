@@ -907,28 +907,51 @@ class App:
                 # Properly cleanup the old pipeline before creating new one
                 if hasattr(self, 'pipeline') and self.pipeline is not None:
                     print("[main.py] Cleaning up old pipeline...")
-                    
+
                     # Clear pipeline from GPU memory
                     if hasattr(self.pipeline, 'pipes'):
-                        # Multiple pipes case
-                        for pipe in self.pipeline.pipes:
-                            if hasattr(pipe, 'to'):
+                        # Multiple pipes case (StreamDiffusion)
+                        for idx, pipe in enumerate(self.pipeline.pipes):
+                            print(f"[main.py] Cleaning up pipe {idx + 1}/{len(self.pipeline.pipes)}")
+
+                            # StreamDiffusionWrapper cleanup
+                            if hasattr(pipe, 'cleanup_gpu_memory'):
+                                try:
+                                    pipe.cleanup_gpu_memory()
+                                    print(f"[main.py] Called cleanup_gpu_memory on pipe {idx}")
+                                except Exception as e:
+                                    print(f"[main.py] Warning: cleanup_gpu_memory failed for pipe {idx}: {e}")
+
+                            # Move the actual pipeline to CPU
+                            if hasattr(pipe, 'stream') and hasattr(pipe.stream, 'pipe'):
+                                try:
+                                    pipe.stream.pipe.to('cpu')
+                                    print(f"[main.py] Moved pipe {idx} to CPU")
+                                except Exception as e:
+                                    print(f"[main.py] Warning: Failed to move pipe {idx} to CPU: {e}")
+                            elif hasattr(pipe, 'to'):
+                                # Fallback for regular pipelines
                                 pipe.to('cpu')
+
+                            # Delete individual pipe
+                            del pipe
+
+                        # Delete the pipes list
                         del self.pipeline.pipes
                     elif hasattr(self.pipeline, 'pipe'):
                         # Single pipe case
                         if hasattr(self.pipeline.pipe, 'to'):
                             self.pipeline.pipe.to('cpu')
                         del self.pipeline.pipe
-                    
+
                     # Delete the pipeline object
                     del self.pipeline
                     self.pipeline = None
-                    
+
                     # Force garbage collection
                     import gc
                     gc.collect()
-                    
+
                     # Clear GPU cache if using CUDA
                     if device.type == 'cuda':
                         import torch

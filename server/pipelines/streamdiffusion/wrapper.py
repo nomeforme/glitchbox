@@ -84,7 +84,7 @@ class StreamDiffusionWrapper:
         width: int = 512,
         height: int = 512,
         warmup: int = 10,
-        acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt",
+        acceleration: Literal["none", "xformers", "tensorrt", "sfast"] = "tensorrt",
         do_add_noise: bool = True,
         device_ids: Optional[List[int]] = None,
         use_lcm_lora: bool = True,
@@ -157,7 +157,7 @@ class StreamDiffusionWrapper:
             The height of the image, by default 512.
         warmup : int, optional
             The number of warmup steps to perform, by default 10.
-        acceleration : Literal["none", "xformers", "tensorrt"], optional
+        acceleration : Literal["none", "xformers", "tensorrt", "sfast"], optional
             The acceleration method, by default "tensorrt".
         do_add_noise : bool, optional
             Whether to add noise for following denoising steps or not,
@@ -886,7 +886,7 @@ class StreamDiffusionWrapper:
         lcm_lora_id: Optional[str] = None,
         vae_id: Optional[str] = None,
         unet_path: Optional[str] = None,
-        acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt",
+        acceleration: Literal["none", "xformers", "tensorrt", "sfast"] = "tensorrt",
         do_add_noise: bool = True,
         use_lcm_lora: bool = True,
         use_tiny_vae: bool = True,
@@ -934,7 +934,7 @@ class StreamDiffusionWrapper:
             The lcm_lora_id to load, by default None.
         vae_id : Optional[str], optional
             The vae_id to load, by default None.
-        acceleration : Literal["none", "xfomers", "sfast", "tensorrt"], optional
+        acceleration : Literal["none", "xformers", "sfast", "tensorrt"], optional
             The acceleration method, by default "tensorrt".
         warmup : int, optional
             The number of warmup steps to perform, by default 10.

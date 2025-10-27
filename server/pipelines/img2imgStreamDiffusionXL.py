@@ -407,6 +407,13 @@ class Pipeline:
 
             self.pipes.append(stream)
 
+            # Force GPU cleanup between pipe creations to prevent OOM
+            if idx < len(adapter_weights_sets) - 1:  # Don't cleanup after last pipe
+                import gc
+                torch.cuda.empty_cache()
+                gc.collect()
+                print(f"[img2imgStreamDiffusion.py] GPU cache cleared after pipe {idx + 1}")
+
         # Store current pipe index
         self.current_pipe_idx = 0
         self.last_prompt = default_prompt
