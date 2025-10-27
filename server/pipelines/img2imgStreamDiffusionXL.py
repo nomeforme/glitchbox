@@ -284,6 +284,9 @@ class Pipeline:
             adapter_weights_sets = [[]]
             print(f"[img2imgStreamDiffusion.py] No lora_config provided, creating single pipe")
 
+        # Store adapter_weights_sets for prompt blending (used to derive prompt_travel_factor per pipe)
+        self.adapter_weights_sets = adapter_weights_sets
+
         params = self.InputParams()
 
         # Define ControlNet configuration (static, for structural guidance in img2img)
@@ -521,10 +524,30 @@ class Pipeline:
         print(f"[img2imgStreamDiffusion.py] use_prompt_travel: {use_prompt_travel}")
 
         if use_prompt_travel:
-            # Get prompts and factor
+            # Get prompts
             source_prompt = params.prompt
             target_prompt = getattr(params, 'target_prompt', params.prompt)
-            prompt_travel_factor = getattr(params, 'prompt_travel_factor', 0.5)
+
+            # Derive prompt_travel_factor from this pipe's adapter_weights
+            # For 2 LoRAs: [weight_A, weight_B], use weight_B as the factor
+            # This ensures prompt blending matches LoRA blending
+            if pipe_index < len(self.adapter_weights_sets):
+                adapter_weights = self.adapter_weights_sets[pipe_index]
+                if len(adapter_weights) >= 2:
+                    # Use the second LoRA's weight as the prompt travel factor
+                    # [1.0, 0.0] -> factor=0.0 (all first prompt)
+                    # [0.5, 0.5] -> factor=0.5 (balanced)
+                    # [0.0, 1.0] -> factor=1.0 (all second prompt)
+                    prompt_travel_factor = adapter_weights[1]
+                    print(f"[img2imgStreamDiffusionXL.py] Derived prompt_travel_factor={prompt_travel_factor} from adapter_weights={adapter_weights}")
+                else:
+                    # Fallback if adapter_weights is too short
+                    prompt_travel_factor = getattr(params, 'prompt_travel_factor', 0.5)
+                    print(f"[img2imgStreamDiffusionXL.py] Warning: adapter_weights too short, using default factor={prompt_travel_factor}")
+            else:
+                # Fallback if pipe_index is out of range
+                prompt_travel_factor = getattr(params, 'prompt_travel_factor', 0.5)
+                print(f"[img2imgStreamDiffusionXL.py] Warning: pipe_index out of range, using default factor={prompt_travel_factor}")
 
             print(f"[img2imgStreamDiffusionXL.py] SDXL prompt travel - factor: {prompt_travel_factor}")
             print(f"[img2imgStreamDiffusionXL.py] source: {source_prompt[:50]}...")
