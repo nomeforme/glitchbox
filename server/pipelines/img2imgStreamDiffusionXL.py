@@ -329,7 +329,7 @@ class Pipeline:
                 use_tiny_vae=args.taesd,
                 device=device,
                 dtype=torch_dtype,
-                t_index_list=[32],
+                t_index_list=[25],
                 frame_buffer_size=1,
                 width=params.width,
                 height=params.height,
@@ -379,7 +379,7 @@ class Pipeline:
                     stream.stream.pipe.set_adapters(adapter_names=adapter_names, adapter_weights=adapter_weights)
 
                     print(f"[img2imgStreamDiffusion.py] Fusing LoRAs with scale 1.0")
-                    stream.stream.pipe.fuse_lora(adapter_names=adapter_names, lora_scale=1.05)
+                    stream.stream.pipe.fuse_lora(adapter_names=adapter_names, lora_scale=1.0)
 
                     # Unload after fusing to free memory
                     stream.stream.pipe.unload_lora_weights()

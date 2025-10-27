@@ -51,7 +51,8 @@ class LoRACurationConfig:
             "pixel-art-xl": "loras/pixel-art_XL.safetensors",
             "papercut-xl": "loras/papercut_XL.safetensors",
             "melies-bw-xl": "loras/melies_bw_XL-step00000800.safetensors",
-            "melies-col-xl": "loras/melies_col_XL-step00000500.safetensors"
+            "melies-col-xl": "loras/melies_col_XL-step00000500.safetensors",
+            "mannequin-xl": "loras/mannequin_0_XL-step00000500.safetensors"
         }
 
         self._all_curations = {} # Stores all loaded JSON data {key: data}
@@ -112,35 +113,35 @@ class LoRACurationConfig:
             print(f"[LoRACurationConfig] Error: LoRA config directory does not exist: {lora_config_dir}")
             return
 
-        for filename in os.listdir(lora_config_dir):
-            if filename.endswith(".json"):
-                filepath = os.path.join(lora_config_dir, filename)
-                # Strip .json extension and optional numeric prefix (e.g., "00_melies.json" -> "melies")
-                curation_key = filename[:-5]
-                curation_key = re.sub(r'^\d+_', '', curation_key) 
-                try:
-                    with open(filepath, 'r') as f:
-                        config_data = json.load(f)
-                    
-                    # Support both old (prompts_file_name) and new (prompts_file_names) format
-                    has_prompts_field = "prompts_file_name" in config_data or "prompts_file_names" in config_data
-                    if not (has_prompts_field and all(k in config_data for k in ["loras", "adapter_weights_sets", "input_params"])):
-                        print(f"[LoRACurationConfig] Warning: Skipping {filename}. Missing one or more required keys (prompts_file_name/prompts_file_names, loras, adapter_weights_sets, input_params).")
-                        continue
-                    if not isinstance(config_data.get("adapter_weights_sets"), list) or \
-                       (config_data.get("adapter_weights_sets") and not all(isinstance(i, list) for i in config_data.get("adapter_weights_sets"))):
-                        print(f"[LoRACurationConfig] Warning: Skipping {filename}. 'adapter_weights_sets' must be a list of lists.")
-                        continue
+        # Sort filenames to preserve numeric prefix order
+        filenames = sorted([f for f in os.listdir(lora_config_dir) if f.endswith(".json")])
 
-                    self._all_curations[curation_key] = config_data
-                    self._all_curation_keys.append(curation_key)
-                    print(f"[LoRACurationConfig] Successfully loaded and validated: {curation_key}.json")
-                except json.JSONDecodeError:
-                    print(f"[LoRACurationConfig] Warning: Error decoding JSON from {filename}. Skipping.")
-                except Exception as e:
-                    print(f"[LoRACurationConfig] Warning: Error loading {filename}: {e}. Skipping.")
-        
-        self._all_curation_keys.sort() 
+        for filename in filenames:
+            filepath = os.path.join(lora_config_dir, filename)
+            # Strip .json extension and optional numeric prefix (e.g., "00_melies.json" -> "melies")
+            curation_key = filename[:-5]
+            curation_key = re.sub(r'^\d+_', '', curation_key)
+            try:
+                with open(filepath, 'r') as f:
+                    config_data = json.load(f)
+
+                # Support both old (prompts_file_name) and new (prompts_file_names) format
+                has_prompts_field = "prompts_file_name" in config_data or "prompts_file_names" in config_data
+                if not (has_prompts_field and all(k in config_data for k in ["loras", "adapter_weights_sets", "input_params"])):
+                    print(f"[LoRACurationConfig] Warning: Skipping {filename}. Missing one or more required keys (prompts_file_name/prompts_file_names, loras, adapter_weights_sets, input_params).")
+                    continue
+                if not isinstance(config_data.get("adapter_weights_sets"), list) or \
+                   (config_data.get("adapter_weights_sets") and not all(isinstance(i, list) for i in config_data.get("adapter_weights_sets"))):
+                    print(f"[LoRACurationConfig] Warning: Skipping {filename}. 'adapter_weights_sets' must be a list of lists.")
+                    continue
+
+                self._all_curations[curation_key] = config_data
+                self._all_curation_keys.append(curation_key)
+                print(f"[LoRACurationConfig] Successfully loaded and validated: {curation_key}.json")
+            except json.JSONDecodeError:
+                print(f"[LoRACurationConfig] Warning: Error decoding JSON from {filename}. Skipping.")
+            except Exception as e:
+                print(f"[LoRACurationConfig] Warning: Error loading {filename}: {e}. Skipping.") 
 
     def get_lora_models(self):
         return self.lora_models

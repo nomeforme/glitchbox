@@ -1,6 +1,6 @@
 {
     "prompts_file_names": ["mannequin", "glitch"],
-    "loras": ["pixel-art-xl", "papercut-xl"],
+    "loras": ["mannequin", "glitch"],
     "adapter_weights_sets": [
         [1.0, 0.0],
         [0.0, 1.0]
