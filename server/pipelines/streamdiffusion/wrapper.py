@@ -77,6 +77,7 @@ class StreamDiffusionWrapper:
         output_type: Literal["pil", "pt", "np", "latent"] = "pil",
         lcm_lora_id: Optional[str] = None,
         vae_id: Optional[str] = None,
+        unet_path: Optional[str] = None,
         device: Literal["cpu", "cuda"] = "cuda",
         dtype: torch.dtype = torch.float16,
         frame_buffer_size: int = 1,
@@ -140,6 +141,10 @@ class StreamDiffusionWrapper:
             The vae_id to load, by default None.
             If None, the default TinyVAE
             ("madebyollin/taesd") will be used.
+        unet_path : Optional[str], optional
+            Path to custom UNet weights (.safetensors file) to load, by default None.
+            If provided, these weights will be loaded into the pipeline's UNet after
+            the base model is loaded (e.g., for SDXL Lightning or other custom UNets).
         device : Literal["cpu", "cuda"], optional
             The device to use for inference, by default "cuda".
         dtype : torch.dtype, optional
@@ -257,6 +262,7 @@ class StreamDiffusionWrapper:
             lora_dict=lora_dict,
             lcm_lora_id=lcm_lora_id,
             vae_id=vae_id,
+            unet_path=unet_path,
             t_index_list=t_index_list,
             acceleration=acceleration,
             do_add_noise=do_add_noise,
@@ -879,6 +885,7 @@ class StreamDiffusionWrapper:
         lora_dict: Optional[Dict[str, float]] = None,
         lcm_lora_id: Optional[str] = None,
         vae_id: Optional[str] = None,
+        unet_path: Optional[str] = None,
         acceleration: Literal["none", "xformers", "tensorrt"] = "tensorrt",
         do_add_noise: bool = True,
         use_lcm_lora: bool = True,
@@ -1048,6 +1055,18 @@ class StreamDiffusionWrapper:
 
         # If we get here, the model loaded successfully - break out of retry loop
         logger.info(f"Model loading succeeded")
+
+        # Load custom UNet weights if provided (e.g., SDXL Lightning)
+        if unet_path is not None:
+            logger.info(f"_load_model: Loading custom UNet weights from {unet_path}")
+            try:
+                from safetensors.torch import load_file
+                unet_state_dict = load_file(unet_path)
+                pipe.unet.load_state_dict(unet_state_dict)
+                logger.info(f"_load_model: Custom UNet weights loaded successfully")
+            except Exception as e:
+                logger.error(f"_load_model: Failed to load custom UNet weights from {unet_path}: {e}")
+                raise RuntimeError(f"Failed to load custom UNet weights: {e}")
 
         # Use comprehensive model detection instead of basic detection
         detection_result = detect_model(pipe.unet, pipe)

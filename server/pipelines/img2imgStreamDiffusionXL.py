@@ -20,6 +20,7 @@ import os
 from pipelines.streamdiffusion.wrapper import StreamDiffusionWrapper
 
 import torch
+from safetensors.torch import load_file
 
 from config import Args
 from pydantic import BaseModel, Field
@@ -47,6 +48,9 @@ prompt_prefix = get_prompt_prefix()
 default_prompt = prompt_prefix + "mrnabrmv style, Fragmented digital portrait blending abstract textures and vivid colors, creating a surreal, pixelated visage."
 default_negative_prompt = "black and white, blurry, low resolution, pixelated,  pixel art, low quality, low fidelity"
 
+# Use SDXL Lightning 1-step UNet from local safetensors
+# base_model = "stabilityai/stable-diffusion-xl-base-1.0"
+unet_safetensors_path = None #"models/diffusion/sdxl_lightning_1step_unet_x0.safetensors"
 base_model = "stabilityai/sdxl-turbo"
 # base_model = "stabilityai/sd-turbo"
 # base_model = "stabilityai/stable-diffusion-2-1-base"
@@ -286,13 +290,13 @@ class Pipeline:
         use_controlnet = True
         controlnet_config = {
             'model_id': 'diffusers/controlnet-depth-sdxl-1.0',  # SDXL depth ControlNet
-            'preprocessor': 'depth',  # Uncomment to calculate depth from RGB
-            'preprocessor_params': {
-                'model_name': 'Intel/dpt-swinv2-tiny-256',  # ~165MB, fastest
-                # 'model_name': 'Intel/dpt-large',  # ~1.3GB, slower but higher quality
-            },
-            'conditioning_scale': 0.87,
-            'enabled': False,
+            'preprocessor': 'passthrough',  # Uncomment to calculate depth from RGB
+            # 'preprocessor_params': {
+            #     'model_name': 'Intel/dpt-swinv2-tiny-256',  # ~165MB, fastest
+            #     # 'model_name': 'Intel/dpt-large',  # ~1.3GB, slower but higher quality
+            # },
+            'conditioning_scale': 0.72,
+            'enabled': True,
             'control_guidance_start': 0.0,
             'control_guidance_end': 1.0,
         }
@@ -329,7 +333,7 @@ class Pipeline:
                 use_tiny_vae=args.taesd,
                 device=device,
                 dtype=torch_dtype,
-                t_index_list=[25],
+                t_index_list=[18],
                 frame_buffer_size=1,
                 width=params.width,
                 height=params.height,
