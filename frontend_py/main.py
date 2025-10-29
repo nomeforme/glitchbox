@@ -20,7 +20,7 @@ from components import ControlPanel
 from components import StatusBar
 from components.video_display import VideoDisplay
 from clients import WebSocketClient
-from threads import CameraThread, SpeechToTextThread, FFTAnalyzerThread, VideoThread, VideoAudioThread
+from threads import CameraThread, SpeechToTextThread, FFTAnalyzerThread, VideoThread, VideoAudioThread, DepthCameraThread
 from config import MIC_DEVICE_INDEX, AUTO_DISABLE_BLACK_FRAME_AFTER_CURATION_UPDATE, BLACK_FRAME_DISABLE_TIMEOUT, FORCE_MANUAL_RECONNECTION_AFTER_CURATION_UPDATE, CAMERA_DEVICE_INDEX, CURATION_INDEX_AUTO_UPDATE, CURATION_INDEX_UPDATE_TIME, CURATION_INDEX_MAX, MAX_CAMERA_INDEX
 from utils.list_cameras import test_camera, get_device_info
 load_dotenv(override=True)
@@ -194,7 +194,23 @@ class MainWindow(QMainWindow):
         camera_container_layout.addWidget(self.camera_label)
         
         self.feeds_layout.addWidget(self.camera_container)
-        
+
+        # Depth camera feed container (initially hidden)
+        self.depth_camera_container = QFrame()
+        depth_camera_container_layout = QVBoxLayout(self.depth_camera_container)
+
+        # Depth camera feed
+        self.depth_camera_display = CameraDisplay()
+        depth_camera_container_layout.addWidget(self.depth_camera_display)
+
+        # Depth camera label
+        self.depth_camera_label = QLabel("Depth Camera")
+        self.depth_camera_label.setAlignment(Qt.AlignCenter)
+        depth_camera_container_layout.addWidget(self.depth_camera_label)
+
+        self.depth_camera_container.setVisible(False)  # Hidden by default
+        self.feeds_layout.addWidget(self.depth_camera_container)
+
         # Processed feed container
         self.processed_container = QFrame()
         processed_container_layout = QVBoxLayout(self.processed_container)
@@ -259,9 +275,29 @@ class MainWindow(QMainWindow):
         camera_layout.addWidget(camera_label)
         camera_layout.addWidget(self.camera_spinbox)
         camera_layout.addWidget(self.camera_update_button)
-        
+
         device_controls_layout.addLayout(camera_layout)
-        
+
+        # Depth Camera Index Control
+        depth_camera_layout = QHBoxLayout()
+        depth_camera_label = QLabel("Depth Camera Index:")
+        self.depth_camera_spinbox = QSpinBox()
+        self.depth_camera_spinbox.setMinimum(0)
+        self.depth_camera_spinbox.setMaximum(MAX_CAMERA_INDEX)
+        self.depth_camera_spinbox.setValue(42)  # Default to /dev/video42
+
+        # Set tooltip for depth camera
+        self.depth_camera_spinbox.setToolTip("Depth camera device index (default: 42 for RealSense)")
+
+        self.depth_camera_update_button = QPushButton("Update")
+        self.depth_camera_update_button.clicked.connect(self.update_depth_camera_index)
+
+        depth_camera_layout.addWidget(depth_camera_label)
+        depth_camera_layout.addWidget(self.depth_camera_spinbox)
+        depth_camera_layout.addWidget(self.depth_camera_update_button)
+
+        device_controls_layout.addLayout(depth_camera_layout)
+
         # Microphone Index Control
         mic_layout = QHBoxLayout()
         mic_label = QLabel("Microphone Index:")
@@ -363,7 +399,12 @@ class MainWindow(QMainWindow):
         self.start_button.clicked.connect(self.toggle_camera)
         # Camera button is now always enabled
         buttons_layout.addWidget(self.start_button)
-        
+
+        # Start/Stop Depth Camera button
+        self.start_depth_camera_button = QPushButton("Start Depth Camera")
+        self.start_depth_camera_button.clicked.connect(self.toggle_depth_camera)
+        buttons_layout.addWidget(self.start_depth_camera_button)
+
         # STT Toggle button
         self.stt_button = QPushButton("Start Speech Recognition")
         self.stt_button.clicked.connect(self.toggle_stt)
@@ -431,6 +472,10 @@ class MainWindow(QMainWindow):
         # Set the camera device index
         self.camera_thread.device_index = self.camera_device_index
 
+        # Initialize the depth camera thread
+        self.depth_camera_thread = DepthCameraThread(device_index=42)
+        self.depth_camera_running = False
+
         # Initialize the STT thread with the audio device index
         self.stt_thread = SpeechToTextThread(input_device_index=self.audio_device_index)
         self.stt_thread.transcription_updated.connect(self.handle_transcription)
@@ -461,6 +506,7 @@ class MainWindow(QMainWindow):
         self.ws_client.settings_received.connect(self.handle_settings)
         self.ws_client.status_changed.connect(self.handle_status_change)
         self.camera_thread.frame_ready.connect(self.handle_camera_frame)
+        self.depth_camera_thread.frame_ready.connect(self.handle_depth_camera_frame)
         
         # Track signal connections to prevent duplication
         self.signal_connections_active = True
@@ -748,6 +794,10 @@ class MainWindow(QMainWindow):
         self.current_frame = frame
         self.camera_display.update_frame(frame)
 
+    def handle_depth_camera_frame(self, frame):
+        """Handle new frame from depth camera"""
+        self.depth_camera_display.update_frame(frame)
+
     def handle_video_frame(self, frame):
         """Handle new frame from video"""
         from PySide6.QtGui import QImage, QPixmap
@@ -787,7 +837,77 @@ class MainWindow(QMainWindow):
         else:
             self.stop_camera()
 
+    def toggle_depth_camera(self):
+        """Start/Stop depth camera"""
+        if not self.depth_camera_running:
+            # Get current index from spinbox
+            depth_camera_index = self.depth_camera_spinbox.value()
 
+            # Recreate thread with current index before starting
+            self.depth_camera_thread = DepthCameraThread(device_index=depth_camera_index)
+            self.depth_camera_thread.frame_ready.connect(self.handle_depth_camera_frame)
+
+            # Start depth camera
+            self.depth_camera_thread.start()
+            self.depth_camera_running = True
+            self.depth_camera_container.setVisible(True)
+            self.start_depth_camera_button.setText("Stop Depth Camera")
+            self.status_bar.update_processing_status(f"Depth camera started (index {depth_camera_index})")
+            print(f"[UI] Depth camera started with index {depth_camera_index}")
+        else:
+            # Stop depth camera
+            self.depth_camera_thread.stop()
+            self.depth_camera_running = False
+            self.depth_camera_container.setVisible(False)
+            self.depth_camera_display.clear_display()
+            self.start_depth_camera_button.setText("Start Depth Camera")
+            self.status_bar.update_processing_status("Depth camera stopped")
+            print("[UI] Depth camera stopped")
+
+    def update_depth_camera_index(self):
+        """Update the depth camera device index"""
+        new_index = self.depth_camera_spinbox.value()
+
+        print(f"[UI] Updating depth camera index to {new_index}")
+        self.depth_camera_update_button.setEnabled(False)
+        self.depth_camera_update_button.setText("Updating...")
+        self.status_bar.update_processing_status(f"Updating depth camera to index {new_index}...")
+
+        # Store the old state
+        was_depth_camera_running = self.depth_camera_running
+
+        try:
+            # Stop depth camera if it's running
+            if was_depth_camera_running:
+                self.depth_camera_thread.stop()
+                self.depth_camera_running = False
+
+            # Recreate depth camera thread with new index
+            if hasattr(self, 'depth_camera_thread'):
+                self.depth_camera_thread.stop()
+                self.depth_camera_thread.wait(1000)
+                if self.depth_camera_thread.isRunning():
+                    self.depth_camera_thread.terminate()
+
+            self.depth_camera_thread = DepthCameraThread(device_index=new_index)
+            self.depth_camera_thread.frame_ready.connect(self.handle_depth_camera_frame)
+
+            # Restart depth camera if it was running
+            if was_depth_camera_running:
+                self.depth_camera_thread.start()
+                self.depth_camera_running = True
+                self.status_bar.update_processing_status(f"Depth camera updated to index {new_index} and restarted")
+            else:
+                self.status_bar.update_processing_status(f"Depth camera index updated to {new_index}")
+
+            print(f"[UI] Successfully updated depth camera to index {new_index}")
+
+        except Exception as e:
+            print(f"[UI] Error updating depth camera index: {e}")
+            self.status_bar.update_processing_status(f"Error updating depth camera: {e}")
+        finally:
+            self.depth_camera_update_button.setEnabled(True)
+            self.depth_camera_update_button.setText("Update")
 
 
 
@@ -1944,10 +2064,16 @@ class MainWindow(QMainWindow):
         # Stop other threads
         if hasattr(self, 'stt_thread') and self.stt_thread is not None:
             self.stt_thread.stop()
-            
+
         if hasattr(self, 'fft_thread') and self.fft_thread is not None:
             self.fft_thread.stop()
-            
+
+        # Stop depth camera thread
+        if hasattr(self, 'depth_camera_thread') and self.depth_camera_thread is not None and self.depth_camera_running:
+            print("[UI] Stopping depth camera thread...")
+            self.depth_camera_thread.stop()
+            self.depth_camera_running = False
+
         # Close WebSocket connection
         if hasattr(self, 'ws_client') and self.ws_client is not None:
             self.ws_client.close()
