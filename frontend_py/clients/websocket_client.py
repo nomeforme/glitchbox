@@ -129,8 +129,11 @@ class WebSocketClient(QThread):
             # Extract base URL from WebSocket URI
             base_url = self.uri.replace('ws://', 'http://').replace('wss://', 'https://')
             url = f"{base_url}/api/update_curation_index"
-            
-            async with aiohttp.ClientSession() as session:
+
+            # Set a long timeout for curation switching (pipeline reinitialization can take time)
+            timeout = aiohttp.ClientTimeout(total=300)  # 5 minutes total timeout
+
+            async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(url, json={"curation_index": curation_index}) as response:
                     if response.status == 200:
                         result = await response.json()

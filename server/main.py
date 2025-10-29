@@ -1168,6 +1168,7 @@ if __name__ == "__main__":
             reload=config.reload,
             ssl_certfile=config.ssl_certfile,
             ssl_keyfile=config.ssl_keyfile,
+            timeout_keep_alive=300,  # 5 minutes for curation switching
         )
     except KeyboardInterrupt:
         print("Server stopped by user")
