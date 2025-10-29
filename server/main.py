@@ -606,11 +606,12 @@ class App:
                                     # Get the next factor value and seed from the scheduler
                                     scheduler_factor, scheduler_seed = self.prompt_travel_scheduler.update()
 
-                                    print(f"[main.py] Using scheduled prompt travel factor: {scheduler_factor:.2f}")
+                                    print(f"[main.py] Using continuous scheduler factor: {scheduler_factor:.3f}")
                                     print(f"[main.py] Using scheduled seed: {scheduler_seed}")
-                                    # Use the scheduled factor for prompt travel
-                                    setattr(params, 'prompt_travel_factor', scheduler_factor)
-                                    setattr(params, 'latent_travel_factor', scheduler_factor)
+                                    # Note: prompt_travel_factor will be set later based on interpolation weight
+                                    # For now, set latent_travel_factor to the fractional part of scheduler_factor
+                                    latent_weight = scheduler_factor - int(scheduler_factor)
+                                    setattr(params, 'latent_travel_factor', latent_weight)
 
                                     # Use the scheduled seeds if available
                                     if scheduler_seed is not None:
@@ -648,18 +649,22 @@ class App:
                                                     if self.args.debug:
                                                         print(f"[main.py] Using indexed prompt for prompt index {prompt_index}: {indexed_prompt}")
                                             else:
-                                                # Use sequential prompt scheduling
-                                                current_prompt, next_prompt = self.prompt_travel_scheduler.get_prompts()
-                                                if current_prompt is not None and next_prompt is not None:
-                                                    setattr(params, 'prompt', current_prompt)
-                                                    setattr(params, 'target_prompt', next_prompt)
-                                                    if self.args.debug:
-                                                        print(f"[main.py] Using scheduled prompts:")
-                                                        print(f"source: {current_prompt}")
-                                                        print(f"target: {next_prompt}")
-                                    
-                                    if self.args.debug:
-                                        print(f"[main.py] Using scheduled prompt travel factor: {scheduler_factor:.2f}")
+                                                # Use continuous factor-based prompt scheduling
+                                                # scheduler_factor is a continuous value (e.g., 2.3 means between prompts[2] and prompts[3])
+                                                source_prompt, target_prompt, interpolation_weight = \
+                                                    self.prompt_travel_scheduler.prompt_scheduler.get_prompts_from_factor(scheduler_factor)
+
+                                                if source_prompt and target_prompt:
+                                                    setattr(params, 'prompt', source_prompt)
+                                                    setattr(params, 'target_prompt', target_prompt)
+                                                    # Override the scheduler_factor with the interpolation weight (0.0-1.0)
+                                                    # This is the fractional part used for LERP
+                                                    setattr(params, 'prompt_travel_factor', interpolation_weight)
+
+                                                    print(f"[main.py] Continuous factor: {scheduler_factor:.3f}")
+                                                    print(f"[main.py]   source: {source_prompt[:60]}...")
+                                                    print(f"[main.py]   target: {target_prompt[:60]}...")
+                                                    print(f"[main.py]   interpolation_weight: {interpolation_weight:.3f}")
                                 
                                 # # Queue the prompt travel request
                                 # await embeddings_service.process_prompt_travel(

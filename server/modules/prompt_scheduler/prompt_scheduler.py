@@ -213,23 +213,35 @@ class PromptScheduler:
     def update(self, at_max_boundary=False, at_min_boundary=False):
         """
         Update the current and next prompts based on boundary conditions.
-        
+
         Args:
             at_max_boundary (bool): Whether we're at the maximum boundary (target prompt)
             at_min_boundary (bool): Whether we're at the minimum boundary (source prompt)
-            
+
         Returns:
             tuple: A tuple containing (current_prompt, next_prompt)
         """
+        print(f"[PromptScheduler.update] ENTER: at_max={at_max_boundary}, at_min={at_min_boundary}, current_index={self.current_index}")
+        print(f"[PromptScheduler.update] BEFORE: current={self.current_prompt[:50] if self.current_prompt else 'None'}..., next={self.next_prompt[:50] if self.next_prompt else 'None'}...")
+
         if not self.enabled or len(self.prompts) < 2:
             return self.current_prompt, self.next_prompt
-        
+
         # Update prompts based on boundary conditions
         if at_max_boundary:
-            # At max boundary (target), change the source prompt (current_prompt)
-            # Keep the target prompt (next_prompt) as is
+            # At max boundary (target), advance to next prompt pair
+            # current becomes what next was, and next advances to the following prompt
+            old_index = self.current_index
             self.current_index = (self.current_index + 1) % len(self.prompts)
             self.current_prompt = self.prompts[self.current_index]
+
+            # IMPORTANT: Also update next_prompt to avoid current==next
+            next_index = (self.current_index + 1) % len(self.prompts)
+            self.next_prompt = self.prompts[next_index]
+
+            print(f"[PromptScheduler.update] MAX BOUNDARY: index {old_index} -> {self.current_index}")
+            print(f"[PromptScheduler.update] MAX BOUNDARY: current_prompt updated to: {self.current_prompt[:50]}...")
+            print(f"[PromptScheduler.update] MAX BOUNDARY: next_prompt updated to: {self.next_prompt[:50]}...")
 
             # Update progress ratio to preserve position across prompt file switches
             if len(self.prompts) > 1:
@@ -239,30 +251,86 @@ class PromptScheduler:
                 print(f"[PromptScheduler] At max boundary, updated source prompt: {self.current_prompt} (ratio: {self.progress_ratio:.2f})")
             if self.logging_enabled:
                 self.logger.info(f"At max boundary, updated source prompt: {self.current_prompt}")
-                
+
         elif at_min_boundary:
             # At min boundary (source), change the target prompt (next_prompt)
             # Keep the source prompt (current_prompt) as is
             next_index = (self.current_index + 1) % len(self.prompts)
             self.next_prompt = self.prompts[next_index]
-            
+
+            print(f"[PromptScheduler.update] MIN BOUNDARY: current_index unchanged: {self.current_index}")
+            print(f"[PromptScheduler.update] MIN BOUNDARY: current_prompt unchanged: {self.current_prompt[:50]}...")
+            print(f"[PromptScheduler.update] MIN BOUNDARY: next_prompt updated to: {self.next_prompt[:50]}...")
+
             if self.debug:
                 print(f"[PromptScheduler] At min boundary, updated target prompt: {self.next_prompt}")
             if self.logging_enabled:
                 self.logger.info(f"At min boundary, updated target prompt: {self.next_prompt}")
-        
+
+        print(f"[PromptScheduler.update] EXIT: current={self.current_prompt[:50]}..., next={self.next_prompt[:50]}...")
+
         return self.current_prompt, self.next_prompt
     
     def get_current_prompts(self):
         """
         Get the current source and target prompts.
-        
+
         Returns:
             tuple: A tuple containing (current_prompt, next_prompt)
         """
         if self.logging_enabled:
             self.logger.info(f"Getting current prompts: source={self.current_prompt}, target={self.next_prompt}")
         return self.current_prompt, self.next_prompt
+
+    def get_prompts_from_factor(self, continuous_factor):
+        """
+        Get source and target prompts based on a continuous factor value.
+
+        This method uses a simple linear progression through the prompt list:
+        - Factor range: 0.0 to len(prompts)-1 (wraps around with modulo)
+        - int(factor) gives the source prompt index
+        - int(factor)+1 gives the target prompt index (with wrap)
+        - frac(factor) gives the interpolation weight
+
+        Example with 4 prompts:
+        - factor=0.3: source=prompts[0], target=prompts[1], weight=0.3
+        - factor=1.7: source=prompts[1], target=prompts[2], weight=0.7
+        - factor=3.2: source=prompts[3], target=prompts[0], weight=0.2
+
+        Args:
+            continuous_factor (float): Continuous factor from 0.0 to len(prompts)
+
+        Returns:
+            tuple: (source_prompt, target_prompt, interpolation_weight)
+        """
+        if not self.prompts or len(self.prompts) == 0:
+            print("[PromptScheduler.get_prompts_from_factor] No prompts loaded")
+            return "", "", 0.0
+
+        if len(self.prompts) == 1:
+            # Only one prompt, return it for both source and target
+            return self.prompts[0], self.prompts[0], 0.0
+
+        # Wrap factor to valid range using modulo
+        wrapped_factor = continuous_factor % len(self.prompts)
+
+        # Get source and target indices
+        source_index = int(wrapped_factor)
+        target_index = (source_index + 1) % len(self.prompts)
+
+        # Get interpolation weight (fractional part)
+        interpolation_weight = wrapped_factor - source_index
+
+        source_prompt = self.prompts[source_index]
+        target_prompt = self.prompts[target_index]
+
+        if self.debug:
+            print(f"[PromptScheduler.get_prompts_from_factor] continuous_factor={continuous_factor:.3f}")
+            print(f"[PromptScheduler.get_prompts_from_factor]   wrapped={wrapped_factor:.3f}, source_idx={source_index}, target_idx={target_index}, weight={interpolation_weight:.3f}")
+            print(f"[PromptScheduler.get_prompts_from_factor]   source={source_prompt[:50]}...")
+            print(f"[PromptScheduler.get_prompts_from_factor]   target={target_prompt[:50]}...")
+
+        return source_prompt, target_prompt, interpolation_weight
     
     def set_enabled(self, enabled):
         """Enable or disable the scheduler"""

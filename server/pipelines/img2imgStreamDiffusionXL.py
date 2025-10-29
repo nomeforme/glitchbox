@@ -526,9 +526,14 @@ class Pipeline:
             target_prompt = getattr(params, 'target_prompt', params.prompt)
             prompt_travel_factor = getattr(params, 'prompt_travel_factor', 0.5)
 
-            print(f"[img2imgStreamDiffusionXL.py] SDXL prompt travel - factor: {prompt_travel_factor}")
-            print(f"[img2imgStreamDiffusionXL.py] source: {source_prompt[:50]}...")
-            print(f"[img2imgStreamDiffusionXL.py] target: {target_prompt[:50]}...")
+            print(f"[img2imgStreamDiffusionXL.py] === PROMPT TRAVEL DEBUG ===")
+            print(f"[img2imgStreamDiffusionXL.py] factor: {prompt_travel_factor:.3f}")
+            print(f"[img2imgStreamDiffusionXL.py] source: {source_prompt[:80]}...")
+            print(f"[img2imgStreamDiffusionXL.py] target: {target_prompt[:80]}...")
+            print(f"[img2imgStreamDiffusionXL.py] Interpolation: lerp(source, target, {prompt_travel_factor:.3f})")
+            print(f"[img2imgStreamDiffusionXL.py]   -> factor=0.0 gives 100% source")
+            print(f"[img2imgStreamDiffusionXL.py]   -> factor=1.0 gives 100% target")
+            print(f"[img2imgStreamDiffusionXL.py] ==========================")
 
             # Get or compute source embeddings (with caching)
             cache = self.prompt_embeds_cache[pipe_index]

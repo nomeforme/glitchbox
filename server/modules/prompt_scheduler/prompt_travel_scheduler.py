@@ -101,6 +101,15 @@ class PromptTravelScheduler:
             self.prompt_scheduler.load_prompts()
             if self.logging_enabled:
                 self.logger.info("Prompt scheduler initialized")
+
+            # Set max_factor based on number of prompts loaded
+            num_prompts = len(self.prompt_scheduler.prompts)
+            if num_prompts > 0:
+                self.max_factor = float(num_prompts)
+                print(f"[PromptTravelScheduler] Set max_factor to {self.max_factor} based on {num_prompts} prompts")
+                if self.logging_enabled:
+                    self.logger.info(f"Set max_factor to {self.max_factor} based on {num_prompts} prompts")
+
             # Check if prompts were loaded
             current_prompt, next_prompt = self.prompt_scheduler.get_current_prompts()
             if self.logging_enabled:
@@ -142,75 +151,38 @@ class PromptTravelScheduler:
     
     def update(self):
         """
-        Update the factor value for the next iteration.
-        
+        Update the factor value for the next iteration using simple linear progression.
+
+        The factor continuously increments and wraps around at max_factor.
+        This provides a simple linear progression through prompts:
+        - Factor starts at min_factor (default 0.0)
+        - Increments by factor_increment each update
+        - Wraps around to min_factor when reaching max_factor
+
         Returns:
             tuple: A tuple containing (factor_value, seed_value) where seed_value is None if seed_enabled is False
         """
         if not self.enabled:
             return self.factor_value, self.current_seed if self.seed_enabled else None
-            
-        # Check if we're in stabilization pause at min or max
-        at_boundary = (abs(self.factor_value - self.max_factor) < 0.001 or 
-                       abs(self.factor_value - self.min_factor) < 0.001)
-                       
-        if at_boundary and self.stabilize_counter < self.stabilize_duration:
-            # Hold at boundary for stabilize_duration iterations
-            self.stabilize_counter += 1
-            
-            if self.stabilize_counter == 1:
-                boundary_type = "max" if abs(self.factor_value - self.max_factor) < 0.001 else "min"
-                if self.logging_enabled:
-                    self.logger.info(f"Stabilizing at {boundary_type} factor={self.factor_value:.2f} ({self.stabilize_counter}/{self.stabilize_duration})")
+
+        print(f"[PromptTravelScheduler.update] ENTER: factor={self.factor_value:.3f}, max_factor={self.max_factor}, increment={self.factor_increment}")
+
+        # Simple linear increment
+        old_factor = self.factor_value
+        self.factor_value += self.factor_increment
+
+        # Wrap around at max_factor
+        if self.factor_value >= self.max_factor:
+            self.factor_value = self.min_factor + (self.factor_value - self.max_factor)
+            print(f"[PromptTravelScheduler.update] WRAPPED: {old_factor:.3f} -> {self.factor_value:.3f} (hit max={self.max_factor})")
         else:
-            if at_boundary and self.stabilize_counter >= self.stabilize_duration:
-                # We've finished the stabilization period, continue with oscillation
-                self.stabilize_counter = 0
-                
-                # Determine which boundary we're at
-                at_max = abs(self.factor_value - self.max_factor) < 0.001
-                at_min = abs(self.factor_value - self.min_factor) < 0.001
-                
-                # Update prompts if prompt scheduler is enabled
-                if self.use_prompt_scheduler and self.prompt_scheduler is not None:
-                    # Update the prompt scheduler with the correct boundary flags
-                    self.prompt_scheduler.update(at_max_boundary=at_max, at_min_boundary=at_min)
-                    current_prompt, next_prompt = self.prompt_scheduler.get_current_prompts()
-                    if self.logging_enabled:
-                        self.logger.info(f"Updated prompts: source={current_prompt}, target={next_prompt}")
-                
-                # Generate new seeds when we hit a boundary if enabled
-                if self.seed_enabled:
-                    if at_max:
-                        # At max boundary (target), change the source seed (current_seed)
-                        self.current_seed = random.randint(0, 1000000)
-                        if self.logging_enabled:
-                            self.logger.info(f"At max boundary, changing source seed to: {self.current_seed}")
-                    else:
-                        # At min boundary (source), change the target seed (next_seed)
-                        self.next_seed = random.randint(0, 1000000)
-                        if self.logging_enabled:
-                            self.logger.info(f"At min boundary, changing target seed to: {self.next_seed}")
-                
-                # If we're not oscillating and we've reached max, stop at max
-                if not self.oscillate and abs(self.factor_value - self.max_factor) < 0.001:
-                    return self.factor_value, self.current_seed if self.seed_enabled else None
-                
-            # Update factor for next iteration
-            self.factor_value += self.direction * self.factor_increment
-            
-            # Ensure factor stays within bounds
-            self.factor_value = max(self.min_factor, min(self.max_factor, self.factor_value))
-            
-            # Reverse direction if we hit limits
-            if abs(self.factor_value - self.max_factor) < 0.001:
-                self.direction = -1
-            elif abs(self.factor_value - self.min_factor) < 0.001:
-                self.direction = 1
-        
+            print(f"[PromptTravelScheduler.update] INCREMENT: {old_factor:.3f} -> {self.factor_value:.3f} (max={self.max_factor})")
+
         if self.logging_enabled:
             self.logger.info(f"Factor value: {self.factor_value:.2f}")
-            
+
+        print(f"[PromptTravelScheduler.update] EXIT: factor={self.factor_value:.3f}")
+
         return self.factor_value, self.current_seed if self.seed_enabled else None
     
     def get_seeds(self):
@@ -338,23 +310,40 @@ class PromptTravelScheduler:
         """Reload prompts from the file"""
         if self.prompt_scheduler is not None:
             self.prompt_scheduler.reload_prompts()
+
+            # Update max_factor based on newly loaded prompts
+            num_prompts = len(self.prompt_scheduler.prompts)
+            if num_prompts > 0:
+                self.max_factor = float(num_prompts)
+                print(f"[PromptTravelScheduler] Reloaded - updated max_factor to {self.max_factor} based on {num_prompts} prompts")
+                if self.logging_enabled:
+                    self.logger.info(f"Updated max_factor to {self.max_factor} based on {num_prompts} prompts")
+
         if self.logging_enabled:
             self.logger.info("Reloading prompts")
             
     def update_prompts_file_name(self, prompts_file_name):
         """
         Update the prompts file name and reload prompts.
-        
+
         Args:
             prompts_file_name (str): New prompts file name
         """
         if self.logging_enabled:
             self.logger.info(f"Updating prompts file name from '{self.prompts_file_name}' to '{prompts_file_name}'")
-        
+
         self.prompts_file_name = prompts_file_name
-        
+
         if self.prompt_scheduler is not None:
             self.prompt_scheduler.update_prompts_file_name(prompts_file_name)
+
+            # Update max_factor based on newly loaded prompts
+            num_prompts = len(self.prompt_scheduler.prompts)
+            if num_prompts > 0:
+                self.max_factor = float(num_prompts)
+                print(f"[PromptTravelScheduler] Updated max_factor to {self.max_factor} based on {num_prompts} prompts")
+                if self.logging_enabled:
+                    self.logger.info(f"Updated max_factor to {self.max_factor} based on {num_prompts} prompts")
         else:
             if self.logging_enabled:
                 self.logger.warning("Prompt scheduler not initialized, cannot update prompts file name")
