@@ -52,7 +52,18 @@ class LoRACurationConfig:
             "papercut-xl": "loras/papercut_XL.safetensors",
             "melies-bw-xl": "loras/melies_bw_XL-step00000800.safetensors",
             "melies-col-xl": "loras/melies_col_XL-step00000500.safetensors",
-            "mannequin-xl": "loras/mannequin_0_XL-step00000500.safetensors"
+            "mannequin-0-xl": "loras/mannequin_0_XL-step00000500.safetensors",
+            "glitch-xl": "loras/glitch_XL-step00001100.safetensors",
+            "pixel-xl": "loras/pixel_XL-step00001300.safetensors",
+            "twisted-bodies-xl": "loras/twistedbodies_XL-step00001000.safetensors",
+            "robwood-xl": "loras/robwood_XL-step00000800.safetensors",
+            "queepybeep-xl": "loras/queepybeep_XL-step00000400.safetensors",
+            "queepybeep-anime-xl": "loras/queepybeep_anime_XL-step00000700.safetensors",
+            "water-xl": "loras/water_XL-step00000800.safetensors",
+            "smoke-xl": "loras/smoke_XL-step00000800.safetensors",
+            "san-xl": "loras/san_XL-step00000800.safetensors",
+            "mannequin-xl": "loras/mannequin_XL-step00001200.safetensors",
+            "mannequin-anime-xl": "loras/mannequin_anime_XL-step00002400.safetensors",
         }
 
         self._all_curations = {} # Stores all loaded JSON data {key: data}

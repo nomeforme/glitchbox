@@ -1,6 +1,6 @@
 {
-    "prompts_file_names": ["mannequin_XL", "mannequin_anime_XL"],
-    "loras": ["mannequin-xl", "mannequin-anime-xl"],
+    "prompts_file_names": ["twisted_bodies_XL", "water_XL"],
+    "loras": ["twisted-bodies-xl", "water-xl"],
     "adapter_weights_sets": [
         [1.0, 0.0],
         [0.8, 0.2],
@@ -9,7 +9,7 @@
         [0.0, 1.0]
     ],
     "input_params": {
-        "prompt": "two figures in a dynamic, abstract dance, forming a surreal, interconnected sculpture against a black background.",
+        "prompt": "mrnabrmv style, Fragmented digital portrait blending abstract textures and vivid colors, creating a surreal, pixelated visage.",
         "target_prompt": "a blue dog",
         "pipe_index": 0,
         "use_prompt_travel": true,
