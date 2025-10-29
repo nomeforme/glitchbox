@@ -125,10 +125,10 @@ class App:
             print(f"[main.py] Use latent travel: {self.use_latent_travel}")
             # The actual initialization happens in the startup event
             
-            # Get the prompts_file_name from the current curation config (defaults to pipe_index 0)
-            prompts_file_name = self.lora_config.get_prompts_file_name_for_pipe_index(0)
-            print(f"[main.py] Using prompts_file_name from curation config for pipe_index 0: {prompts_file_name}")
-            
+            # Get the prompts_file_names array from the current curation config
+            prompts_file_names = self.lora_config.get_prompts_file_names_array()
+            print(f"[main.py] Using prompts_file_names from curation config: {prompts_file_names}")
+
             # Initialize prompt travel scheduler
             self.prompt_travel_scheduler = PromptTravelScheduler(
                 min_factor=getattr(self.args, 'prompt_travel_min_factor', 0.0),
@@ -142,7 +142,7 @@ class App:
                 prompts_dir=getattr(self.args, 'prompts_dir', "prompts"),
                 prompt_file_pattern=getattr(self.args, 'prompt_file_pattern', "*.txt"),
                 loop_prompts=getattr(self.args, 'loop_prompts', True),
-                prompts_file_name=prompts_file_name  # Use prompts_file_name from curation config
+                prompts_file_names=prompts_file_names  # Use prompts_file_names array from curation config
             )
         
         # Initialize acid processors
@@ -591,15 +591,8 @@ class App:
                                 # Set user_id on params for the pipeline to use
                                 user_id_str = str(user_id)
 
-                                # Update prompts file based on pipe_index
-                                if hasattr(self, 'prompt_travel_scheduler') and hasattr(self, 'lora_config'):
-                                    pipe_index = getattr(params, 'pipe_index', 0)
-                                    prompts_file_name = self.lora_config.get_prompts_file_name_for_pipe_index(pipe_index)
-
-                                    # Only update if it changed
-                                    if prompts_file_name != self.prompt_travel_scheduler.prompts_file_name:
-                                        print(f"[main.py] Switching prompts file from '{self.prompt_travel_scheduler.prompts_file_name}' to '{prompts_file_name}' for pipe_index {pipe_index}")
-                                        self.prompt_travel_scheduler.update_prompts_file_name(prompts_file_name)
+                                # Note: All prompt files are loaded at init/curation change
+                                # No need to switch files per-request, weights are used for blending
 
                                 # Update prompt travel factor with scheduler if enabled
                                 if hasattr(self, 'prompt_travel_scheduler') and self.prompt_travel_scheduler.enabled:
@@ -649,22 +642,60 @@ class App:
                                                     if self.args.debug:
                                                         print(f"[main.py] Using indexed prompt for prompt index {prompt_index}: {indexed_prompt}")
                                             else:
-                                                # Use continuous factor-based prompt scheduling
+                                                # Use continuous factor-based prompt scheduling with multi-file weighted blending
                                                 # scheduler_factor is a continuous value (e.g., 2.3 means between prompts[2] and prompts[3])
-                                                source_prompt, target_prompt, interpolation_weight = \
-                                                    self.prompt_travel_scheduler.prompt_scheduler.get_prompts_from_factor(scheduler_factor)
 
-                                                if source_prompt and target_prompt:
-                                                    setattr(params, 'prompt', source_prompt)
-                                                    setattr(params, 'target_prompt', target_prompt)
-                                                    # Override the scheduler_factor with the interpolation weight (0.0-1.0)
-                                                    # This is the fractional part used for LERP
+                                                # Get adapter_weights for the current pipe_index
+                                                pipe_index = getattr(params, 'pipe_index', 0)
+                                                adapter_weights_set_curation = self.lora_config.get_adapter_weights_set_curation()
+                                                default_curation_key = self.lora_config.default_curation_key
+
+                                                # Get the weights for this pipe
+                                                adapter_weights = None
+                                                if default_curation_key in adapter_weights_set_curation:
+                                                    weights_sets = adapter_weights_set_curation[default_curation_key]
+                                                    if pipe_index < len(weights_sets):
+                                                        adapter_weights = weights_sets[pipe_index]
+                                                    else:
+                                                        print(f"[main.py] WARNING: pipe_index {pipe_index} out of range for adapter_weights_sets, using first set")
+                                                        adapter_weights = weights_sets[0] if weights_sets else None
+
+                                                print(f"[main.py] pipe_index={pipe_index}, adapter_weights={adapter_weights}")
+
+                                                # Get prompts with optional weights for multi-file blending
+                                                source_prompts, target_prompts, interpolation_weight, spatial_weights = \
+                                                    self.prompt_travel_scheduler.prompt_scheduler.get_prompts_from_factor(
+                                                        scheduler_factor,
+                                                        weights=adapter_weights
+                                                    )
+
+                                                if source_prompts and target_prompts:
+                                                    # Check if multi-file mode (prompts are lists)
+                                                    is_multi_file = isinstance(source_prompts, list)
+
+                                                    setattr(params, 'prompt', source_prompts)
+                                                    setattr(params, 'target_prompt', target_prompts)
                                                     setattr(params, 'prompt_travel_factor', interpolation_weight)
 
-                                                    print(f"[main.py] Continuous factor: {scheduler_factor:.3f}")
-                                                    print(f"[main.py]   source: {source_prompt[:60]}...")
-                                                    print(f"[main.py]   target: {target_prompt[:60]}...")
-                                                    print(f"[main.py]   interpolation_weight: {interpolation_weight:.3f}")
+                                                    # Store spatial weights and multi-file flag for pipeline
+                                                    if is_multi_file and spatial_weights:
+                                                        setattr(params, 'spatial_weights', spatial_weights)
+                                                        setattr(params, 'multi_file_prompts', True)
+                                                        print(f"[main.py] MULTI-FILE MODE: {len(source_prompts)} files")
+                                                        print(f"[main.py]   Continuous factor: {scheduler_factor:.3f}")
+                                                        print(f"[main.py]   Spatial weights: {spatial_weights}")
+                                                        print(f"[main.py]   Temporal weight: {interpolation_weight:.3f}")
+                                                        for i, (src, tgt) in enumerate(zip(source_prompts, target_prompts)):
+                                                            print(f"[main.py]   File {i} (w={spatial_weights[i]:.2f}):")
+                                                            print(f"[main.py]     source: {src[:50]}...")
+                                                            print(f"[main.py]     target: {tgt[:50]}...")
+                                                    else:
+                                                        setattr(params, 'multi_file_prompts', False)
+                                                        print(f"[main.py] SINGLE-FILE MODE")
+                                                        print(f"[main.py]   Continuous factor: {scheduler_factor:.3f}")
+                                                        print(f"[main.py]   source: {source_prompts[:60] if isinstance(source_prompts, str) else str(source_prompts)[:60]}...")
+                                                        print(f"[main.py]   target: {target_prompts[:60] if isinstance(target_prompts, str) else str(target_prompts)[:60]}...")
+                                                        print(f"[main.py]   interpolation_weight: {interpolation_weight:.3f}")
                                 
                                 # # Queue the prompt travel request
                                 # await embeddings_service.process_prompt_travel(
@@ -902,12 +933,12 @@ class App:
                 )
                 print(f"[main.py] LoRACurationConfig updated with curation index {new_curation_index}")
                 
-                # Update the PromptTravelScheduler's prompts_file_name if it exists
+                # Update the PromptTravelScheduler's prompts_file_names if it exists
                 if hasattr(self, 'prompt_travel_scheduler') and self.prompt_travel_scheduler is not None:
-                    # Use pipe_index 0 as default when curation changes
-                    new_prompts_file_name = self.lora_config.get_prompts_file_name_for_pipe_index(0)
-                    print(f"[main.py] Updating PromptTravelScheduler with new prompts_file_name for pipe_index 0: {new_prompts_file_name}")
-                    self.prompt_travel_scheduler.update_prompts_file_name(new_prompts_file_name)
+                    # Get all prompts file names for the new curation
+                    new_prompts_file_names = self.lora_config.get_prompts_file_names_array()
+                    print(f"[main.py] Updating PromptTravelScheduler with new prompts_file_names: {new_prompts_file_names}")
+                    self.prompt_travel_scheduler.update_prompts_file_names(new_prompts_file_names)
                 
                 # Properly cleanup the old pipeline before creating new one
                 if hasattr(self, 'pipeline') and self.pipeline is not None:

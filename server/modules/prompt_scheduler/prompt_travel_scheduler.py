@@ -15,7 +15,7 @@ class PromptTravelScheduler:
     A class that handles scheduled prompt travel transitions.
     This provides a deterministic schedule for moving between prompts.
     """
-    def __init__(self, 
+    def __init__(self,
                 min_factor=0.0,
                 max_factor=1.0,
                 factor_increment=0.025,
@@ -29,10 +29,10 @@ class PromptTravelScheduler:
                 prompt_file_pattern="*.txt",
                 loop_prompts=True,
                 logging_enabled=False,
-                prompts_file_name=None):
+                prompts_file_names=None):
         """
         Initialize the prompt travel scheduler.
-        
+
         Args:
             min_factor (float): Minimum prompt travel factor (default: 0.0)
             max_factor (float): Maximum prompt travel factor (default: 1.0)
@@ -47,7 +47,7 @@ class PromptTravelScheduler:
             prompt_file_pattern (str): Pattern to match prompt files (default: "*.txt")
             loop_prompts (bool): Whether to loop back to the beginning when reaching the end (default: True)
             logging_enabled (bool): Whether to enable logging (default: False)
-            prompts_file_name (str): Name of the prompts file (default: None)
+            prompts_file_names (list): List of prompts file names (default: None)
         """
         self.min_factor = min_factor
         self.max_factor = max_factor
@@ -60,7 +60,7 @@ class PromptTravelScheduler:
         self.use_prompt_scheduler = use_prompt_scheduler
         self.logging_enabled = logging_enabled
 
-        self.prompts_file_name = prompts_file_name
+        self.prompts_file_names = prompts_file_names if prompts_file_names else []
         
         # Internal state
         self.factor_value = min_factor
@@ -88,7 +88,7 @@ class PromptTravelScheduler:
         # Initialize prompt scheduler if enabled
         if use_prompt_scheduler:
             if self.logging_enabled:
-                self.logger.info(f"Initializing prompt scheduler with prompts_dir={prompts_dir}, prompt_file_pattern={prompt_file_pattern}")
+                self.logger.info(f"Initializing prompt scheduler with prompts_dir={prompts_dir}, prompts_file_names={self.prompts_file_names}")
             self.prompt_scheduler = PromptScheduler(
                 prompts_dir=prompts_dir,
                 prompt_file_pattern=prompt_file_pattern,
@@ -96,7 +96,7 @@ class PromptTravelScheduler:
                 debug=debug,
                 loop_prompts=loop_prompts,
                 logging_enabled=logging_enabled,
-                prompts_file_name=self.prompts_file_name
+                prompts_file_names=self.prompts_file_names
             )
             self.prompt_scheduler.load_prompts()
             if self.logging_enabled:
@@ -322,20 +322,20 @@ class PromptTravelScheduler:
         if self.logging_enabled:
             self.logger.info("Reloading prompts")
             
-    def update_prompts_file_name(self, prompts_file_name):
+    def update_prompts_file_names(self, prompts_file_names):
         """
-        Update the prompts file name and reload prompts.
+        Update the prompts file names and reload prompts.
 
         Args:
-            prompts_file_name (str): New prompts file name
+            prompts_file_names (list): New list of prompts file names
         """
         if self.logging_enabled:
-            self.logger.info(f"Updating prompts file name from '{self.prompts_file_name}' to '{prompts_file_name}'")
+            self.logger.info(f"Updating prompts file names from {self.prompts_file_names} to {prompts_file_names}")
 
-        self.prompts_file_name = prompts_file_name
+        self.prompts_file_names = prompts_file_names if prompts_file_names else []
 
         if self.prompt_scheduler is not None:
-            self.prompt_scheduler.update_prompts_file_name(prompts_file_name)
+            self.prompt_scheduler.update_prompts_file_names(prompts_file_names)
 
             # Update max_factor based on newly loaded prompts
             num_prompts = len(self.prompt_scheduler.prompts)
@@ -346,7 +346,7 @@ class PromptTravelScheduler:
                     self.logger.info(f"Updated max_factor to {self.max_factor} based on {num_prompts} prompts")
         else:
             if self.logging_enabled:
-                self.logger.warning("Prompt scheduler not initialized, cannot update prompts file name")
+                self.logger.warning("Prompt scheduler not initialized, cannot update prompts file names")
             
     def reset(self):
         """Reset the scheduler to initial state"""

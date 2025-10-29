@@ -16,17 +16,17 @@ class PromptScheduler:
     A class that handles scheduled prompt transitions from a file.
     This provides a deterministic schedule for moving between prompts.
     """
-    def __init__(self, 
+    def __init__(self,
                 prompts_dir="prompts",
                 prompt_file_pattern="*.txt",
                 enabled=False,
                 debug=False,
                 loop_prompts=True,
                 logging_enabled=False,
-                prompts_file_name=None):
+                prompts_file_names=None):
         """
         Initialize the prompt scheduler.
-        
+
         Args:
             prompts_dir (str): Directory containing prompt files (default: "prompts")
             prompt_file_pattern (str): Pattern to match prompt files (default: "*.txt")
@@ -34,7 +34,7 @@ class PromptScheduler:
             debug (bool): Whether to print debug messages (default: False)
             loop_prompts (bool): Whether to loop back to the beginning when reaching the end (default: True)
             logging_enabled (bool): Whether to enable logging (default: False)
-            prompts_file_name (str): Name of the prompts file (default: None)
+            prompts_file_names (list): List of prompts file names (default: None)
         """
         self.prompts_dir = prompts_dir
         self.prompt_file_pattern = prompt_file_pattern
@@ -42,10 +42,11 @@ class PromptScheduler:
         self.debug = debug
         self.loop_prompts = loop_prompts
         self.logging_enabled = logging_enabled
-        self.prompts_file_name = prompts_file_name  # Store prompts_file_name as instance variable
-        
-        # Internal state
-        self.prompts = []
+        self.prompts_file_names = prompts_file_names if prompts_file_names else []
+
+        # Internal state - multi-file support
+        self.prompts_by_file = []  # List of lists: [[file1_prompts], [file2_prompts], ...]
+        self.prompts = []  # Keep for backward compatibility (uses first file)
         self.current_index = 0
         self.current_prompt = None
         self.next_prompt = None
@@ -129,8 +130,8 @@ class PromptScheduler:
     
     def load_prompts(self):
         """
-        Load prompts from the specified directory and file pattern.
-        If a LoRA model name is provided, load the corresponding prompt file.
+        Load prompts from multiple files specified in prompts_file_names.
+        Each file should have the same number of lines.
         """
         # Get the prompt prefix
         prompt_prefix = self.get_prompt_prefix()
@@ -138,77 +139,83 @@ class PromptScheduler:
         # Get the absolute path to the prompts directory
         server_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
         prompts_path = os.path.join(server_dir, self.prompts_dir)
+        lora_prompts_path = os.path.join(prompts_path, "lora_prompts")
 
         if self.debug:
-            print(f"[PromptScheduler] Looking for prompts in: {prompts_path}")
+            print(f"[PromptScheduler] Looking for prompts in: {lora_prompts_path}")
         if self.logging_enabled:
-            self.logger.info(f"Looking for prompts in: {prompts_path}")
+            self.logger.info(f"Looking for prompts in: {lora_prompts_path}")
 
-        # If a prompts file name is provided, construct the specific file path
-        if self.prompts_file_name is not None:
-            print(f"[PromptScheduler] Loading prompts for prompts file: {self.prompts_file_name}")
-            # Look in the lora_prompts subdirectory for specific prompts
-            lora_prompts_path = os.path.join(prompts_path, "lora_prompts")
-            prompt_file = os.path.join(lora_prompts_path, f"prompts_{self.prompts_file_name}.txt")
-            prompt_files = [prompt_file] if os.path.exists(prompt_file) else []
+        # Clear existing prompts
+        self.prompts_by_file = []
+        self.prompts = []
+
+        # If prompts_file_names is provided, load all specified files
+        if self.prompts_file_names and len(self.prompts_file_names) > 0:
+            print(f"[PromptScheduler] Loading {len(self.prompts_file_names)} prompt files: {self.prompts_file_names}")
+
+            for file_name in self.prompts_file_names:
+                prompt_file = os.path.join(lora_prompts_path, f"prompts_{file_name}.txt")
+
+                if not os.path.exists(prompt_file):
+                    print(f"[PromptScheduler] WARNING: File not found: {prompt_file}")
+                    if self.logging_enabled:
+                        self.logger.warning(f"File not found: {prompt_file}")
+                    continue
+
+                # Read prompts from file
+                with open(prompt_file, 'r') as f:
+                    raw_prompts = [line.strip() for line in f.readlines() if line.strip()]
+                    # Apply the prompt prefix to each prompt
+                    file_prompts = [prompt_prefix + " " + prompt for prompt in raw_prompts]
+                    self.prompts_by_file.append(file_prompts)
+
+                if self.debug:
+                    print(f"[PromptScheduler] Loaded {len(file_prompts)} prompts from {file_name}")
+
+            # Validate that all files have the same number of lines
+            if self.prompts_by_file:
+                line_counts = [len(prompts) for prompts in self.prompts_by_file]
+                if len(set(line_counts)) > 1:
+                    print(f"[PromptScheduler] ERROR: Prompt files have different line counts: {line_counts}")
+                    print(f"[PromptScheduler] Files: {self.prompts_file_names}")
+                    if self.logging_enabled:
+                        self.logger.error(f"Prompt files have different line counts: {line_counts}")
+                    # Keep going but warn user
+
+                # For backward compatibility, set self.prompts to first file
+                self.prompts = self.prompts_by_file[0] if self.prompts_by_file else []
+
+                print(f"[PromptScheduler] Successfully loaded {len(self.prompts_by_file)} prompt files with {len(self.prompts)} prompts each")
+                if self.logging_enabled:
+                    self.logger.info(f"Loaded {len(self.prompts_by_file)} prompt files with {len(self.prompts)} prompts each")
         else:
-            # Find all prompt files matching the pattern
-            print(f"[PromptScheduler] Looking for prompts in: {prompts_path} matching {self.prompt_file_pattern}")
+            # Fallback to old behavior: find files matching pattern
+            print(f"[PromptScheduler] No prompts_file_names provided, using fallback pattern matching")
             prompt_files = glob.glob(os.path.join(prompts_path, self.prompt_file_pattern))
+            prompt_files = [f for f in prompt_files if not os.path.basename(f).startswith("prompt_prefix_")]
 
-        # Filter out prefix files
-        prompt_files = [f for f in prompt_files if not os.path.basename(f).startswith("prompt_prefix_")]
+            if not prompt_files:
+                print(f"[PromptScheduler] No prompt files found")
+                return
 
-        if not prompt_files:
-            if self.debug:
-                print(f"[PromptScheduler] No prompt files found in {prompts_path} matching {self.prompt_file_pattern}")
-            if self.logging_enabled:
-                self.logger.warning(f"No prompt files found in {prompts_path} matching {self.prompt_file_pattern}")
-            return
+            # Read prompts from the first file found
+            with open(prompt_files[0], 'r') as f:
+                raw_prompts = [line.strip() for line in f.readlines() if line.strip()]
+                self.prompts = [prompt_prefix + " " + prompt for prompt in raw_prompts]
+                self.prompts_by_file = [self.prompts]
 
-        # Read prompts from the first file found
-        with open(prompt_files[0], 'r') as f:
-            # Read lines and filter out empty lines
-            raw_prompts = [line.strip() for line in f.readlines() if line.strip()]
-
-            # Apply the prompt prefix to each prompt
-            self.prompts = [prompt_prefix + " " + prompt for prompt in raw_prompts]
-
-        if self.debug:
-            print(f"[PromptScheduler] Loaded {len(self.prompts)} prompts from {prompt_files[0]}")
-            for i, prompt in enumerate(self.prompts):
-                print(f"[PromptScheduler] Prompt {i+1}: {prompt}")
-
-        if self.logging_enabled:
-            self.logger.info(f"Loaded {len(self.prompts)} prompts from {prompt_files[0]}")
-            for i, prompt in enumerate(self.prompts):
-                self.logger.info(f"Prompt {i+1}: {prompt}")
-
-        # Initialize current and next prompts using progress_ratio to preserve position
+        # Initialize current and next prompts (backward compatibility)
         if len(self.prompts) >= 2:
-            # Calculate index from progress_ratio to preserve position when switching files
             self.current_index = int(self.progress_ratio * (len(self.prompts) - 1))
             self.current_index = max(0, min(len(self.prompts) - 1, self.current_index))
-
             self.current_prompt = self.prompts[self.current_index]
             next_index = (self.current_index + 1) % len(self.prompts)
             self.next_prompt = self.prompts[next_index]
-
-            if self.logging_enabled:
-                self.logger.info(f"Initialized with prompts at ratio {self.progress_ratio:.2f}: source={self.current_prompt}, target={self.next_prompt}")
-            if self.debug:
-                print(f"[PromptScheduler] Restored position from ratio {self.progress_ratio:.2f} → index {self.current_index}/{len(self.prompts)-1}")
         elif len(self.prompts) == 1:
             self.current_index = 0
             self.current_prompt = self.prompts[0]
-            self.next_prompt = self.prompts[0]  # Use the same prompt for both
-            if self.logging_enabled:
-                self.logger.info(f"Initialized with single prompt: {self.current_prompt}")
-        else:
-            if self.debug:
-                print("[PromptScheduler] Not enough prompts to initialize current and next prompts")
-            if self.logging_enabled:
-                self.logger.warning("Not enough prompts to initialize current and next prompts")
+            self.next_prompt = self.prompts[0]
     
     def update(self, at_max_boundary=False, at_min_boundary=False):
         """
@@ -282,15 +289,21 @@ class PromptScheduler:
             self.logger.info(f"Getting current prompts: source={self.current_prompt}, target={self.next_prompt}")
         return self.current_prompt, self.next_prompt
 
-    def get_prompts_from_factor(self, continuous_factor):
+    def get_prompts_from_factor(self, continuous_factor, weights=None):
         """
         Get source and target prompts based on a continuous factor value.
+        Supports weighted blending across multiple prompt files.
 
         This method uses a simple linear progression through the prompt list:
         - Factor range: 0.0 to len(prompts)-1 (wraps around with modulo)
         - int(factor) gives the source prompt index
         - int(factor)+1 gives the target prompt index (with wrap)
         - frac(factor) gives the interpolation weight
+
+        Multi-file blending:
+        - If weights are provided and multiple files are loaded, returns lists of prompts
+        - Pipeline should encode each prompt and blend embeddings using weights
+        - weights should have same length as prompts_by_file
 
         Example with 4 prompts:
         - factor=0.3: source=prompts[0], target=prompts[1], weight=0.3
@@ -299,17 +312,24 @@ class PromptScheduler:
 
         Args:
             continuous_factor (float): Continuous factor from 0.0 to len(prompts)
+            weights (list): Optional list of weights for multi-file blending
 
         Returns:
-            tuple: (source_prompt, target_prompt, interpolation_weight)
+            tuple: (source_prompts, target_prompts, interpolation_weight, spatial_weights)
+                   source_prompts and target_prompts can be strings or lists depending on weights
         """
         if not self.prompts or len(self.prompts) == 0:
             print("[PromptScheduler.get_prompts_from_factor] No prompts loaded")
-            return "", "", 0.0
+            return "", "", 0.0, None
 
         if len(self.prompts) == 1:
             # Only one prompt, return it for both source and target
-            return self.prompts[0], self.prompts[0], 0.0
+            if weights and len(self.prompts_by_file) > 1:
+                # Multi-file mode with single prompt
+                source_list = [file_prompts[0] for file_prompts in self.prompts_by_file]
+                return source_list, source_list, 0.0, weights
+            else:
+                return self.prompts[0], self.prompts[0], 0.0, None
 
         # Wrap factor to valid range using modulo
         wrapped_factor = continuous_factor % len(self.prompts)
@@ -321,16 +341,58 @@ class PromptScheduler:
         # Get interpolation weight (fractional part)
         interpolation_weight = wrapped_factor - source_index
 
+        # Multi-file weighted blending
+        if weights and len(self.prompts_by_file) > 1:
+            # Validate weights
+            if len(weights) != len(self.prompts_by_file):
+                print(f"[PromptScheduler.get_prompts_from_factor] WARNING: weights length ({len(weights)}) != files count ({len(self.prompts_by_file)})")
+                # Fall back to single file mode
+                source_prompt = self.prompts[source_index]
+                target_prompt = self.prompts[target_index]
+                return source_prompt, target_prompt, interpolation_weight, None
+
+            # Get prompts from all files at the same indices
+            source_prompts = []
+            target_prompts = []
+
+            for file_prompts in self.prompts_by_file:
+                if source_index < len(file_prompts):
+                    source_prompts.append(file_prompts[source_index])
+                else:
+                    print(f"[PromptScheduler.get_prompts_from_factor] WARNING: source_index {source_index} out of range for file with {len(file_prompts)} prompts")
+                    source_prompts.append(file_prompts[0])  # Fallback
+
+                if target_index < len(file_prompts):
+                    target_prompts.append(file_prompts[target_index])
+                else:
+                    print(f"[PromptScheduler.get_prompts_from_factor] WARNING: target_index {target_index} out of range for file with {len(file_prompts)} prompts")
+                    target_prompts.append(file_prompts[0])  # Fallback
+
+            if self.debug:
+                print(f"[PromptScheduler.get_prompts_from_factor] MULTI-FILE MODE")
+                print(f"[PromptScheduler.get_prompts_from_factor]   continuous_factor={continuous_factor:.3f}")
+                print(f"[PromptScheduler.get_prompts_from_factor]   wrapped={wrapped_factor:.3f}, source_idx={source_index}, target_idx={target_index}")
+                print(f"[PromptScheduler.get_prompts_from_factor]   interpolation_weight={interpolation_weight:.3f}")
+                print(f"[PromptScheduler.get_prompts_from_factor]   spatial_weights={weights}")
+                for i, (src, tgt) in enumerate(zip(source_prompts, target_prompts)):
+                    print(f"[PromptScheduler.get_prompts_from_factor]   File {i} (weight={weights[i]:.2f}):")
+                    print(f"[PromptScheduler.get_prompts_from_factor]     source: {src[:50]}...")
+                    print(f"[PromptScheduler.get_prompts_from_factor]     target: {tgt[:50]}...")
+
+            return source_prompts, target_prompts, interpolation_weight, weights
+
+        # Single file mode (backward compatibility)
         source_prompt = self.prompts[source_index]
         target_prompt = self.prompts[target_index]
 
         if self.debug:
-            print(f"[PromptScheduler.get_prompts_from_factor] continuous_factor={continuous_factor:.3f}")
+            print(f"[PromptScheduler.get_prompts_from_factor] SINGLE-FILE MODE")
+            print(f"[PromptScheduler.get_prompts_from_factor]   continuous_factor={continuous_factor:.3f}")
             print(f"[PromptScheduler.get_prompts_from_factor]   wrapped={wrapped_factor:.3f}, source_idx={source_index}, target_idx={target_index}, weight={interpolation_weight:.3f}")
             print(f"[PromptScheduler.get_prompts_from_factor]   source={source_prompt[:50]}...")
             print(f"[PromptScheduler.get_prompts_from_factor]   target={target_prompt[:50]}...")
 
-        return source_prompt, target_prompt, interpolation_weight
+        return source_prompt, target_prompt, interpolation_weight, None
     
     def set_enabled(self, enabled):
         """Enable or disable the scheduler"""
@@ -364,19 +426,19 @@ class PromptScheduler:
             self.logger.info("Reloading prompts")
         self.load_prompts()
         
-    def update_prompts_file_name(self, prompts_file_name):
+    def update_prompts_file_names(self, prompts_file_names):
         """
-        Update the prompts file name and reload prompts.
-        
+        Update the prompts file names and reload prompts.
+
         Args:
-            prompts_file_name (str): New prompts file name
+            prompts_file_names (list): New list of prompts file names
         """
         if self.debug:
-            print(f"[PromptScheduler] Updating prompts file name from '{self.prompts_file_name}' to '{prompts_file_name}'")
+            print(f"[PromptScheduler] Updating prompts file names from {self.prompts_file_names} to {prompts_file_names}")
         if self.logging_enabled:
-            self.logger.info(f"Updating prompts file name from '{self.prompts_file_name}' to '{prompts_file_name}'")
-        
-        self.prompts_file_name = prompts_file_name
+            self.logger.info(f"Updating prompts file names from {self.prompts_file_names} to {prompts_file_names}")
+
+        self.prompts_file_names = prompts_file_names if prompts_file_names else []
         self.reload_prompts()
 
     def reset(self):

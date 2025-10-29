@@ -521,58 +521,119 @@ class Pipeline:
         print(f"[img2imgStreamDiffusion.py] use_prompt_travel: {use_prompt_travel}")
 
         if use_prompt_travel:
-            # Get prompts
-            source_prompt = params.prompt
-            target_prompt = getattr(params, 'target_prompt', params.prompt)
+            # Check if we're in multi-file mode
+            multi_file_mode = getattr(params, 'multi_file_prompts', False)
             prompt_travel_factor = getattr(params, 'prompt_travel_factor', 0.5)
 
-            print(f"[img2imgStreamDiffusionXL.py] === PROMPT TRAVEL DEBUG ===")
-            print(f"[img2imgStreamDiffusionXL.py] factor: {prompt_travel_factor:.3f}")
-            print(f"[img2imgStreamDiffusionXL.py] source: {source_prompt[:80]}...")
-            print(f"[img2imgStreamDiffusionXL.py] target: {target_prompt[:80]}...")
-            print(f"[img2imgStreamDiffusionXL.py] Interpolation: lerp(source, target, {prompt_travel_factor:.3f})")
-            print(f"[img2imgStreamDiffusionXL.py]   -> factor=0.0 gives 100% source")
-            print(f"[img2imgStreamDiffusionXL.py]   -> factor=1.0 gives 100% target")
-            print(f"[img2imgStreamDiffusionXL.py] ==========================")
+            if multi_file_mode:
+                # MULTI-FILE MODE: Weighted spatial + temporal blending
+                source_prompts = params.prompt  # List of prompts
+                target_prompts = getattr(params, 'target_prompt', params.prompt)  # List of prompts
+                spatial_weights = getattr(params, 'spatial_weights', None)
 
-            # Get or compute source embeddings (with caching)
-            cache = self.prompt_embeds_cache[pipe_index]
-            if source_prompt not in cache:
-                print(f"[img2imgStreamDiffusionXL.py] Cache MISS - encoding source prompt")
-                source_embeds, _, source_pooled, _ = stream_wrapper.prompt_travel.encode_prompt_sdxl(
-                    prompt=source_prompt,
-                    device=stream_wrapper.stream.device,
-                    num_images_per_prompt=1,
-                    do_classifier_free_guidance=False,
-                )
-                cache[source_prompt] = (source_embeds, source_pooled)
+                print(f"[img2imgStreamDiffusionXL.py] === MULTI-FILE PROMPT TRAVEL ===")
+                print(f"[img2imgStreamDiffusionXL.py] Number of files: {len(source_prompts)}")
+                print(f"[img2imgStreamDiffusionXL.py] Spatial weights: {spatial_weights}")
+                print(f"[img2imgStreamDiffusionXL.py] Temporal factor: {prompt_travel_factor:.3f}")
+
+                # Encode all prompts and compute weighted spatial blend for source
+                cache = self.prompt_embeds_cache[pipe_index]
+                source_embeds_list = []
+                source_pooled_list = []
+
+                for i, prompt in enumerate(source_prompts):
+                    if prompt not in cache:
+                        print(f"[img2imgStreamDiffusionXL.py] Cache MISS - encoding source prompt {i}")
+                        embeds, _, pooled, _ = stream_wrapper.prompt_travel.encode_prompt_sdxl(
+                            prompt=prompt,
+                            device=stream_wrapper.stream.device,
+                            num_images_per_prompt=1,
+                            do_classifier_free_guidance=False,
+                        )
+                        cache[prompt] = (embeds, pooled)
+                    else:
+                        embeds, pooled = cache[prompt]
+                    source_embeds_list.append(embeds)
+                    source_pooled_list.append(pooled)
+
+                # Weighted sum for source (spatial blending)
+                source_embeds = sum(w * e for w, e in zip(spatial_weights, source_embeds_list))
+                source_pooled = sum(w * p for w, p in zip(spatial_weights, source_pooled_list))
+
+                # Encode all prompts and compute weighted spatial blend for target
+                target_embeds_list = []
+                target_pooled_list = []
+
+                for i, prompt in enumerate(target_prompts):
+                    if prompt not in cache:
+                        print(f"[img2imgStreamDiffusionXL.py] Cache MISS - encoding target prompt {i}")
+                        embeds, _, pooled, _ = stream_wrapper.prompt_travel.encode_prompt_sdxl(
+                            prompt=prompt,
+                            device=stream_wrapper.stream.device,
+                            num_images_per_prompt=1,
+                            do_classifier_free_guidance=False,
+                        )
+                        cache[prompt] = (embeds, pooled)
+                    else:
+                        embeds, pooled = cache[prompt]
+                    target_embeds_list.append(embeds)
+                    target_pooled_list.append(pooled)
+
+                # Weighted sum for target (spatial blending)
+                target_embeds = sum(w * e for w, e in zip(spatial_weights, target_embeds_list))
+                target_pooled = sum(w * p for w, p in zip(spatial_weights, target_pooled_list))
+
+                print(f"[img2imgStreamDiffusionXL.py] Spatially blended source/target embeddings")
+                print(f"[img2imgStreamDiffusionXL.py] Now applying temporal interpolation: {prompt_travel_factor:.3f}")
+
             else:
-                print(f"[img2imgStreamDiffusionXL.py] Cache HIT - reusing source embeddings")
-                source_embeds, source_pooled = cache[source_prompt]
+                # SINGLE-FILE MODE: Original behavior
+                source_prompt = params.prompt
+                target_prompt = getattr(params, 'target_prompt', params.prompt)
 
-            # Get or compute target embeddings (with caching)
-            if target_prompt not in cache:
-                print(f"[img2imgStreamDiffusionXL.py] Cache MISS - encoding target prompt")
-                target_embeds, _, target_pooled, _ = stream_wrapper.prompt_travel.encode_prompt_sdxl(
-                    prompt=target_prompt,
-                    device=stream_wrapper.stream.device,
-                    num_images_per_prompt=1,
-                    do_classifier_free_guidance=False,
-                )
-                cache[target_prompt] = (target_embeds, target_pooled)
-            else:
-                print(f"[img2imgStreamDiffusionXL.py] Cache HIT - reusing target embeddings")
-                target_embeds, target_pooled = cache[target_prompt]
+                print(f"[img2imgStreamDiffusionXL.py] === SINGLE-FILE PROMPT TRAVEL ===")
+                print(f"[img2imgStreamDiffusionXL.py] factor: {prompt_travel_factor:.3f}")
+                print(f"[img2imgStreamDiffusionXL.py] source: {source_prompt[:80]}...")
+                print(f"[img2imgStreamDiffusionXL.py] target: {target_prompt[:80]}...")
 
-            # Interpolate between embeddings (both concatenated and pooled)
+                # Get or compute source embeddings (with caching)
+                cache = self.prompt_embeds_cache[pipe_index]
+                if source_prompt not in cache:
+                    print(f"[img2imgStreamDiffusionXL.py] Cache MISS - encoding source prompt")
+                    source_embeds, _, source_pooled, _ = stream_wrapper.prompt_travel.encode_prompt_sdxl(
+                        prompt=source_prompt,
+                        device=stream_wrapper.stream.device,
+                        num_images_per_prompt=1,
+                        do_classifier_free_guidance=False,
+                    )
+                    cache[source_prompt] = (source_embeds, source_pooled)
+                else:
+                    print(f"[img2imgStreamDiffusionXL.py] Cache HIT - reusing source embeddings")
+                    source_embeds, source_pooled = cache[source_prompt]
+
+                # Get or compute target embeddings (with caching)
+                if target_prompt not in cache:
+                    print(f"[img2imgStreamDiffusionXL.py] Cache MISS - encoding target prompt")
+                    target_embeds, _, target_pooled, _ = stream_wrapper.prompt_travel.encode_prompt_sdxl(
+                        prompt=target_prompt,
+                        device=stream_wrapper.stream.device,
+                        num_images_per_prompt=1,
+                        do_classifier_free_guidance=False,
+                    )
+                    cache[target_prompt] = (target_embeds, target_pooled)
+                else:
+                    print(f"[img2imgStreamDiffusionXL.py] Cache HIT - reusing target embeddings")
+                    target_embeds, target_pooled = cache[target_prompt]
+
+            # Temporal interpolation (LERP) between spatially-blended (or single) source and target
             interpolated_embeds, interpolated_pooled = stream_wrapper.prompt_travel.interpolate_embeddings_sdxl(
                 embeds_from=(source_embeds, source_pooled),
                 embeds_to=(target_embeds, target_pooled),
                 factor=prompt_travel_factor,
             )
 
-            print(f"[img2imgStreamDiffusionXL.py] Interpolated embeddings shape: {interpolated_embeds.shape}")
-            print(f"[img2imgStreamDiffusionXL.py] Interpolated pooled embeddings shape: {interpolated_pooled.shape}")
+            print(f"[img2imgStreamDiffusionXL.py] Final interpolated embeddings shape: {interpolated_embeds.shape}")
+            print(f"[img2imgStreamDiffusionXL.py] Final interpolated pooled embeddings shape: {interpolated_pooled.shape}")
 
             # StreamDiffusion repeats embeddings for batch_size, so we need to match that
             batch_size = stream_wrapper.stream.batch_size

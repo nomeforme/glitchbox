@@ -1,8 +1,11 @@
 {
-    "prompts_file_names": ["mannequin_0_XL"],
+    "prompts_file_names": ["mannequin_0_XL", "glitch_XL"],
     "loras": ["mannequin-0-xl", "glitch-xl"],
     "adapter_weights_sets": [
         [1.0, 0.0],
+        [0.8, 0.2],
+        [0.5, 0.5],
+        [0.2, 0.8],
         [0.0, 1.0]
     ],
     "input_params": {

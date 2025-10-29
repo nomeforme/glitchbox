@@ -225,5 +225,43 @@ class LoRACurationConfig:
         print(f"[LoRACurationConfig] Warning: No prompts_file_name or prompts_file_names found in config '{curation_key}'")
         return "glitch"
 
+    def get_prompts_file_names_array(self, curation_key: str = None) -> list[str]:
+        """
+        Get the array of prompts file names for the curation.
+        This should match the number of LoRAs in the curation.
+
+        Args:
+            curation_key: Optional curation key (uses default if not provided)
+
+        Returns:
+            List of prompts file names
+        """
+        if curation_key is None:
+            curation_key = self.default_curation_key
+
+        config = self._all_curations.get(curation_key)
+        if not config:
+            print(f"[LoRACurationConfig] Warning: No config found for curation '{curation_key}'")
+            return []
+
+        # New format: array of prompts file names
+        if "prompts_file_names" in config:
+            prompts_file_names = config["prompts_file_names"]
+            if isinstance(prompts_file_names, list):
+                return prompts_file_names
+            else:
+                print(f"[LoRACurationConfig] Warning: prompts_file_names is not a list")
+                # Convert single value to list
+                return [prompts_file_names]
+
+        # Old format: single prompts file name, replicate for number of LoRAs
+        if "prompts_file_name" in config:
+            num_loras = len(config.get("loras", []))
+            return [config["prompts_file_name"]] * num_loras
+
+        # Ultimate fallback
+        print(f"[LoRACurationConfig] Warning: No prompts_file_name or prompts_file_names found in config '{curation_key}'")
+        return []
+
     def get_default_curation_input_params(self) -> dict:
         return self.default_curation_input_params 
