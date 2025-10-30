@@ -1,6 +1,6 @@
 {
-    "prompts_file_names": ["angels_XL", "SAN_XL"],
-    "loras": ["angels-xl", "angels-xl"],
+    "prompts_file_names": ["angels_XL", "glitch_extended_XL"],
+    "loras": ["angels-xl", "glitch-xl"],
     "adapter_weights_sets": [
         [1.0, 0.0],
         [0.8, 0.2],
