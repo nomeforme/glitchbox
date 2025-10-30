@@ -543,7 +543,7 @@ parser.add_argument(
     "--depth-normalized-distance-threshold",
     dest="depth_normalized_distance_threshold",
     type=float,
-    default=0.05,
+    default=0.0,
     help="Normalized distance threshold for depth estimation (0.0-1.0, default: 0.225)",
 )
 parser.add_argument(

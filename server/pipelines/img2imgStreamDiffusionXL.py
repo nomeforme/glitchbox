@@ -146,7 +146,7 @@ class Pipeline:
             1024, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
         )
         controlnet_scale: float = Field(
-            0.87,
+            0.4,
             min=0,
             max=2.0,
             step=0.001,
@@ -297,7 +297,7 @@ class Pipeline:
             #     'model_name': 'Intel/dpt-swinv2-tiny-256',  # ~165MB, fastest
             #     # 'model_name': 'Intel/dpt-large',  # ~1.3GB, slower but higher quality
             # },
-            'conditioning_scale': 0.87,
+            'conditioning_scale': 0.4,  # Default scale - can be adjusted at runtime via params.controlnet_scale
             'enabled': True,
             'control_guidance_start': 0.0,
             'control_guidance_end': 1.0,
@@ -486,6 +486,7 @@ class Pipeline:
         # Store current pipe index
         self.current_pipe_idx = 0
         self.last_prompt = default_prompt
+        self.last_controlnet_scale = None
 
         # Cache for prompt travel embeddings (per pipe)
         self.prompt_embeds_cache = {}  # {pipe_idx: {prompt: (embeds, pooled)}}
@@ -667,6 +668,13 @@ class Pipeline:
         if control_image is not None:
             print(f"[img2imgStreamDiffusion.py] Updating control image for ControlNet structural guidance")
             stream_wrapper.update_control_image(index=0, image=control_image)
+
+        # Update ControlNet conditioning scale from params (runtime adjustable)
+        if hasattr(params, 'controlnet_scale') and hasattr(stream_wrapper.stream, '_controlnet_module'):
+            if params.controlnet_scale != self.last_controlnet_scale:
+                stream_wrapper.stream._controlnet_module.update_controlnet_scale(index=0, scale=params.controlnet_scale)
+                self.last_controlnet_scale = params.controlnet_scale
+                print(f"[img2imgStreamDiffusion.py] Updated ControlNet scale to {params.controlnet_scale}")
 
         # Preprocess input image and generate
         image_tensor = stream_wrapper.preprocess_image(params.image)
