@@ -291,12 +291,12 @@ class Pipeline:
         use_controlnet = True
         controlnet_config = {
             'model_id': 'diffusers/controlnet-depth-sdxl-1.0',  # SDXL depth ControlNet
-            # 'preprocessor': 'passthrough',  # Uncomment to calculate depth from RGB
-            'preprocessor': 'depth',  # Uncomment to calculate depth from RGB
-            'preprocessor_params': {
-                'model_name': 'Intel/dpt-swinv2-tiny-256',  # ~165MB, fastest
-                # 'model_name': 'Intel/dpt-large',  # ~1.3GB, slower but higher quality
-            },
+            'preprocessor': 'passthrough',  # Uncomment to calculate depth from RGB
+            # 'preprocessor': 'depth',  # Uncomment to calculate depth from RGB
+            # 'preprocessor_params': {
+            #     'model_name': 'Intel/dpt-swinv2-tiny-256',  # ~165MB, fastest
+            #     # 'model_name': 'Intel/dpt-large',  # ~1.3GB, slower but higher quality
+            # },
             'conditioning_scale': 0.87,
             'enabled': True,
             'control_guidance_start': 0.0,
@@ -348,7 +348,7 @@ class Pipeline:
             output_type="pil",
             warmup=10,
             vae_id=None,
-            acceleration="xformers",
+            acceleration="tensorrt",
             mode="img2img",
             use_denoising_batch=True,
             cfg_type="none",

@@ -37,6 +37,7 @@ from modules.bg_removal import get_processor as get_bg_removal_processor
 from modules.image_saver import get_image_saver
 # Import LoRACurationConfig for curation management
 from pipelines.config import LoRACurationConfig
+import torch
 
 import numpy as np
 import zmq
@@ -339,7 +340,12 @@ class App:
                     if self.use_depth_estimator and hasattr(self, 'depth_estimator'):
                         try:
                             params.control_image = self.depth_estimator.get_depth(dummy_image)
-                        except:
+                            # CRITICAL: Synchronize CUDA after TensorRT depth inference
+                            import torch
+                            torch.cuda.synchronize()
+                        except Exception as e:
+                            print(f"[main.py] Warmup depth estimation failed: {e}")
+                            # Don't set control_image if depth estimation failed
                             pass
 
                 self.pipeline.predict(params)
@@ -776,7 +782,11 @@ class App:
                                     # Set the control image in the params
                                     # This is the key part that sets params.control_image for use in the pipeline
                                     setattr(params, 'control_image', depth_map)
-                                    
+
+                                    # CRITICAL: Synchronize CUDA after TensorRT depth inference
+                                    # to avoid context conflicts with main pipeline TensorRT VAE
+                                    torch.cuda.synchronize()
+
                                     print("[main.py] Depth estimation applied")
                                 except Exception as e:
                                     print(f"[main.py] Error during depth estimation: {e}")

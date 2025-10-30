@@ -1,13 +1,16 @@
 import os
 import cv2
 import numpy as np
-import pycuda.autoinit
+# CRITICAL: Do NOT use pycuda.autoinit - it creates a separate CUDA context
+# that conflicts with PyTorch's context. We'll use PyTorch's context instead.
+# import pycuda.autoinit
 import pycuda.driver as cuda
 import tensorrt as trt
 import time
 from PIL import Image
 from .util.transform import load_image
 from typing import Optional
+import torch
 
 class DepthAnythingTRT:
     """
@@ -19,7 +22,7 @@ class DepthAnythingTRT:
     def __init__(self, engine_path, device="cuda", grayscale=False, normalized_distance_threshold=0.225, absolute_min=0.0, absolute_max=18.0):
         """
         Initialize the Depth Anything TensorRT model.
-        
+
         Args:
             engine_path (str): Path to the TensorRT engine file
             device (str): Device to run inference on (cuda or cpu)
@@ -37,7 +40,15 @@ class DepthAnythingTRT:
         self.normalized_distance_threshold = normalized_distance_threshold
         self.absolute_min = absolute_min
         self.absolute_max = absolute_max
-        
+
+        # CRITICAL: Initialize PyCUDA to use PyTorch's CUDA context
+        # This prevents conflicts with TensorRT engines in the main pipeline
+        cuda.init()
+        # Get PyTorch's CUDA context and make PyCUDA use it
+        torch_device = torch.cuda.current_device()
+        self.cuda_context = cuda.Device(torch_device).retain_primary_context()
+        self.cuda_context.push()
+
         logger = trt.Logger(trt.Logger.WARNING)
         with open(engine_path, 'rb') as f, trt.Runtime(logger) as runtime:
             self.engine = runtime.deserialize_cuda_engine(f.read())

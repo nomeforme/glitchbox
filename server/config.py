@@ -520,7 +520,7 @@ parser.add_argument(
     "--use-depth-estimator",
     dest="use_depth_estimator",
     action="store_true",
-    default=False,
+    default=True,
     help="Enable depth estimation using DepthAnything TensorRT",
 )
 parser.add_argument(
@@ -534,7 +534,7 @@ parser.add_argument(
     "--use-camera-as-control",
     dest="use_camera_as_control",
     action="store_true",
-    default=True,
+    default=False,
     help="Use camera image directly as control image, bypassing depth estimation (useful for depth cameras)",
 )
 
@@ -543,7 +543,7 @@ parser.add_argument(
     "--depth-normalized-distance-threshold",
     dest="depth_normalized_distance_threshold",
     type=float,
-    default=0.2,
+    default=0.05,
     help="Normalized distance threshold for depth estimation (0.0-1.0, default: 0.225)",
 )
 parser.add_argument(
@@ -660,7 +660,7 @@ parser.add_argument(
     "--default-curation-index",
     dest="default_curation_index",
     type=int,
-    default=17,
+    default=21,
     help="Default index for curation selection",
 )
 
