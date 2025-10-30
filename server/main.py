@@ -807,7 +807,15 @@ class App:
                                     # Continue without depth estimation
                                 if self.args.debug:
                                     print(f"Time for depth estimation: {time.time() - depth_start:.4f}s")
-                            
+
+                            # Apply acid processing to control_image if it exists and acid is enabled
+                            if self.use_acid_processor and hasattr(params, 'control_image') and params.control_image:
+                                acid_control_start = time.time()
+                                print("[main.py] Applying ACID processing to control_image")
+                                params.control_image = self._apply_acid_processing(params.control_image)
+                                if self.args.debug:
+                                    print(f"Time for acid processing on control_image: {time.time() - acid_control_start:.4f}s")
+
                             if self.args.debug:
                                 print(f"Total image processing time: {time.time() - image_processing_start:.4f}s")
 
