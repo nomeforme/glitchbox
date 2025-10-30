@@ -220,22 +220,23 @@ class WebSocketClient(QThread):
             if not success:
                 return False
 
-            # Get depth frame or create black dummy if not available
-            if self.current_depth_frame is not None:
-                depth_frame = self.current_depth_frame
-            else:
-                # Create black dummy frame with same dimensions as RGB frame
-                depth_frame = np.zeros_like(frame)
-
-            # Convert depth frame to JPEG
-            success2, buffer2 = cv2.imencode('.jpg', depth_frame)
-            if not success2:
-                return False
-
-            # Concatenate both image buffers into one binary message
             frame1_bytes = buffer.tobytes()
-            frame2_bytes = buffer2.tobytes()
-            combined_data = frame1_bytes + frame2_bytes
+
+            # Check if we have a real depth frame (not dummy)
+            if self.current_depth_frame is not None:
+                # Convert depth frame to JPEG
+                success2, buffer2 = cv2.imencode('.jpg', self.current_depth_frame)
+                if not success2:
+                    return False
+
+                frame2_bytes = buffer2.tobytes()
+                # Concatenate both image buffers
+                combined_data = frame1_bytes + frame2_bytes
+                frame_sizes = [len(frame1_bytes), len(frame2_bytes)]
+            else:
+                # Only send RGB frame when depth is not available
+                combined_data = frame1_bytes
+                frame_sizes = [len(frame1_bytes)]
 
             # Send next_frame signal
             await self.websocket.send(json.dumps({
@@ -244,7 +245,7 @@ class WebSocketClient(QThread):
 
             # Send parameters with frame sizes so server can split them
             params_with_sizes = self.params.copy()
-            params_with_sizes['frame_sizes'] = [len(frame1_bytes), len(frame2_bytes)]
+            params_with_sizes['frame_sizes'] = frame_sizes
             await self.websocket.send(json.dumps(params_with_sizes))
 
             # Send combined frame data

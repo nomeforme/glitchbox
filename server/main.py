@@ -747,12 +747,18 @@ class App:
                                 print(f"[main.py] Extracting first frame from combined data: {first_frame_size} bytes out of {len(image_data)} total")
                                 params.image = bytes_to_pil(first_frame_data)
 
-                                # Extract second frame (depth) if available
+                                # Extract second frame (depth) if available and use it as control_image
+                                # This takes priority over use_camera_as_control when depth camera is active
                                 if len(frame_sizes) > 1:
                                     second_frame_size = frame_sizes[1]
                                     second_frame_data = image_data[first_frame_size:first_frame_size + second_frame_size]
                                     depth_image = bytes_to_pil(second_frame_data)
                                     print(f"[main.py] Extracted second frame (depth): {second_frame_size} bytes, image size: {depth_image.size}")
+
+                                    # Set depth image as control_image parameter (overrides use_camera_as_control)
+                                    params.control_image = depth_image
+                                    print(f"[main.py] Set control_image from depth frame")
+                                # If only 1 frame, don't set control_image here - let use_camera_as_control handle it below
                             else:
                                 # Single image case (original behavior)
                                 params.image = bytes_to_pil(image_data)
@@ -773,7 +779,8 @@ class App:
                                     print(f"Time for background removal: {time.time() - bg_removal_start:.4f}s")
                             
                             # Use camera image directly as control image if enabled
-                            if getattr(self.args, 'use_camera_as_control', False):
+                            # Only applies if control_image not already set from depth camera
+                            if getattr(self.args, 'use_camera_as_control', False) and not hasattr(params, 'control_image'):
                                 camera_control_start = time.time()
                                 print("[main.py] Using camera image directly as control image")
                                 setattr(params, 'control_image', params.image)
