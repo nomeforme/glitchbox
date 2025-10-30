@@ -175,8 +175,8 @@ try:
             depth_8bit = cv2.bilateralFilter(depth_8bit, 5, 30, 30)
             depth_8bit = cv2.GaussianBlur(depth_8bit, (3, 3), 0.5)
 
-            # Apply colormap
-            depth_colormap_bgr = cv2.applyColorMap(depth_8bit, cv2.COLORMAP_INFERNO) # BGR
+            # Convert grayscale to RGB for virtual camera (but keep it grayscale visually)
+            depth_colormap_bgr = cv2.cvtColor(depth_8bit, cv2.COLOR_GRAY2BGR)
 
             # --- Zoom and Crop (1.25x from top-right) ---
             zoom_factor = 1.25
