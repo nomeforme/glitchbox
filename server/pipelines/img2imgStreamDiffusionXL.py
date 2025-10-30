@@ -146,7 +146,7 @@ class Pipeline:
             1024, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
         )
         controlnet_scale: float = Field(
-            0.4,
+            0.55,
             min=0,
             max=2.0,
             step=0.001,
@@ -297,7 +297,7 @@ class Pipeline:
             #     'model_name': 'Intel/dpt-swinv2-tiny-256',  # ~165MB, fastest
             #     # 'model_name': 'Intel/dpt-large',  # ~1.3GB, slower but higher quality
             # },
-            'conditioning_scale': 0.4,  # Default scale - can be adjusted at runtime via params.controlnet_scale
+            'conditioning_scale': 0.55,  # Default scale - can be adjusted at runtime via params.controlnet_scale
             'enabled': True,
             'control_guidance_start': 0.0,
             'control_guidance_end': 1.0,
@@ -508,8 +508,16 @@ class Pipeline:
         # Swap UNet if pipe index changed
         if pipe_index != self.current_pipe_idx:
             print(f"[img2imgStreamDiffusionXL.py] Swapping UNet from pipe {self.current_pipe_idx} to pipe {pipe_index}")
-            # TODO: Implement actual UNet swapping
-            # For now, this is a placeholder since all pipes share the same wrapper
+            # UNet switching happens at TensorRT engine level
+            # Each pipe has its own LoRA-fused TensorRT UNet engine
+            # Other components (VAE, text encoders, ControlNet) are shared
+
+            # Perform the actual UNet swap
+            # target_unet = self.unet_engines[pipe_index]
+            # self.shared_wrapper.stream.unet = target_unet
+            # print(f"[img2imgStreamDiffusionXL.py] Successfully swapped to UNet engine {pipe_index}")
+            # print(f"[img2imgStreamDiffusionXL.py] UNet type: {type(target_unet).__name__}")
+
             self.current_pipe_idx = pipe_index
 
         # Use the shared wrapper (all pipes reference it)

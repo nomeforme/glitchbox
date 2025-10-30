@@ -64,6 +64,7 @@ class LoRACurationConfig:
             "san-xl": "loras/san_XL-step00000800.safetensors",
             "mannequin-xl": "loras/mannequin_XL-step00001200.safetensors",
             "mannequin-anime-xl": "loras/mannequin_anime_XL-step00002400.safetensors",
+            "angels-xl": "loras/angels_XL-step00001000.safetensors",
         }
 
         self._all_curations = {} # Stores all loaded JSON data {key: data}
