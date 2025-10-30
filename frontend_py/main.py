@@ -507,6 +507,7 @@ class MainWindow(QMainWindow):
         self.ws_client.status_changed.connect(self.handle_status_change)
         self.camera_thread.frame_ready.connect(self.handle_camera_frame)
         self.depth_camera_thread.frame_ready.connect(self.handle_depth_camera_frame)
+        self.depth_camera_thread.frame_ready.connect(self.ws_client.update_depth_frame)
         
         # Track signal connections to prevent duplication
         self.signal_connections_active = True
@@ -846,6 +847,7 @@ class MainWindow(QMainWindow):
             # Recreate thread with current index before starting
             self.depth_camera_thread = DepthCameraThread(device_index=depth_camera_index)
             self.depth_camera_thread.frame_ready.connect(self.handle_depth_camera_frame)
+            self.depth_camera_thread.frame_ready.connect(self.ws_client.update_depth_frame)
 
             # Start depth camera
             self.depth_camera_thread.start()
@@ -891,6 +893,7 @@ class MainWindow(QMainWindow):
 
             self.depth_camera_thread = DepthCameraThread(device_index=new_index)
             self.depth_camera_thread.frame_ready.connect(self.handle_depth_camera_frame)
+            self.depth_camera_thread.frame_ready.connect(self.ws_client.update_depth_frame)
 
             # Restart depth camera if it was running
             if was_depth_camera_running:

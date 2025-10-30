@@ -28,6 +28,7 @@ class WebSocketClient(QThread):
         self.user_id = str(uuid.uuid4())
         self.settings = None
         self.current_frame = None
+        self.current_depth_frame = None
         # Initialize with empty parameters - will be populated from settings
         self.params = {}
         # Polling configuration
@@ -46,6 +47,7 @@ class WebSocketClient(QThread):
         self.user_id = str(uuid.uuid4())  # Generate new user ID
         self.settings = None
         self.current_frame = None
+        self.current_depth_frame = None
         self.params = {}
         self.retry_count = 0
         self.retry_delay = self.initial_retry_delay
@@ -121,6 +123,10 @@ class WebSocketClient(QThread):
             print(f"[WebSocket] Updated prompt: {text}")
         else:
             print("[WebSocket] Warning: 'prompt' parameter not found in initialized parameters")
+
+    def update_depth_frame(self, frame):
+        """Update the current depth frame"""
+        self.current_depth_frame = frame
 
     async def update_curation_index(self, curation_index):
         """Update the curation index on the server"""
@@ -209,21 +215,41 @@ class WebSocketClient(QThread):
                 print("[WebSocket] Processing stopped, not sending frame")
                 return False
 
-            # Convert frame to JPEG
+            # Convert RGB frame to JPEG
             success, buffer = cv2.imencode('.jpg', frame)
             if not success:
                 return False
+
+            # Get depth frame or create black dummy if not available
+            if self.current_depth_frame is not None:
+                depth_frame = self.current_depth_frame
+            else:
+                # Create black dummy frame with same dimensions as RGB frame
+                depth_frame = np.zeros_like(frame)
+
+            # Convert depth frame to JPEG
+            success2, buffer2 = cv2.imencode('.jpg', depth_frame)
+            if not success2:
+                return False
+
+            # Concatenate both image buffers into one binary message
+            frame1_bytes = buffer.tobytes()
+            frame2_bytes = buffer2.tobytes()
+            combined_data = frame1_bytes + frame2_bytes
 
             # Send next_frame signal
             await self.websocket.send(json.dumps({
                 "status": "next_frame"
             }))
-            
-            # Send parameters
-            await self.websocket.send(json.dumps(self.params))
-            
-            # Send frame data
-            await self.websocket.send(buffer.tobytes())
+
+            # Send parameters with frame sizes so server can split them
+            params_with_sizes = self.params.copy()
+            params_with_sizes['frame_sizes'] = [len(frame1_bytes), len(frame2_bytes)]
+            await self.websocket.send(json.dumps(params_with_sizes))
+
+            # Send combined frame data
+            await self.websocket.send(combined_data)
+
             self.processing_frame = False
             return True
 
@@ -358,6 +384,7 @@ class WebSocketClient(QThread):
         self.processing = False
         self.processing_frame = False
         self.current_frame = None
+        self.current_depth_frame = None
         
         # Emit status change immediately
         self.status_changed.emit("ready")
@@ -408,14 +435,15 @@ class WebSocketClient(QThread):
     def close(self):
         """Close the WebSocket connection gracefully (called from main thread)"""
         print("[WebSocket] Closing WebSocket connection gracefully")
-        
+
         # Signal to stop processing and running
         self.running = False
         self.processing = False
-        
-        # Clear current frame to prevent new processing
+
+        # Clear current frames to prevent new processing
         self.current_frame = None
-        
+        self.current_depth_frame = None
+
         print("[WebSocket] Graceful close initiated - signals set")
 
     def stop(self):
@@ -424,10 +452,11 @@ class WebSocketClient(QThread):
         if not self.running:
             print("[WebSocket] Already stopped")
             return
-            
+
         self.running = False
         self.processing = False
         self.current_frame = None
+        self.current_depth_frame = None
         
         # Emit disconnected status immediately
         self.status_changed.emit("disconnected")

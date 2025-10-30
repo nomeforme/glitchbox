@@ -514,8 +514,9 @@ class App:
                         params = await self.conn_manager.receive_json(user_id)
 
                         params_creation_start = time.time()
-                        # Extract acid_settings before converting to SimpleNamespace
+                        # Extract acid_settings and frame_sizes before converting to SimpleNamespace
                         acid_settings = params.pop("acid_settings", {}) if isinstance(params, dict) else {}
+                        frame_sizes = params.pop("frame_sizes", None) if isinstance(params, dict) else None
                         params = self.pipeline.InputParams(**params)
                         params = SimpleNamespace(**vars(params))
                         # Add acid_settings back as an attribute
@@ -736,9 +737,25 @@ class App:
                                     user_id, {"status": "send_frame"}
                                 )
                                 continue
-                            
+
                             image_processing_start = time.time()
-                            params.image = bytes_to_pil(image_data)
+
+                            # Extract first frame if frame_sizes provided (multi-image case)
+                            if frame_sizes and len(frame_sizes) > 0:
+                                first_frame_size = frame_sizes[0]
+                                first_frame_data = image_data[:first_frame_size]
+                                print(f"[main.py] Extracting first frame from combined data: {first_frame_size} bytes out of {len(image_data)} total")
+                                params.image = bytes_to_pil(first_frame_data)
+
+                                # Extract second frame (depth) if available
+                                if len(frame_sizes) > 1:
+                                    second_frame_size = frame_sizes[1]
+                                    second_frame_data = image_data[first_frame_size:first_frame_size + second_frame_size]
+                                    depth_image = bytes_to_pil(second_frame_data)
+                                    print(f"[main.py] Extracted second frame (depth): {second_frame_size} bytes, image size: {depth_image.size}")
+                            else:
+                                # Single image case (original behavior)
+                                params.image = bytes_to_pil(image_data)
                             
                             # Apply acid processing if enabled
                             if self.use_acid_processor and params.image:
