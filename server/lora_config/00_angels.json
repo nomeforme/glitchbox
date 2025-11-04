@@ -1,5 +1,5 @@
 {
-    "prompts_file_name": ["angels", "glitch"],
+    "prompts_file_names": ["angels", "glitch"],
     "loras": ["angels", "glitch"],
     "adapter_weights_sets": [
         [1.0, 0.0],
