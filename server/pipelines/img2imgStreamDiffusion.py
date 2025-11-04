@@ -280,11 +280,11 @@ class Pipeline:
         use_controlnet = True
         controlnet_config = {
             'model_id': 'thibaud/controlnet-sd21-depth-diffusers',
-            'preprocessor': 'depth',  # 'depth', 'canny', 'pose', etc.
-            'preprocessor_params': {
-                'model_name': 'Intel/dpt-swinv2-tiny-256',  # ~165MB, fastest
-                # 'model_name': 'Intel/dpt-large',  # ~1.3GB, slower but higher quality
-            },
+            'preprocessor': 'passthrough',  # 'depth', 'canny', 'pose', etc.
+            # 'preprocessor_params': {
+            #     'model_name': 'Intel/dpt-swinv2-tiny-256',  # ~165MB, fastest
+            #     # 'model_name': 'Intel/dpt-large',  # ~1.3GB, slower but higher quality
+            # },
             'conditioning_scale': 0.87,
             'enabled': True,
             'control_guidance_start': 0.0,
@@ -388,16 +388,35 @@ class Pipeline:
 
             # Initialize PromptTravel for this pipe to enable prompt embedding interpolation
             # Access text_encoder and tokenizer from the inner stream object
+            # NOTE: img2imgStreamDiffusion only uses non-SDXL models, so explicitly set SDXL encoders to None
+
+            # Debug: Check text encoder config
+            text_encoder = stream.stream.text_encoder
+            if hasattr(text_encoder, 'config'):
+                hidden_size = getattr(text_encoder.config, 'hidden_size', 'unknown')
+                print(f"[img2imgStreamDiffusion.py] Text encoder hidden_size: {hidden_size}")
+
             stream.prompt_travel = PromptTravel(
-                text_encoder=stream.stream.text_encoder,
+                text_encoder=text_encoder,
                 tokenizer=stream.stream.pipe.tokenizer,
+                text_encoder_2=None,
+                tokenizer_2=None,
             )
+            print(f"[img2imgStreamDiffusion.py] PromptTravel initialized for non-SDXL model (base: {base_model})")
 
             self.pipes.append(stream)
 
         # Store current pipe index
         self.current_pipe_idx = 0
         self.last_prompt = default_prompt
+        self.last_controlnet_scale = None
+
+        # Cache for prompt travel embeddings (per pipe)
+        self.prompt_embeds_cache = {}  # {pipe_idx: {prompt: embeds}}
+
+        # Initialize cache for each pipe
+        for idx in range(len(self.pipes)):
+            self.prompt_embeds_cache[idx] = {}
 
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
         # Get pipe_index from params, default to 0 if not provided
@@ -420,30 +439,111 @@ class Pipeline:
         print(f"[img2imgStreamDiffusion.py] use_prompt_travel: {use_prompt_travel}")
 
         if use_prompt_travel:
-            # Get prompts and factor
-            source_prompt = params.prompt
-            target_prompt = getattr(params, 'target_prompt', params.prompt)
+            # Check if we're in multi-file mode
+            multi_file_mode = getattr(params, 'multi_file_prompts', False)
             prompt_travel_factor = getattr(params, 'prompt_travel_factor', 0.5)
 
-            print(f"[img2imgStreamDiffusion.py] Calculating prompt travel embeddings")
-            print(f"[img2imgStreamDiffusion.py] source: {source_prompt}")
-            print(f"[img2imgStreamDiffusion.py] target: {target_prompt}")
-            print(f"[img2imgStreamDiffusion.py] factor: {prompt_travel_factor}")
+            if multi_file_mode:
+                # MULTI-FILE MODE: Weighted spatial + temporal blending (like SDXL pipeline)
+                source_prompts = params.prompt  # List of prompts
+                target_prompts = getattr(params, 'target_prompt', params.prompt)  # List of prompts
+                spatial_weights = getattr(params, 'spatial_weights', None)
 
-            # Encode source and target prompts
-            source_embeds, _ = stream_wrapper.prompt_travel.encode_prompt(
-                prompt=source_prompt,
-                device=stream_wrapper.stream.device,
-                num_images_per_prompt=1,
-                do_classifier_free_guidance=False,
-            )
+                print(f"[img2imgStreamDiffusion.py] === MULTI-FILE PROMPT TRAVEL ===")
+                print(f"[img2imgStreamDiffusion.py] Number of files: {len(source_prompts)}")
+                print(f"[img2imgStreamDiffusion.py] Spatial weights: {spatial_weights}")
+                print(f"[img2imgStreamDiffusion.py] Temporal factor: {prompt_travel_factor:.3f}")
 
-            target_embeds, _ = stream_wrapper.prompt_travel.encode_prompt(
-                prompt=target_prompt,
-                device=stream_wrapper.stream.device,
-                num_images_per_prompt=1,
-                do_classifier_free_guidance=False,
-            )
+                # Encode all source prompts and compute weighted spatial blend
+                cache = self.prompt_embeds_cache[pipe_index]
+                source_embeds_list = []
+                for i, prompt in enumerate(source_prompts):
+                    if prompt not in cache:
+                        embeds, _ = stream_wrapper.prompt_travel.encode_prompt(
+                            prompt=prompt,
+                            device=stream_wrapper.stream.device,
+                            num_images_per_prompt=1,
+                            do_classifier_free_guidance=False,
+                        )
+                        cache[prompt] = embeds
+                        print(f"[img2imgStreamDiffusion.py] Cache MISS - encoding source prompt {i} (weight={spatial_weights[i]:.2f}): {prompt[:60]}...")
+                    else:
+                        embeds = cache[prompt]
+                        print(f"[img2imgStreamDiffusion.py] Cache HIT - reusing source prompt {i} (weight={spatial_weights[i]:.2f}): {prompt[:60]}...")
+
+                    source_embeds_list.append(embeds)
+
+                # Weighted sum for source (spatial blending)
+                source_embeds = sum(w * e for w, e in zip(spatial_weights, source_embeds_list))
+
+                # Encode all target prompts and compute weighted spatial blend
+                target_embeds_list = []
+                for i, prompt in enumerate(target_prompts):
+                    if prompt not in cache:
+                        embeds, _ = stream_wrapper.prompt_travel.encode_prompt(
+                            prompt=prompt,
+                            device=stream_wrapper.stream.device,
+                            num_images_per_prompt=1,
+                            do_classifier_free_guidance=False,
+                        )
+                        cache[prompt] = embeds
+                        print(f"[img2imgStreamDiffusion.py] Cache MISS - encoding target prompt {i} (weight={spatial_weights[i]:.2f}): {prompt[:60]}...")
+                    else:
+                        embeds = cache[prompt]
+                        print(f"[img2imgStreamDiffusion.py] Cache HIT - reusing target prompt {i} (weight={spatial_weights[i]:.2f}): {prompt[:60]}...")
+
+                    target_embeds_list.append(embeds)
+
+                # Weighted sum for target (spatial blending)
+                target_embeds = sum(w * e for w, e in zip(spatial_weights, target_embeds_list))
+
+                print(f"[img2imgStreamDiffusion.py] Spatially blended source/target embeddings")
+                print(f"[img2imgStreamDiffusion.py] Source embeddings shape: {source_embeds.shape}")
+                print(f"[img2imgStreamDiffusion.py] Target embeddings shape: {target_embeds.shape}")
+                print(f"[img2imgStreamDiffusion.py] Now applying temporal interpolation: {prompt_travel_factor:.3f}")
+
+            else:
+                # SINGLE-FILE MODE: Standard prompt travel
+                source_prompt = params.prompt
+                target_prompt = getattr(params, 'target_prompt', params.prompt)
+
+                print(f"[img2imgStreamDiffusion.py] === SINGLE-FILE PROMPT TRAVEL ===")
+                print(f"[img2imgStreamDiffusion.py] source: {source_prompt[:80]}...")
+                print(f"[img2imgStreamDiffusion.py] target: {target_prompt[:80]}...")
+                print(f"[img2imgStreamDiffusion.py] factor: {prompt_travel_factor}")
+
+                # Get or compute source embeddings (with caching)
+                cache = self.prompt_embeds_cache[pipe_index]
+                if source_prompt not in cache:
+                    print(f"[img2imgStreamDiffusion.py] Cache MISS - encoding source prompt")
+                    source_embeds, _ = stream_wrapper.prompt_travel.encode_prompt(
+                        prompt=source_prompt,
+                        device=stream_wrapper.stream.device,
+                        num_images_per_prompt=1,
+                        do_classifier_free_guidance=False,
+                    )
+                    cache[source_prompt] = source_embeds
+                else:
+                    print(f"[img2imgStreamDiffusion.py] Cache HIT - reusing source prompt")
+                    source_embeds = cache[source_prompt]
+
+                print(f"[img2imgStreamDiffusion.py] Source embeddings shape: {source_embeds.shape}")
+
+                # Get or compute target embeddings (with caching)
+                if target_prompt not in cache:
+                    print(f"[img2imgStreamDiffusion.py] Cache MISS - encoding target prompt")
+                    target_embeds, _ = stream_wrapper.prompt_travel.encode_prompt(
+                        prompt=target_prompt,
+                        device=stream_wrapper.stream.device,
+                        num_images_per_prompt=1,
+                        do_classifier_free_guidance=False,
+                    )
+                    cache[target_prompt] = target_embeds
+                else:
+                    print(f"[img2imgStreamDiffusion.py] Cache HIT - reusing target prompt")
+                    target_embeds = cache[target_prompt]
+
+                print(f"[img2imgStreamDiffusion.py] Target embeddings shape: {target_embeds.shape}")
 
             # Interpolate between embeddings
             interpolated_embeds = stream_wrapper.prompt_travel.interpolate_embeddings(
@@ -454,14 +554,17 @@ class Pipeline:
 
             print(f"[img2imgStreamDiffusion.py] Interpolated embeddings shape: {interpolated_embeds.shape}")
 
-            # StreamDiffusion repeats embeddings for batch_size, so we need to match that
+            # StreamDiffusion with denoising batch needs embeddings repeated for batch_size
+            # batch_size = len(t_index_list) when use_denoising_batch=True
             batch_size = stream_wrapper.stream.batch_size
-            interpolated_embeds_batched = interpolated_embeds.repeat(batch_size, 1, 1)
+            if interpolated_embeds.shape[0] != batch_size:
+                print(f"[img2imgStreamDiffusion.py] Repeating embeddings from batch_size {interpolated_embeds.shape[0]} to {batch_size}")
+                interpolated_embeds = interpolated_embeds.repeat(batch_size, 1, 1)
 
             # Directly set the embeddings on the inner stream object
-            stream_wrapper.stream.prompt_embeds = interpolated_embeds_batched
+            stream_wrapper.stream.prompt_embeds = interpolated_embeds
 
-            print(f"[img2imgStreamDiffusion.py] Set prompt_embeds with shape: {interpolated_embeds_batched.shape}")
+            print(f"[img2imgStreamDiffusion.py] Set prompt_embeds with shape: {interpolated_embeds.shape}")
 
         else:
             # If prompt changed and not using prompt travel, update it via prepare()
@@ -483,6 +586,13 @@ class Pipeline:
         if control_image is not None:
             print(f"[img2imgStreamDiffusion.py] Updating control image for ControlNet structural guidance")
             stream_wrapper.update_control_image(index=0, image=control_image)
+
+        # Update ControlNet conditioning scale from params (runtime adjustable)
+        if hasattr(params, 'controlnet_scale') and hasattr(stream_wrapper.stream, '_controlnet_module'):
+            if params.controlnet_scale != self.last_controlnet_scale:
+                stream_wrapper.stream._controlnet_module.update_controlnet_scale(index=0, scale=params.controlnet_scale)
+                self.last_controlnet_scale = params.controlnet_scale
+                print(f"[img2imgStreamDiffusion.py] Updated ControlNet scale to {params.controlnet_scale}")
 
         # Preprocess input image and generate
         image_tensor = stream_wrapper.preprocess_image(params.image)
