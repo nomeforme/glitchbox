@@ -1,11 +1,8 @@
 {
-    "prompts_file_name": "twisted_bodies",
+    "prompts_file_names": ["twisted_bodies", "nature_water"],
     "loras": ["twisted-bodies", "nature-water"],
     "adapter_weights_sets": [
         [1.0, 0.0],
-        [0.7, 0.3],
-        [0.4, 0.6],
-        [0.2, 0.8],
         [0.0, 1.0]
     ],
     "input_params": {
@@ -21,8 +18,8 @@
         "seed": 4402026899276587,
         "target_seed": null,
         "steps": 4,
-        "width": 640,
-        "height": 360,
+        "width": 512,
+        "height": 512,
         "guidance_scale": 1.0,
         "strength": 0.8,
         "controlnet_scale": 0.55,

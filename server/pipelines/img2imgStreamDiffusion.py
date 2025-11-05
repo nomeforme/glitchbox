@@ -253,6 +253,13 @@ class Pipeline:
             hide=True,
             id="debug_controlnet",
         )
+        use_depth_masking: bool = Field(
+            True,
+            title="Use Depth Masking",
+            field="checkbox",
+            id="use_depth_masking",
+            description="Apply depth-based masking to remove background from input image",
+        )
 
     def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype, lora_config=None):
         # Store lora_config for later use
@@ -315,33 +322,10 @@ class Pipeline:
             print(f"[img2imgStreamDiffusion.py] Creating pipe {idx + 1}/{len(adapter_weights_sets)}")
             print(f"[img2imgStreamDiffusion.py] Pipe {idx}: adapter_weights = {adapter_weights}")
 
-            # Create the StreamDiffusionWrapper WITHOUT lora_dict
-            # We'll load LoRAs manually afterwards to support per-pipe adapter weights
-            stream = StreamDiffusionWrapper(
-                model_id_or_path=base_model,
-                lora_dict=None,  # Don't use lora_dict - we'll load manually
-                use_tiny_vae=args.taesd,
-                device=device,
-                dtype=torch_dtype,
-                t_index_list=[10, 12, 14, 16],
-                frame_buffer_size=1,
-                width=params.width,
-                height=params.height,
-                use_lcm_lora=False,
-                output_type="pil",
-                warmup=10,
-                vae_id=None,
-                acceleration="tensorrt",
-                mode="img2img",
-                use_denoising_batch=True,
-                cfg_type="none",
-                use_safety_checker=args.safety_checker,
-                use_controlnet=use_controlnet,
-                controlnet_config=controlnet_config,
-                image_postprocessing_config=image_postprocessing_config,
-            )
-
-            # Load LoRAs manually with adapter weights (like controlnetSDTurbot2i)
+            # Build lora_dict with adapter weights for this pipe
+            # Format: {lora_path: weight, ...}
+            # This will be processed by wrapper BEFORE TensorRT compilation
+            lora_dict = None
             if lora_config is not None:
                 curation_key = lora_config.get_curation_keys()[0]
                 lora_models_list = lora_config.get_lora_curation()[curation_key]
@@ -351,7 +335,7 @@ class Pipeline:
                 selected_loras = [name for name in lora_models_list if name != "None"]
 
                 if selected_loras:
-                    print(f"[img2imgStreamDiffusion.py] Loading {len(selected_loras)} LoRAs: {selected_loras}")
+                    print(f"[img2imgStreamDiffusion.py] Building lora_dict with {len(selected_loras)} LoRAs: {selected_loras}")
 
                     # Ensure adapter_weights matches the number of loras
                     if len(adapter_weights) < len(selected_loras):
@@ -359,25 +343,40 @@ class Pipeline:
                     elif len(adapter_weights) > len(selected_loras):
                         adapter_weights = adapter_weights[:len(selected_loras)]
 
-                    # Load each LoRA with an adapter name
-                    adapter_names = []
+                    # Build lora_dict: {lora_path: adapter_weight}
+                    lora_dict = {}
                     for i, lora_name in enumerate(selected_loras):
-                        adapter_name = f"lora_{i}"
                         lora_path = lora_models_dict[lora_name]
-                        print(f"[img2imgStreamDiffusion.py] Loading LoRA {i}: {lora_name} as {adapter_name} with weight {adapter_weights[i]}")
-                        stream.stream.pipe.load_lora_weights(lora_path, adapter_name=adapter_name)
-                        adapter_names.append(adapter_name)
+                        weight = adapter_weights[i]
+                        lora_dict[lora_path] = weight
+                        print(f"[img2imgStreamDiffusion.py] lora_dict['{lora_name}'] = {weight}")
 
-                    # Set adapter weights and fuse
-                    print(f"[img2imgStreamDiffusion.py] Setting adapters with weights: {adapter_weights}")
-                    stream.stream.pipe.set_adapters(adapter_names=adapter_names, adapter_weights=adapter_weights)
-
-                    print(f"[img2imgStreamDiffusion.py] Fusing LoRAs with scale 1.0")
-                    stream.stream.pipe.fuse_lora(adapter_names=adapter_names, lora_scale=1.0)
-
-                    # Unload after fusing to free memory
-                    stream.stream.pipe.unload_lora_weights()
-                    print(f"[img2imgStreamDiffusion.py] LoRAs loaded and fused successfully")
+            # Create the StreamDiffusionWrapper with lora_dict
+            # The wrapper will load and fuse LoRAs BEFORE TensorRT compilation
+            stream = StreamDiffusionWrapper(
+                model_id_or_path=base_model,
+                lora_dict=lora_dict,  # Will be fused before TensorRT compilation
+                use_tiny_vae=args.taesd,
+                device=device,
+                dtype=torch_dtype,
+                t_index_list=[5, 18, 32, 45],
+                frame_buffer_size=1,
+                width=params.width,
+                height=params.height,
+                use_lcm_lora=False,
+                output_type="pil",
+                warmup=0,
+                vae_id=None,
+                acceleration="tensorrt",  # TensorRT will compile AFTER LoRA fusion
+                mode="img2img",
+                use_denoising_batch=True,
+                cfg_type="none",
+                use_safety_checker=args.safety_checker,
+                use_controlnet=use_controlnet,
+                controlnet_config=controlnet_config,
+                image_postprocessing_config=image_postprocessing_config,
+            )
+            print(f"[img2imgStreamDiffusion.py] StreamDiffusionWrapper created with LoRAs fused before TensorRT")
 
             stream.prepare(
                 prompt=default_prompt,

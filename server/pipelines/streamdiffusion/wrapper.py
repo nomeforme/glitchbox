@@ -1107,10 +1107,29 @@ class StreamDiffusionWrapper:
                     stream.load_lcm_lora()
                 stream.fuse_lora()
 
-            if lora_dict is not None:
-                for lora_name, lora_scale in lora_dict.items():
-                    stream.load_lora(lora_name)
-                    stream.fuse_lora(lora_scale=lora_scale)
+        # Load custom LoRAs (works for both turbo and non-turbo models)
+        if lora_dict is not None:
+            # Manual LoRA loading with per-adapter weights (supports multiple LoRAs with different scales)
+            adapter_names = []
+            adapter_weights = []
+
+            for i, (lora_path, lora_weight) in enumerate(lora_dict.items()):
+                adapter_name = f"lora_{i}"
+                logger.info(f"Loading LoRA {i}: {lora_path} as {adapter_name} with weight {lora_weight}")
+                stream.pipe.load_lora_weights(lora_path, adapter_name=adapter_name)
+                adapter_names.append(adapter_name)
+                adapter_weights.append(lora_weight)
+
+            if adapter_names:
+                logger.info(f"Setting adapters with weights: {adapter_weights}")
+                stream.pipe.set_adapters(adapter_names=adapter_names, adapter_weights=adapter_weights)
+
+                logger.info(f"Fusing LoRAs with scale 1.0")
+                stream.pipe.fuse_lora(adapter_names=adapter_names, lora_scale=1.0)
+
+                # Unload after fusing to free memory
+                stream.pipe.unload_lora_weights()
+                logger.info(f"LoRAs loaded and fused successfully")
 
         if use_tiny_vae:
             if vae_id is not None:
@@ -1257,7 +1276,8 @@ class StreamDiffusionWrapper:
                     t_index_list=t_index_list,
                     ipadapter_scale=ipadapter_scale,
                     ipadapter_tokens=ipadapter_tokens,
-                    is_faceid=is_faceid if use_ipadapter_trt else None
+                    is_faceid=is_faceid if use_ipadapter_trt else None,
+                    lora_dict=lora_dict  # Include LoRA config in engine cache key
                 )
                 vae_encoder_path = engine_manager.get_engine_path(
                     EngineType.VAE_ENCODER,

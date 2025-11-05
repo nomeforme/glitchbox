@@ -776,9 +776,18 @@ class App:
                                     # Get the depth map
                                     depth_map = self.depth_estimator.get_depth(params.image)
 
+                                    # Apply depth-based masking if enabled
+                                    if getattr(params, 'use_depth_masking', False):
+                                        params.image = self.depth_estimator.mask_image_with_depth(
+                                            params.image,
+                                            depth_map,
+                                            threshold=10
+                                        )
+                                        print("[main.py] Applied depth-based masking to input image")
+
                                     # if self.use_background_removal:
                                     #     depth_map = self._apply_background_removal(depth_map)
-                                    
+
                                     # Set the control image in the params
                                     # This is the key part that sets params.control_image for use in the pipeline
                                     setattr(params, 'control_image', depth_map)

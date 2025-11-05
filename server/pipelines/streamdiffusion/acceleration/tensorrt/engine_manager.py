@@ -1,4 +1,6 @@
 import logging
+import hashlib
+import json
 from enum import Enum
 from pathlib import Path
 from typing import Any, Optional, Dict
@@ -88,23 +90,24 @@ class EngineManager:
                        ipadapter_scale: Optional[float] = None,
                        ipadapter_tokens: Optional[int] = None,
                        controlnet_model_id: Optional[str] = None,
-                       is_faceid: Optional[bool] = None) -> Path:
+                       is_faceid: Optional[bool] = None,
+                       lora_dict: Optional[Dict[str, float]] = None) -> Path:
         """
         Generate engine path using wrapper.py's current logic.
-        
+
         Moves and consolidates create_prefix() function from wrapper.py lines 995-1014.
         Special handling for ControlNet engines which use model_id-based directories.
         """
         filename = self._configs[engine_type]['filename']
-        
+
         if engine_type == EngineType.CONTROLNET:
             # ControlNet engines use special model_id-based directory structure
             if controlnet_model_id is None:
                 raise ValueError("get_engine_path: controlnet_model_id required for CONTROLNET engines")
-            
+
             # Convert model_id to directory name format (replace "/" with "_")
             model_dir_name = controlnet_model_id.replace("/", "_")
-            
+
             # Use ControlNetEnginePool naming convention: dynamic engines with 384-1024 range
             prefix = f"controlnet_{model_dir_name}--min_batch-{min_batch_size}--max_batch-{max_batch_size}--dyn-384-1024"
             return self.engine_dir / prefix / filename
@@ -122,6 +125,11 @@ class EngineManager:
                 t_indices_str = "_".join(map(str, t_index_list))
                 prefix += f"--t_idx-{t_indices_str}"
 
+            # Add LoRA hash to differentiate engine caches by LoRA configuration
+            if lora_dict is not None and engine_type == EngineType.UNET:
+                lora_hash = self._compute_lora_hash(lora_dict)
+                prefix += f"--lora-{lora_hash}"
+
             # IP-Adapter differentiation: add type and (optionally) tokens
             # Keep scale out of identity for runtime control, but include a type flag to separate caches
             if is_faceid is True:
@@ -132,6 +140,28 @@ class EngineManager:
             prefix += f"--mode-{mode}"
 
             return self.engine_dir / prefix / filename
+
+    def _compute_lora_hash(self, lora_dict: Dict[str, float]) -> str:
+        """
+        Compute a deterministic hash from lora_dict (paths + weights).
+
+        Returns a short hash (8 chars) that uniquely identifies this LoRA configuration.
+        """
+        # Sort by keys for deterministic ordering
+        sorted_items = sorted(lora_dict.items())
+
+        # Create a representation: extract just the model name from path + weight
+        lora_repr = []
+        for lora_path, weight in sorted_items:
+            # Extract model name from path (e.g., "models/loras/foo.safetensors" -> "foo")
+            model_name = Path(lora_path).stem
+            # Round weight to 2 decimal places for stability
+            lora_repr.append(f"{model_name}:{weight:.2f}")
+
+        # Join and hash
+        lora_str = "|".join(lora_repr)
+        hash_obj = hashlib.md5(lora_str.encode())
+        return hash_obj.hexdigest()[:8]  # Use first 8 chars of MD5 hash
     
     def _get_embedding_dim_for_model_type(self, model_type: str) -> int:
         """Get embedding dimension based on model type."""

@@ -165,16 +165,52 @@ class DepthAnythingTRT:
         
         return depth_pil
     
+    def mask_image_with_depth(self, image, depth_map, threshold=10, invert=False):
+        """
+        Mask an image using a depth map, removing areas based on depth values.
+
+        Args:
+            image (PIL.Image): Input RGB image to mask
+            depth_map (PIL.Image): Depth map (grayscale or colored)
+            threshold (int): Pixel values below this threshold will be masked out (0-255).
+                Default is 10, which removes near-black areas (far/invalid depth).
+            invert (bool): If True, inverts the mask (removes high-depth areas instead).
+                Default is False.
+
+        Returns:
+            PIL.Image: Masked image with transparency (RGBA)
+        """
+        # Convert depth map to grayscale numpy array if needed
+        depth_array = np.array(depth_map.convert('L'))
+
+        # Create binary mask: 255 where depth > threshold, 0 elsewhere
+        if invert:
+            mask = (depth_array <= threshold).astype(np.uint8) * 255
+        else:
+            mask = (depth_array > threshold).astype(np.uint8) * 255
+
+        # Convert input image to RGBA
+        image_rgba = image.convert('RGBA')
+        image_array = np.array(image_rgba)
+
+        # Apply mask to alpha channel
+        image_array[:, :, 3] = mask
+
+        # Convert back to PIL Image
+        masked_image = Image.fromarray(image_array, 'RGBA')
+
+        return masked_image
+
     def __call__(self, image, normalized_distance_threshold: Optional[float] = None, absolute_min: Optional[float] = None, absolute_max: Optional[float] = None):
         """
         Callable interface for the model.
-        
+
         Args:
             image (PIL.Image): Input image
             normalized_distance_threshold (float, optional): See get_depth() for details.
             absolute_min (float, optional): See get_depth() for details.
             absolute_max (float, optional): See get_depth() for details.
-            
+
         Returns:
             dict: Dictionary containing the depth map
         """

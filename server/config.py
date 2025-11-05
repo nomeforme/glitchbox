@@ -543,7 +543,7 @@ parser.add_argument(
     "--depth-normalized-distance-threshold",
     dest="depth_normalized_distance_threshold",
     type=float,
-    default=0.0,
+    default=0.225,
     help="Normalized distance threshold for depth estimation (0.0-1.0, default: 0.225)",
 )
 parser.add_argument(
@@ -557,7 +557,7 @@ parser.add_argument(
     "--depth-absolute-max",
     dest="depth_absolute_max",
     type=float,
-    default=40.0,
+    default=18.0,
     help="Absolute maximum depth value for normalization (default: 18.0)",
 )
 
@@ -574,7 +574,7 @@ parser.add_argument(
     "--use-upscaler",
     dest="use_upscaler",
     action="store_true",
-    default=False,
+    default=True,
     help="Enable upscaler for output images",
 )
 parser.add_argument(
@@ -660,7 +660,7 @@ parser.add_argument(
     "--default-curation-index",
     dest="default_curation_index",
     type=int,
-    default=13,
+    default=11, #13,
     help="Default index for curation selection",
 )
 
