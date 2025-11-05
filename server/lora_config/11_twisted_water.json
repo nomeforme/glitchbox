@@ -3,6 +3,7 @@
     "loras": ["twisted-bodies", "nature-water"],
     "adapter_weights_sets": [
         [1.0, 0.0],
+        [0.4, 0.6],
         [0.0, 1.0]
     ],
     "input_params": {

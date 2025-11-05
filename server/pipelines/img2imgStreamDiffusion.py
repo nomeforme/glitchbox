@@ -405,6 +405,13 @@ class Pipeline:
 
             self.pipes.append(stream)
 
+            # CPU Offloading: Clean up PyTorch models IMMEDIATELY after TensorRT compilation
+            # This frees GPU memory before loading the next pipe
+            print(f"[img2imgStreamDiffusion.py] Cleaning up PyTorch models for pipe {idx}...")
+            stream.cleanup_pytorch_models_after_tensorrt()
+            torch.cuda.empty_cache()
+            print(f"[img2imgStreamDiffusion.py] Cleaned up PyTorch models for pipe {idx}")
+
         # Store current pipe index
         self.current_pipe_idx = 0
         self.last_prompt = default_prompt
