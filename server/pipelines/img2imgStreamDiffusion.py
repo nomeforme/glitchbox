@@ -323,7 +323,7 @@ class Pipeline:
                 use_tiny_vae=args.taesd,
                 device=device,
                 dtype=torch_dtype,
-                t_index_list=[22, 45],
+                t_index_list=[10, 12, 14, 16],
                 frame_buffer_size=1,
                 width=params.width,
                 height=params.height,
@@ -383,7 +383,7 @@ class Pipeline:
                 prompt=default_prompt,
                 negative_prompt=default_negative_prompt,
                 num_inference_steps=50,
-                guidance_scale=1.2,
+                guidance_scale=1.0,
             )
 
             # Initialize PromptTravel for this pipe to enable prompt embedding interpolation
@@ -574,7 +574,7 @@ class Pipeline:
                     prompt=prompt,
                     negative_prompt=default_negative_prompt,
                     num_inference_steps=50,
-                    guidance_scale=1.2,
+                    guidance_scale=1.0,
                 )
                 self.last_prompt = prompt
 
