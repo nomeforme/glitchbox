@@ -41,7 +41,11 @@ class Args(NamedTuple):
     prompt_travel_factor_increment: float = 0.025
     prompt_travel_stabilize_duration: int = 3
     prompt_travel_oscillate: bool = True
-    use_seed_travel: bool = False
+    # Seed travel scheduler settings
+    use_seed_travel: bool = True
+    seed_travel_num_seeds: int = 4
+    seed_travel_factor_increment: float = 0.025
+    seed_travel_match_prompt_travel: bool = False
     # Prompt scheduler settings
     use_prompt_scheduler: bool = False
     prompts_dir: str = "prompts"
@@ -470,13 +474,34 @@ parser.add_argument(
     help="Oscillate between min and max factor",
 )
 
-# Add seed travel argument
+# Seed travel scheduler arguments
 parser.add_argument(
     "--use-seed-travel",
     dest="use_seed_travel",
     action="store_true",
+    default=True,
+    help="Enable Seed Travel Scheduler",
+)
+parser.add_argument(
+    "--seed-travel-num-seeds",
+    dest="seed_travel_num_seeds",
+    type=int,
+    default=4,
+    help="Number of seeds to cycle through for seed travel",
+)
+parser.add_argument(
+    "--seed-travel-factor-increment",
+    dest="seed_travel_factor_increment",
+    type=float,
+    default=0.025,
+    help="Increment per frame for seed travel factor",
+)
+parser.add_argument(
+    "--seed-travel-match-prompt-travel",
+    dest="seed_travel_match_prompt_travel",
+    action="store_true",
     default=False,
-    help="Use seed travel",
+    help="Sync seed travel with prompt travel scheduler",
 )
 
 # Prompt scheduler settings
@@ -543,7 +568,7 @@ parser.add_argument(
     "--depth-normalized-distance-threshold",
     dest="depth_normalized_distance_threshold",
     type=float,
-    default=0.225,
+    default=0.3,
     help="Normalized distance threshold for depth estimation (0.0-1.0, default: 0.225)",
 )
 parser.add_argument(
@@ -557,7 +582,7 @@ parser.add_argument(
     "--depth-absolute-max",
     dest="depth_absolute_max",
     type=float,
-    default=18.0,
+    default=21.5,
     help="Absolute maximum depth value for normalization (default: 18.0)",
 )
 
@@ -660,7 +685,7 @@ parser.add_argument(
     "--default-curation-index",
     dest="default_curation_index",
     type=int,
-    default=11, #13,
+    default=21, #13,
     help="Default index for curation selection",
 )
 

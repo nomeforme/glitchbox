@@ -1018,11 +1018,14 @@ class StreamDiffusion:
 
     @torch.no_grad()
     def txt2img(self, batch_size: int = 1) -> torch.Tensor:
-        x_0_pred_out = self.predict_x0_batch(
-            torch.randn((batch_size, 4, self.latent_height, self.latent_width)).to(
-                device=self.device, dtype=self.dtype
-            )
-        )
+        # Use self.init_noise instead of torch.randn to respect seed settings
+        # If init_noise has correct batch size, use it; otherwise use first element repeated
+        if self.init_noise.shape[0] == batch_size:
+            x_t_latent = self.init_noise
+        else:
+            x_t_latent = self.init_noise[0:1].repeat(batch_size, 1, 1, 1)
+
+        x_0_pred_out = self.predict_x0_batch(x_t_latent)
         
         # LATENT POSTPROCESSING HOOKS: After diffusion, before VAE decoding
         x_0_pred_out = self._apply_latent_postprocessing_hooks(x_0_pred_out)
@@ -1039,11 +1042,11 @@ class StreamDiffusion:
         return x_output
 
     def txt2img_sd_turbo(self, batch_size: int = 1) -> torch.Tensor:
-        x_t_latent = torch.randn(
-            (batch_size, 4, self.latent_height, self.latent_width),
-            device=self.device,
-            dtype=self.dtype,
-        )
+        # Use self.init_noise instead of torch.randn to respect seed settings
+        if self.init_noise.shape[0] == batch_size:
+            x_t_latent = self.init_noise
+        else:
+            x_t_latent = self.init_noise[0:1].repeat(batch_size, 1, 1, 1)
 
         # Prepare UNet call arguments
         unet_kwargs = {

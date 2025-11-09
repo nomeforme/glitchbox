@@ -139,11 +139,42 @@ class Pipeline:
             id="prompt_travel_factor",
             hide=True,
         )
+        use_latent_travel: bool = Field(
+            True,
+            title="Use Latent Travel",
+            field="checkbox",
+            id="use_latent_travel",
+            hide=True,
+        )
+        latent_travel_method: str = Field(
+            "slerp",
+            title="Latent Travel Method",
+            field="select",
+            id="latent_travel_method",
+            options=["slerp", "linear"],
+            hide=True,
+        )
+        latent_travel_factor: float = Field(
+            0.5,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Latent Travel Factor",
+            field="range",
+            id="latent_travel_factor",
+            hide=True,
+        )
+        seed: int = Field(
+            4402026899276587, min=0, title="Seed", field="seed", hide=True, id="seed"
+        )
+        target_seed: int | None = Field(
+            None, min=0, title="Target Seed", field="seed", hide=True, id="target_seed"
+        )
         width: int = Field(
             1024, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
         )
         height: int = Field(
-            1024, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
+            768, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
         )
         controlnet_scale: float = Field(
             0.55,
@@ -244,6 +275,17 @@ class Pipeline:
             id="use_prompt_indexing",
             description="Use pipe index to select prompts from file instead of sequential scheduling",
         )
+        prompt_index_interpolation_duration: float = Field(
+            0.5,
+            min=0.0,
+            max=5.0,
+            step=0.1,
+            title="Prompt Index Interpolation Duration (s)",
+            field="range",
+            hide=True,
+            id="prompt_index_interpolation_duration",
+            description="Duration in seconds to interpolate between prompts when pipe index changes",
+        )
         use_client_prompts: bool = Field(
             False,
             title="Use Client Prompts",
@@ -340,7 +382,7 @@ class Pipeline:
             use_tiny_vae=args.taesd,
             device=device,
             dtype=torch_dtype,
-            t_index_list=[10],
+            t_index_list=[6],
             frame_buffer_size=1,
             width=params.width,
             height=params.height,
@@ -348,7 +390,7 @@ class Pipeline:
             output_type="pil",
             warmup=10,
             vae_id=None,
-            acceleration="tensorrt",
+            acceleration="none",
             mode="img2img",
             use_denoising_batch=True,
             cfg_type="none",
@@ -414,20 +456,88 @@ class Pipeline:
                     for i, lora_name in enumerate(selected_loras):
                         adapter_name = f"lora_{i}"
                         lora_path = lora_models_dict[lora_name]
+
+                        # Resolve path relative to server directory if not absolute
+                        if not os.path.isabs(lora_path):
+                            # Get server directory (parent of pipelines directory)
+                            server_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                            lora_path = os.path.join(server_dir, lora_path)
+
+                        # Handle directory-based LoRA paths
+                        actual_lora_path = lora_path
+                        if os.path.isdir(lora_path):
+                            # Look for LoRA safetensors file in directory
+                            lora_files = glob.glob(os.path.join(lora_path, "*_lora.safetensors"))
+                            if not lora_files:
+                                # Fallback: look for any safetensors that's not embeddings
+                                lora_files = [f for f in glob.glob(os.path.join(lora_path, "*.safetensors"))
+                                            if "embedding" not in f.lower()]
+                            if lora_files:
+                                actual_lora_path = lora_files[0]
+                                print(f"[img2imgStreamDiffusionXL.py] Found LoRA file in directory: {actual_lora_path}")
+                            else:
+                                print(f"[img2imgStreamDiffusionXL.py] WARNING: No LoRA file found in directory: {lora_path}")
+
                         print(f"[img2imgStreamDiffusionXL.py] Loading LoRA {i}: {lora_name} as {adapter_name} with weight {adapter_weights[i]}")
-                        target_pipe.load_lora_weights(lora_path, adapter_name=adapter_name)
+                        target_pipe.load_lora_weights(actual_lora_path, adapter_name=adapter_name)
                         adapter_names.append(adapter_name)
 
                     # Set adapter weights and fuse
                     print(f"[img2imgStreamDiffusionXL.py] Setting adapters with weights: {adapter_weights}")
                     target_pipe.set_adapters(adapter_names=adapter_names, adapter_weights=adapter_weights)
 
-                    print(f"[img2imgStreamDiffusionXL.py] Fusing LoRAs with scale 1.0")
-                    target_pipe.fuse_lora(adapter_names=adapter_names, lora_scale=1.0)
+                    # Get lora_scale from config (defaults to 1.0)
+                    lora_scale = lora_config.DEFAULT_LORA_SCALE if lora_config is not None else 1.0
+                    print(f"[img2imgStreamDiffusionXL.py] Fusing LoRAs with scale {lora_scale}")
+                    target_pipe.fuse_lora(adapter_names=adapter_names, lora_scale=lora_scale)
 
                     # Unload after fusing to free memory
                     target_pipe.unload_lora_weights()
                     print(f"[img2imgStreamDiffusionXL.py] LoRAs loaded and fused successfully")
+
+                    # Check for textual inversion embeddings alongside LoRAs
+                    for i, lora_name in enumerate(selected_loras):
+                        lora_path = lora_models_dict[lora_name]
+
+                        # Resolve path relative to server directory if not absolute
+                        if not os.path.isabs(lora_path):
+                            server_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                            lora_path = os.path.join(server_dir, lora_path)
+
+                        # Check if lora_path is a directory or file
+                        if os.path.isdir(lora_path):
+                            # Look for embedding files in the directory
+                            embedding_files = glob.glob(os.path.join(lora_path, "*embeddings.safetensors"))
+                            special_params_file = os.path.join(lora_path, "special_params.json")
+                        else:
+                            # Look in the same directory as the LoRA file
+                            lora_dir = os.path.dirname(lora_path)
+                            lora_basename = os.path.splitext(os.path.basename(lora_path))[0]
+                            embedding_files = glob.glob(os.path.join(lora_dir, f"{lora_basename}_embeddings.safetensors"))
+                            if not embedding_files:
+                                # Also check for generic embedding files
+                                embedding_files = glob.glob(os.path.join(lora_dir, "*embeddings.safetensors"))
+                            special_params_file = os.path.join(lora_dir, "special_params.json")
+
+                        if embedding_files:
+                            embedding_path = embedding_files[0]
+                            print(f"[img2imgStreamDiffusionXL.py] Found textual inversion embedding: {embedding_path}")
+
+                            # Try to read token string from special_params.json
+                            token_str = "<s0><s1><s2>"  # Default
+                            if os.path.exists(special_params_file):
+                                try:
+                                    import json
+                                    with open(special_params_file, 'r') as f:
+                                        special_params = json.load(f)
+                                        token_str = special_params.get('TOK', token_str)
+                                    print(f"[img2imgStreamDiffusionXL.py] Loaded token string from special_params.json: {token_str}")
+                                except Exception as e:
+                                    print(f"[img2imgStreamDiffusionXL.py] Warning: Could not read special_params.json: {e}")
+
+                            # Load and fuse the embeddings
+                            self._load_and_fuse_embeddings(target_pipe, embedding_path, token_str=token_str)
+                            print(f"[img2imgStreamDiffusionXL.py] Textual inversion embeddings fused for LoRA: {lora_name}")
 
             # Now build TensorRT engine for this LoRA-fused UNet
             # For idx==0, keep it loaded. For idx>0, build and unload
@@ -462,12 +572,17 @@ class Pipeline:
         self.shared_wrapper.cleanup_pytorch_models_after_tensorrt()
 
         # Prepare the shared wrapper with default prompt
+        default_seed = 4402026899276587
         self.shared_wrapper.prepare(
             prompt=default_prompt,
             negative_prompt=default_negative_prompt,
             num_inference_steps=50,
             guidance_scale=1.0,
         )
+
+        # Set the default seed separately
+        self.shared_wrapper.update_stream_params(seed=default_seed)
+        print(f"[img2imgStreamDiffusionXL.py] Initialized with default seed: {default_seed}")
 
         # Initialize PromptTravel for shared wrapper
         self.shared_wrapper.prompt_travel = PromptTravel(
@@ -487,6 +602,9 @@ class Pipeline:
         self.current_pipe_idx = 0
         self.last_prompt = default_prompt
         self.last_controlnet_scale = None
+        self.last_seed = None
+        self.last_target_seed = None
+        self.last_latent_travel_settings = None
 
         # Cache for prompt travel embeddings (per pipe)
         self.prompt_embeds_cache = {}  # {pipe_idx: {prompt: (embeds, pooled)}}
@@ -494,6 +612,99 @@ class Pipeline:
         # Initialize cache for each pipe
         for idx in range(len(self.pipes)):
             self.prompt_embeds_cache[idx] = {}
+
+    def _load_and_fuse_embeddings(self, pipe, embedding_path, token_str="<s0><s1><s2>"):
+        """
+        Load textual inversion embeddings and fuse them into text encoders.
+
+        Args:
+            pipe: The diffusion pipeline with text_encoder and text_encoder_2
+            embedding_path: Path to the .safetensors file containing embeddings
+            token_str: The token string (e.g., "<s0><s1><s2>")
+        """
+        import re
+
+        # Load embedding tensors
+        print(f"[img2imgStreamDiffusionXL.py] Loading embeddings from {embedding_path}")
+        embedding_data = load_file(embedding_path)
+
+        # Inspect the embedding data
+        print(f"[img2imgStreamDiffusionXL.py] Embedding keys: {list(embedding_data.keys())}")
+        for key in embedding_data.keys():
+            print(f"[img2imgStreamDiffusionXL.py]   {key}: shape={embedding_data[key].shape}, dtype={embedding_data[key].dtype}")
+
+        # Parse tokens from token_str
+        # Expecting format like "<s0><s1><s2>"
+        tokens = re.findall(r'<s\d+>', token_str)
+        print(f"[img2imgStreamDiffusionXL.py] Parsed tokens: {tokens}")
+
+        num_tokens = len(tokens)
+
+        # Verify embedding shapes match expected number of tokens
+        clip_l_embeds = embedding_data.get('clip_l')
+        clip_g_embeds = embedding_data.get('clip_g')
+
+        if clip_l_embeds is None or clip_g_embeds is None:
+            print(f"[img2imgStreamDiffusionXL.py] ERROR: Missing clip_l or clip_g embeddings!")
+            return
+
+        if clip_l_embeds.shape[0] != num_tokens or clip_g_embeds.shape[0] != num_tokens:
+            print(f"[img2imgStreamDiffusionXL.py] WARNING: Embedding shape mismatch!")
+            print(f"[img2imgStreamDiffusionXL.py]   Expected {num_tokens} tokens, got clip_l={clip_l_embeds.shape[0]}, clip_g={clip_g_embeds.shape[0]}")
+
+        # Add tokens to tokenizers and resize embeddings
+        # Text Encoder 1 (CLIP-L)
+        tokenizer_1 = pipe.tokenizer
+        text_encoder_1 = pipe.text_encoder
+
+        # Text Encoder 2 (CLIP-G)
+        tokenizer_2 = pipe.tokenizer_2
+        text_encoder_2 = pipe.text_encoder_2
+
+        print(f"[img2imgStreamDiffusionXL.py] Adding {num_tokens} tokens to tokenizers")
+
+        # Add tokens to tokenizer 1 (CLIP-L)
+        num_added_tokens_1 = tokenizer_1.add_tokens(tokens)
+        print(f"[img2imgStreamDiffusionXL.py] Added {num_added_tokens_1} new tokens to tokenizer_1")
+
+        # Resize token embeddings for text_encoder_1
+        text_encoder_1.resize_token_embeddings(len(tokenizer_1))
+
+        # Get token IDs and set embeddings
+        token_ids_1 = tokenizer_1.convert_tokens_to_ids(tokens)
+        print(f"[img2imgStreamDiffusionXL.py] Token IDs in tokenizer_1: {token_ids_1}")
+
+        # Set the embedding weights for each token in text_encoder_1
+        with torch.no_grad():
+            for i, token_id in enumerate(token_ids_1):
+                text_encoder_1.get_input_embeddings().weight[token_id] = clip_l_embeds[i].to(
+                    device=text_encoder_1.device,
+                    dtype=text_encoder_1.dtype
+                )
+        print(f"[img2imgStreamDiffusionXL.py] Set {len(token_ids_1)} embeddings in text_encoder_1")
+
+        # Add tokens to tokenizer 2 (CLIP-G)
+        num_added_tokens_2 = tokenizer_2.add_tokens(tokens)
+        print(f"[img2imgStreamDiffusionXL.py] Added {num_added_tokens_2} new tokens to tokenizer_2")
+
+        # Resize token embeddings for text_encoder_2
+        text_encoder_2.resize_token_embeddings(len(tokenizer_2))
+
+        # Get token IDs and set embeddings
+        token_ids_2 = tokenizer_2.convert_tokens_to_ids(tokens)
+        print(f"[img2imgStreamDiffusionXL.py] Token IDs in tokenizer_2: {token_ids_2}")
+
+        # Set the embedding weights for each token in text_encoder_2
+        with torch.no_grad():
+            for i, token_id in enumerate(token_ids_2):
+                text_encoder_2.get_input_embeddings().weight[token_id] = clip_g_embeds[i].to(
+                    device=text_encoder_2.device,
+                    dtype=text_encoder_2.dtype
+                )
+        print(f"[img2imgStreamDiffusionXL.py] Set {len(token_ids_2)} embeddings in text_encoder_2")
+
+        print(f"[img2imgStreamDiffusionXL.py] Successfully fused textual inversion embeddings!")
+        print(f"[img2imgStreamDiffusionXL.py] You can now use tokens: {token_str} in your prompts")
 
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
         # Get pipe_index from params, default to 0 if not provided
@@ -669,6 +880,76 @@ class Pipeline:
                 self.last_prompt = prompt
 
             print(f"[img2imgStreamDiffusion.py] NOTE: No prompt travel used, prepared prompt: {prompt}")
+
+        # Handle seed and latent travel
+        use_latent_travel = getattr(params, 'use_latent_travel', False)
+        seed = getattr(params, 'seed', 4402026899276587)
+        target_seed = getattr(params, 'target_seed', None)
+        if target_seed is None:
+            target_seed = seed + 1
+
+        latent_travel_factor = getattr(params, 'latent_travel_factor', 0.5)
+        latent_travel_method = getattr(params, 'latent_travel_method', 'slerp')
+
+        # Create settings tuple to check if anything changed
+        current_latent_travel_settings = (use_latent_travel, seed, target_seed, latent_travel_factor, latent_travel_method)
+
+        # DEBUG: Always log to see if we're checking seeds every frame
+        print(f"[img2imgStreamDiffusionXL.py] Frame seed check - use_latent_travel: {use_latent_travel}, seed: {seed}, factor: {latent_travel_factor:.3f}")
+        print(f"[img2imgStreamDiffusionXL.py] Settings changed: {current_latent_travel_settings != self.last_latent_travel_settings}")
+
+        # Check current init_noise to see if it's changing
+        if hasattr(stream_wrapper.stream, 'init_noise') and stream_wrapper.stream.init_noise is not None:
+            noise_mean = stream_wrapper.stream.init_noise.mean().item()
+            noise_std = stream_wrapper.stream.init_noise.std().item()
+            print(f"[img2imgStreamDiffusionXL.py] Current init_noise stats - mean: {noise_mean:.6f}, std: {noise_std:.6f}")
+
+        # IMPORTANT: Always update if latent travel is enabled, because the factor might be animating
+        # Only skip update if disabled and settings haven't changed
+        should_update = use_latent_travel or (current_latent_travel_settings != self.last_latent_travel_settings)
+
+        if should_update:
+            print(f"[img2imgStreamDiffusionXL.py] Updating seed/latent travel settings")
+            print(f"[img2imgStreamDiffusionXL.py]   use_latent_travel: {use_latent_travel}")
+            print(f"[img2imgStreamDiffusionXL.py]   seed: {seed}, target_seed: {target_seed}")
+            print(f"[img2imgStreamDiffusionXL.py]   latent_travel_factor: {latent_travel_factor}, method: {latent_travel_method}")
+
+            if use_latent_travel:
+                # Use seed blending with StreamDiffusion's built-in seed_list
+                # Weight calculation: source gets (1 - factor), target gets factor
+                source_weight = 1.0 - latent_travel_factor
+                target_weight = latent_travel_factor
+
+                seed_list = [
+                    (seed, source_weight),
+                    (target_seed, target_weight)
+                ]
+
+                print(f"[img2imgStreamDiffusionXL.py] Applying seed blending: seed_list={seed_list}, method={latent_travel_method}")
+                print(f"[img2imgStreamDiffusionXL.py] This will blend {source_weight*100:.1f}% of seed {seed} with {target_weight*100:.1f}% of seed {target_seed}")
+
+                # Store noise BEFORE update
+                noise_before = stream_wrapper.stream.init_noise.clone() if hasattr(stream_wrapper.stream, 'init_noise') else None
+
+                # Update with seed blending
+                stream_wrapper.update_stream_params(
+                    seed_list=seed_list,
+                    seed_interpolation_method=latent_travel_method
+                )
+
+                # Check if noise actually changed
+                if noise_before is not None and hasattr(stream_wrapper.stream, 'init_noise'):
+                    noise_after = stream_wrapper.stream.init_noise
+                    noise_diff = (noise_after - noise_before).abs().mean().item()
+                    print(f"[img2imgStreamDiffusionXL.py] Noise changed by: {noise_diff:.6f} (should be >0 if blending worked)")
+                    if noise_diff < 1e-6:
+                        print(f"[img2imgStreamDiffusionXL.py] WARNING: Noise didn't change! Seed blending may not be working.")
+            else:
+                # Just use fixed seed without blending
+                print(f"[img2imgStreamDiffusionXL.py] Using fixed seed: {seed}")
+                stream_wrapper.update_stream_params(seed=seed)
+
+            self.last_latent_travel_settings = current_latent_travel_settings
 
         # Update ControlNet control image (use input image for structural guidance)
         # ControlNet is statically enabled for this pipeline

@@ -3,9 +3,9 @@ Configuration settings for the Glitch Machine Engine.
 """
 
 # Display and camera dimensions
-DISPLAY_WIDTH = 512#480
-DISPLAY_HEIGHT = 512#480
-DISPLAY_SCALE = 2.0 #4.0
+DISPLAY_WIDTH = 1024#480
+DISPLAY_HEIGHT = 768#480
+DISPLAY_SCALE = 1.0 #4.0
 CAMERA_DEVICE_INDEX = 0 #0 #42
 MIC_DEVICE_INDEX = 0 #16
 MAX_CAMERA_INDEX = 50  # Maximum camera index to check (supports virtual cameras like /dev/video42)
@@ -32,4 +32,4 @@ BLACK_FRAME_DISABLE_TIMEOUT = 0 #75
 # Automatic curation index update settings
 CURATION_INDEX_AUTO_UPDATE = False  # Enable automatic curation index updates
 CURATION_INDEX_UPDATE_TIME = 120  # Update interval in seconds (1 hour = 3600 seconds)
-CURATION_INDEX_MAX = 23#Maximum curation index value (0 to this value)
+CURATION_INDEX_MAX = 100#Maximum curation index value (0 to this value)

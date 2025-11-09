@@ -30,7 +30,7 @@ class LoraSoundController:
                  mel_mode=True,  # Use mel-frequency scaling for perceptual frequency analysis (default)
                  sample_rate=44100,  # Sample rate for mel conversion
                  max_freq=10000,  # Maximum frequency for mel conversion
-                 min_freq=201,  # Minimum frequency for mel conversion
+                 min_freq=60,  # Minimum frequency for mel conversion (start at bass range)
                  use_decibel_scale=True,  # Convert mel bins to decibel scale for perceptual analysis
                  frequency_bin_boost_factors=None,  # Array of boost factors for mel bins [bass, low_mids, mids, high_mids, treble]
                  smoothed_mode=True):  # Enable smoothed pipe index transitions (max ±1 change per frame)

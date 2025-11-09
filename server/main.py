@@ -145,7 +145,34 @@ class App:
                 loop_prompts=getattr(self.args, 'loop_prompts', True),
                 prompts_file_names=prompts_file_names  # Use prompts_file_names array from curation config
             )
-        
+
+            # Initialize seed travel scheduler if enabled
+            self.use_seed_travel = getattr(self.args, 'use_seed_travel', False)
+            if self.use_seed_travel:
+                from modules.prompt_scheduler.seed_travel_scheduler import SeedTravelScheduler
+                self.seed_travel_scheduler = SeedTravelScheduler(
+                    num_seeds=getattr(self.args, 'seed_travel_num_seeds', 4),
+                    factor_increment=getattr(self.args, 'seed_travel_factor_increment', 0.025),
+                    enabled=True,
+                    match_prompt_travel=getattr(self.args, 'seed_travel_match_prompt_travel', False),
+                    logging_enabled=getattr(self.args, 'debug', False)
+                )
+                print(f"[main.py] Seed travel scheduler initialized with {self.seed_travel_scheduler.num_seeds} seeds")
+                print(f"[main.py] Seed travel match_prompt_travel: {self.seed_travel_scheduler.match_prompt_travel}")
+            else:
+                self.seed_travel_scheduler = None
+                print("[main.py] Seed travel scheduler disabled")
+
+        # Initialize prompt index interpolation state tracking
+        self.prompt_index_state = {
+            'current_index': None,
+            'previous_index': None,
+            'current_prompt': None,
+            'previous_prompt': None,
+            'transition_start_time': None,
+            'transition_duration': 0.5,  # Default duration in seconds
+        }
+
         # Initialize acid processors
         self.use_acid_processor = getattr(self.args, 'use_acid_processor', False)
         self.use_lora_sound_control = getattr(self.args, 'use_lora_sound_control', False)
@@ -607,19 +634,38 @@ class App:
 
                                     print(f"[main.py] Using continuous scheduler factor: {scheduler_factor:.3f}")
                                     print(f"[main.py] Using scheduled seed: {scheduler_seed}")
-                                    # Note: prompt_travel_factor will be set later based on interpolation weight
-                                    # For now, set latent_travel_factor to the fractional part of scheduler_factor
-                                    latent_weight = scheduler_factor - int(scheduler_factor)
-                                    setattr(params, 'latent_travel_factor', latent_weight)
 
-                                    # Use the scheduled seeds if available
-                                    if scheduler_seed is not None:
-                                        # Get both current and next seeds for smooth transition
-                                        current_seed, next_seed = self.prompt_travel_scheduler.get_seeds()
+                                    # Handle seed travel separately if enabled
+                                    if hasattr(self, 'seed_travel_scheduler') and self.seed_travel_scheduler is not None:
+                                        # Use dedicated seed travel scheduler
+                                        if self.seed_travel_scheduler.match_prompt_travel:
+                                            # Match prompt travel - use scheduler_factor
+                                            current_seed, next_seed, seed_interpolation_factor = self.seed_travel_scheduler.update(
+                                                external_factor=scheduler_factor
+                                            )
+                                        else:
+                                            # Independent seed travel
+                                            current_seed, next_seed, seed_interpolation_factor = self.seed_travel_scheduler.update()
+
                                         setattr(params, 'seed', current_seed)
                                         setattr(params, 'target_seed', next_seed)
-                                        if self.args.debug:
-                                            print(f"[main.py] Using scheduled seeds: current={current_seed}, next={next_seed}")
+                                        setattr(params, 'latent_travel_factor', seed_interpolation_factor)
+                                        print(f"[main.py] Seed travel: seed {current_seed} → {next_seed}, factor={seed_interpolation_factor:.3f}")
+                                    else:
+                                        # Old behavior: use prompt scheduler for seeds
+                                        # Note: prompt_travel_factor will be set later based on interpolation weight
+                                        # For now, set latent_travel_factor to the fractional part of scheduler_factor
+                                        latent_weight = scheduler_factor - int(scheduler_factor)
+                                        setattr(params, 'latent_travel_factor', latent_weight)
+
+                                        # Use the scheduled seeds if available
+                                        if scheduler_seed is not None:
+                                            # Get both current and next seeds for smooth transition
+                                            current_seed, next_seed = self.prompt_travel_scheduler.get_seeds()
+                                            setattr(params, 'seed', current_seed)
+                                            setattr(params, 'target_seed', next_seed)
+                                            if self.args.debug:
+                                                print(f"[main.py] Using scheduled seeds: current={current_seed}, next={next_seed}")
 
                                     print(f"[main.py] Prompt scheduler enabled: {self.prompt_travel_scheduler.use_prompt_scheduler}")
                                     
@@ -639,14 +685,83 @@ class App:
                                         else:
                                             # Check if prompt indexing is enabled
                                             if getattr(params, 'use_prompt_indexing', False):
-                                                # Use pipe index to select prompts
+                                                # Use pipe index to select prompts with smooth interpolation
                                                 prompt_index = getattr(params, 'prompt_index', 0)
+                                                interpolation_duration = getattr(params, 'prompt_index_interpolation_duration', 0.5)
+
+                                                # Get the new indexed prompt
                                                 indexed_prompt = self.prompt_travel_scheduler.get_prompt_by_index(prompt_index)
+
                                                 if indexed_prompt is not None:
-                                                    setattr(params, 'prompt', indexed_prompt)
-                                                    setattr(params, 'target_prompt', indexed_prompt)  # Same prompt for both
-                                                    if self.args.debug:
-                                                        print(f"[main.py] Using indexed prompt for prompt index {prompt_index}: {indexed_prompt}")
+                                                    current_time = time.time()
+
+                                                    # Check if prompt index has changed
+                                                    if self.prompt_index_state['current_index'] != prompt_index:
+                                                        # Prompt index changed - start new interpolation
+                                                        # CHAIN MODE: If we're mid-transition, compute current interpolated state
+                                                        # and use that as the new starting point
+                                                        if (self.prompt_index_state['transition_start_time'] is not None and
+                                                            self.prompt_index_state['previous_prompt'] is not None):
+                                                            # Calculate current progress of ongoing transition
+                                                            elapsed = current_time - self.prompt_index_state['transition_start_time']
+                                                            current_progress = min(elapsed / self.prompt_index_state['transition_duration'], 1.0)
+
+                                                            if current_progress < 1.0:
+                                                                # We're mid-transition - use current interpolated state as new source
+                                                                # For text prompts, we can't literally interpolate the strings,
+                                                                # but we track that we're starting from the "previous" prompt at current_progress
+                                                                # The embeddings will be interpolated in the pipeline
+                                                                if self.args.debug:
+                                                                    print(f"[main.py] CHAIN MODE: Mid-transition detected (progress: {current_progress*100:.1f}%)")
+                                                                    print(f"[main.py] Chaining: keeping previous prompt as source")
+                                                            else:
+                                                                # Previous transition completed, use its target as new source
+                                                                self.prompt_index_state['previous_prompt'] = self.prompt_index_state['current_prompt']
+                                                        else:
+                                                            # First transition or previous completed
+                                                            self.prompt_index_state['previous_prompt'] = self.prompt_index_state['current_prompt']
+
+                                                        self.prompt_index_state['previous_index'] = self.prompt_index_state['current_index']
+                                                        self.prompt_index_state['current_index'] = prompt_index
+                                                        self.prompt_index_state['current_prompt'] = indexed_prompt
+                                                        self.prompt_index_state['transition_start_time'] = current_time
+                                                        self.prompt_index_state['transition_duration'] = interpolation_duration
+
+                                                        if self.args.debug:
+                                                            print(f"[main.py] Prompt index changed: {self.prompt_index_state['previous_index']} -> {prompt_index}")
+                                                            print(f"[main.py] Starting {interpolation_duration}s interpolation")
+
+                                                    # Calculate interpolation factor based on elapsed time
+                                                    if (self.prompt_index_state['transition_start_time'] is not None and
+                                                        self.prompt_index_state['previous_prompt'] is not None):
+                                                        elapsed = current_time - self.prompt_index_state['transition_start_time']
+                                                        progress = min(elapsed / self.prompt_index_state['transition_duration'], 1.0)
+
+                                                        if progress < 1.0:
+                                                            # Still interpolating
+                                                            setattr(params, 'prompt', self.prompt_index_state['previous_prompt'])
+                                                            setattr(params, 'target_prompt', self.prompt_index_state['current_prompt'])
+
+                                                            # Enable prompt travel and set interpolation progress
+                                                            setattr(params, 'use_prompt_travel', True)
+                                                            setattr(params, 'prompt_travel_factor', progress)
+
+                                                            if self.args.debug:
+                                                                print(f"[main.py] Interpolating prompts: {progress*100:.1f}% complete")
+                                                                print(f"[main.py]   from: {self.prompt_index_state['previous_prompt'][:50]}...")
+                                                                print(f"[main.py]   to:   {self.prompt_index_state['current_prompt'][:50]}...")
+                                                        else:
+                                                            # Interpolation complete - use target prompt
+                                                            setattr(params, 'prompt', indexed_prompt)
+                                                            setattr(params, 'target_prompt', indexed_prompt)
+                                                            if self.args.debug:
+                                                                print(f"[main.py] Using indexed prompt {prompt_index}: {indexed_prompt[:50]}...")
+                                                    else:
+                                                        # First time or no previous prompt - use directly
+                                                        self.prompt_index_state['current_index'] = prompt_index
+                                                        self.prompt_index_state['current_prompt'] = indexed_prompt
+                                                        setattr(params, 'prompt', indexed_prompt)
+                                                        setattr(params, 'target_prompt', indexed_prompt)
                                             else:
                                                 # Use continuous factor-based prompt scheduling with multi-file weighted blending
                                                 # scheduler_factor is a continuous value (e.g., 2.3 means between prompts[2] and prompts[3])
@@ -730,7 +845,25 @@ class App:
                                 # Continue without prompt travel embeddings
                             if self.args.debug:
                                 print(f"Time to process prompt travel: {time.time() - prompt_travel_start:.4f}s")
-                        
+
+                        # Handle seed travel independently if enabled and not already handled by prompt travel
+                        if hasattr(self, 'seed_travel_scheduler') and self.seed_travel_scheduler is not None:
+                            # Check if seed travel was already handled inside prompt travel block
+                            seed_already_set = hasattr(params, 'seed') and \
+                                              self.use_prompt_travel and \
+                                              getattr(params, 'use_prompt_travel', False) and \
+                                              hasattr(self, 'prompt_travel_scheduler') and \
+                                              self.prompt_travel_scheduler.enabled
+
+                            if not seed_already_set:
+                                # Seed travel is independent - run it
+                                current_seed, next_seed, seed_interpolation_factor = self.seed_travel_scheduler.update()
+                                setattr(params, 'seed', current_seed)
+                                setattr(params, 'target_seed', next_seed)
+                                setattr(params, 'latent_travel_factor', seed_interpolation_factor)
+                                setattr(params, 'use_latent_travel', True)
+                                print(f"[main.py] Independent seed travel: seed {current_seed} → {next_seed}, factor={seed_interpolation_factor:.3f}")
+
                         if info.input_mode == "image":
                             receive_image_start = time.time()
                             image_data = await self.conn_manager.receive_bytes(user_id)

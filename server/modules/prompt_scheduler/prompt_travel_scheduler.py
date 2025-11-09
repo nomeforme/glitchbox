@@ -165,18 +165,36 @@ class PromptTravelScheduler:
         if not self.enabled:
             return self.factor_value, self.current_seed if self.seed_enabled else None
 
-        print(f"[PromptTravelScheduler.update] ENTER: factor={self.factor_value:.3f}, max_factor={self.max_factor}, increment={self.factor_increment}")
+        print(f"[PromptTravelScheduler.update] ENTER: factor={self.factor_value:.3f}, direction={self.direction}, oscillate={self.oscillate}")
 
-        # Simple linear increment
         old_factor = self.factor_value
-        self.factor_value += self.factor_increment
 
-        # Wrap around at max_factor
-        if self.factor_value >= self.max_factor:
-            self.factor_value = self.min_factor + (self.factor_value - self.max_factor)
-            print(f"[PromptTravelScheduler.update] WRAPPED: {old_factor:.3f} -> {self.factor_value:.3f} (hit max={self.max_factor})")
+        if self.oscillate:
+            # Oscillate mode: go 0 → 1 → 0 by reversing direction
+            self.factor_value += self.factor_increment * self.direction
+
+            # Check if we hit max and need to reverse
+            if self.factor_value >= self.max_factor:
+                self.factor_value = self.max_factor
+                self.direction = -1
+                print(f"[PromptTravelScheduler.update] HIT MAX: Reversing direction to go back down")
+            # Check if we hit min and need to reverse
+            elif self.factor_value <= self.min_factor:
+                self.factor_value = self.min_factor
+                self.direction = 1
+                print(f"[PromptTravelScheduler.update] HIT MIN: Reversing direction to go back up")
+
+            print(f"[PromptTravelScheduler.update] OSCILLATE: {old_factor:.3f} -> {self.factor_value:.3f} (direction={self.direction})")
         else:
-            print(f"[PromptTravelScheduler.update] INCREMENT: {old_factor:.3f} -> {self.factor_value:.3f} (max={self.max_factor})")
+            # Wrap mode: go 0 → 1, jump back to 0
+            self.factor_value += self.factor_increment
+
+            # Wrap around at max_factor
+            if self.factor_value >= self.max_factor:
+                self.factor_value = self.min_factor + (self.factor_value - self.max_factor)
+                print(f"[PromptTravelScheduler.update] WRAPPED: {old_factor:.3f} -> {self.factor_value:.3f} (hit max={self.max_factor})")
+            else:
+                print(f"[PromptTravelScheduler.update] INCREMENT: {old_factor:.3f} -> {self.factor_value:.3f} (max={self.max_factor})")
 
         if self.logging_enabled:
             self.logger.info(f"Factor value: {self.factor_value:.2f}")
