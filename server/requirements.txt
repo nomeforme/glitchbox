@@ -38,3 +38,9 @@ xformers>=0.0.30
 git+https://github.com/lunarring/lunar_tools.git
 
 # pip install -v -U git+https://github.com/chengzeyi/stable-fast.git@main#egg=stable-fast --no-build-isolation
+
+# Add aiortc for WebRTC
+aiortc
+
+# Add python-multipart for handling multipart form data
+python-multipart

@@ -6,7 +6,7 @@ from diffusers import (
 )
 from compel import Compel
 import torch
-from pipelines.utils.canny_gpu import SobelOperator
+import os
 import numpy as np
 
 try:
@@ -19,23 +19,26 @@ from pydantic import BaseModel, Field
 from PIL import Image
 import math
 
+# Import DepthAnythingTRT
+from modules.depth_anything.depth_anything_trt import DepthAnythingTRT
+
 #
 taesd_model = "madebyollin/taesd"
-controlnet_model = "thibaud/controlnet-sd21-canny-diffusers"
+controlnet_model = "thibaud/controlnet-sd21-depth-diffusers"
 base_model = "stabilityai/sd-turbo"
 
 default_prompt = "Portrait of The Joker halloween costume, face painting, with , glare pose, detailed, intricate, full of colour, cinematic lighting, trending on artstation, 8k, hyperrealistic, focused, extreme details, unreal engine 5 cinematic, masterpiece"
 default_target_prompt = "a blue dog"
 page_content = """
-<h1 class="text-3xl font-bold">Real-Time SDv2.1 Turbo</h1>
-<h3 class="text-xl font-bold">Image-to-Image ControlNet</h3>
+<h1 class="text-3xl font-bold">Real-Time SD Turbo with Depth Control</h1>
+<h3 class="text-xl font-bold">Image-to-Image Depth ControlNet</h3>
 <p class="text-sm">
     This demo showcases
     <a
     href="https://huggingface.co/stabilityai/sd-turbo"
     target="_blank"
     class="text-blue-500 underline hover:no-underline">SD Turbo</a>
-Image to Image pipeline using
+Image to Image pipeline using a Depth ControlNet and
     <a
     href="https://huggingface.co/docs/diffusers/main/en/using-diffusers/sdxl_turbo"
     target="_blank"
@@ -54,9 +57,9 @@ Image to Image pipeline using
 
 class Pipeline:
     class Info(BaseModel):
-        name: str = "controlnet+sd15Turbo"
-        title: str = "SDv1.5 Turbo + Controlnet"
-        description: str = "Generates an image from a text prompt"
+        name: str = "controlnet_depth+sdTurbo"
+        title: str = "SD Turbo + Depth ControlNet"
+        description: str = "Generates an image from a text prompt and webcam input using Depth ControlNet"
         input_mode: str = "image"
         page_content: str = page_content
 
@@ -125,10 +128,10 @@ class Pipeline:
             512, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
         )
         height: int = Field(
-            512, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
+            898, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
         )
         guidance_scale: float = Field(
-            1.21,
+            1,
             min=0,
             max=10,
             step=0.001,
@@ -138,7 +141,7 @@ class Pipeline:
             id="guidance_scale",
         )
         strength: float = Field(
-            0.8,
+            1,
             min=0.10,
             max=1.0,
             step=0.001,
@@ -148,7 +151,7 @@ class Pipeline:
             id="strength",
         )
         controlnet_scale: float = Field(
-            0.325,
+            0.75,
             min=0,
             max=1.0,
             step=0.001,
@@ -177,47 +180,20 @@ class Pipeline:
             hide=True,
             id="controlnet_end",
         )
-        canny_low_threshold: float = Field(
-            0.31,
-            min=0,
-            max=1.0,
-            step=0.001,
-            title="Canny Low Threshold",
-            field="range",
-            hide=True,
-            id="canny_low_threshold",
-        )
-        canny_high_threshold: float = Field(
-            0.125,
-            min=0,
-            max=1.0,
-            step=0.001,
-            title="Canny High Threshold",
-            field="range",
-            hide=True,
-            id="canny_high_threshold",
-        )
-        debug_canny: bool = Field(
-            False,
-            title="Debug Canny",
-            field="checkbox",
-            hide=True,
-            id="debug_canny",
-        )
 
     def __init__(self, args: Args, device: torch.device, torch_dtype: torch.dtype):
-        controlnet_canny = ControlNetModel.from_pretrained(
+        controlnet_depth = ControlNetModel.from_pretrained(
             controlnet_model, torch_dtype=torch_dtype
         )
         self.pipes = {}
 
         self.pipe = StableDiffusionControlNetImg2ImgPipeline.from_pretrained(
             base_model,
-            controlnet=controlnet_canny,
+            controlnet=controlnet_depth,
             safety_checker=None,
             torch_dtype=torch_dtype,
         )
-        self.pipe.load_lora_weights("server/loras/flowers-000022.safetensors")
+        #self.pipe.load_lora_weights("server/loras/flowers-000022.safetensors")
         if args.taesd:
             self.pipe.vae = AutoencoderTiny.from_pretrained(
                 taesd_model, torch_dtype=torch_dtype, use_safetensors=True
@@ -244,8 +220,6 @@ class Pipeline:
             self.pipe.vae.encoder = oneflow_compile(self.pipe.vae.encoder)
             self.pipe.vae.decoder = oneflow_compile(self.pipe.vae.decoder)
             self.pipe.controlnet = oneflow_compile(self.pipe.controlnet)
-
-        self.canny_torch = SobelOperator(device=device)
 
         self.pipe.scheduler = LCMScheduler.from_config(self.pipe.scheduler.config)
         self.pipe.set_progress_bar_config(disable=True)
@@ -287,6 +261,27 @@ class Pipeline:
             tokenizer=self.pipe.tokenizer,
         )
 
+        # Initialize Depth Estimator
+        self.device = device
+        depth_engine_path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "..", # Go up to server directory
+            "modules", "depth_anything", "models", "depth_anything_v2_vits.trt"
+        )
+        if not os.path.exists(depth_engine_path):
+            print(f"WARNING: Depth engine file not found at {depth_engine_path}. Depth estimation will not work.")
+            self.depth_estimator = None
+        else:
+            try:
+                self.depth_estimator = DepthAnythingTRT(
+                    engine_path=depth_engine_path,
+                    device=self.device 
+                )
+                print(f"DepthAnythingTRT estimator initialized with engine: {depth_engine_path}")
+            except Exception as e:
+                print(f"Error initializing DepthAnythingTRT: {e}")
+                self.depth_estimator = None
+
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
         generator = torch.manual_seed(params.seed)
         prompt = params.prompt
@@ -313,9 +308,25 @@ class Pipeline:
             )
             prompt = None
         
-        control_image = self.canny_torch(
-            params.image, params.canny_low_threshold, params.canny_high_threshold
-        )
+        # Generate depth map instead of Canny edges
+        control_image_pil = None
+        if self.depth_estimator and params.image:
+            try:
+                # params.image is the webcam input PIL Image
+                control_image_pil = self.depth_estimator.get_depth(params.image)
+                if control_image_pil is None: # Should not happen if get_depth is robust
+                    print("WARNING: Depth estimator returned None. Using a blank image.")
+                    control_image_pil = Image.new("L", (params.width, params.height), 128) # Grayscale, middle depth
+            except Exception as e:
+                print(f"Error during depth estimation: {e}")
+                control_image_pil = Image.new("L", (params.width, params.height), 128)
+        elif params.image: # Depth estimator not loaded, but we have an input image
+            print("WARNING: Depth estimator not available. Using a blank image as control_image.")
+            control_image_pil = Image.new("L", (params.width, params.height), 128)
+        else: # No input image
+            print("WARNING: No input image provided for depth estimation. Using a blank image.")
+            # Use pipeline's default width/height if params.image is None
+            control_image_pil = Image.new("L", (params.width, params.height), 128)
 
         # Generate latents for source and target if latent travel is enabled
         latents = None
@@ -360,11 +371,6 @@ class Pipeline:
                 generator=target_generator,
             )
             
-            # # If using classifier free guidance, properly batch the latents
-            # if params.guidance_scale > 1.0:
-            #     source_latents = torch.cat([source_latents] * 2)
-            #     target_latents = torch.cat([target_latents] * 2)
-            
             # Interpolate between latents using the specified method
             if hasattr(self.pipe, "prompt_travel") and self.pipe.prompt_travel is not None:
                 latents = self.pipe.prompt_travel.interpolate_latents(
@@ -374,28 +380,6 @@ class Pipeline:
                     getattr(params, "latent_travel_method", "slerp")
                 )
 
-        ######################################333
-
-        # latents = torch.randn(
-        #     (2, self.pipe.unet.config.in_channels, 512 // 8, 512 // 8),
-        #     generator=target_generator,
-        #     device=self.pipe.device,
-        #     dtype=prompt_embeds.dtype,
-        # )
-
-        # control_image = self.pipe.prepare_control_image(
-        #     image=control_image,
-        #     width=params.width,
-        #     height=params.height,
-        #     batch_size=1,
-        #     num_images_per_prompt=1,
-        #     device=self.pipe.device,
-        #     dtype=prompt_embeds.dtype,
-        # )
-
-        #print("latents", latents)   
-        #print("latents shape", latents.shape)
-
         steps = params.steps
         strength = params.strength
         if int(steps * strength) < 1:
@@ -403,7 +387,7 @@ class Pipeline:
 
         results = self.pipe(
             image=params.image,
-            control_image=control_image,
+            control_image=control_image_pil,
             prompt=prompt,
             prompt_embeds=prompt_embeds,
             negative_prompt_embeds=negative_prompt_embeds,
@@ -420,11 +404,5 @@ class Pipeline:
             latents=None,
         )
         result_image = results.images[0]
-        if params.debug_canny:
-            # paste control_image on top of result_image
-            w0, h0 = (200, 200)
-            control_image = control_image.resize((w0, h0))
-            w1, h1 = result_image.size
-            result_image.paste(control_image, (w1 - w0, h1 - h0))
 
         return result_image

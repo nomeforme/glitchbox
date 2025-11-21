@@ -100,8 +100,8 @@ class EmbeddingsServiceManager:
                 # Store the results in the cache
                 async with self.cache_lock:
                     self.embeddings_cache[user_id] = {
-                        "prompt_embeds": prompt_embeds.detach().cpu(),
-                        "negative_prompt_embeds": negative_prompt_embeds.detach().cpu(),
+                        "prompt_embeds": prompt_embeds.detach(),
+                        "negative_prompt_embeds": negative_prompt_embeds.detach(),
                         "timestamp": time.time()
                     }
         except Exception as e:

@@ -80,6 +80,7 @@ class Args(NamedTuple):
     upscaler_type: str = "fast_srgan"
     upscaler_scale_factor: float = 2.0
     upscaler_resample_method: str = "lanczos"
+    mirror_horizontal: bool = False
 
     def pretty_print(self):
         print("\n")
@@ -380,11 +381,11 @@ parser.add_argument(
     help="Maximum Y shift for test oscillation",
 )
 parser.add_argument(
-    "--use-backround-removal",
+    "--use-background-removal",
     dest="use_background_removal",
     action="store_true",
-    default=True,
-    help="Remove the background from the image feed"
+    default=False,
+    help="Enable background removal",
 )
 # Add prompt travel argument
 parser.add_argument(
@@ -512,7 +513,7 @@ parser.add_argument(
     "--use-upscaler",
     dest="use_upscaler",
     action="store_true",
-    default=True,
+    default=False,
     help="Enable upscaler for output images",
 )
 parser.add_argument(
@@ -537,6 +538,14 @@ parser.add_argument(
     default="lanczos",
     choices=["nearest", "bilinear", "bicubic", "lanczos"],
     help="Resampling method for upscaler (default: lanczos)",
+)
+
+parser.add_argument(
+    "--mirror-horizontal",
+    dest="mirror_horizontal",
+    action="store_true",
+    default=False,
+    help="Mirror the output video horizontally",
 )
 
 parser.add_argument(

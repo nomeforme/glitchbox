@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi import Request
 import markdown2
 from pipelines.utils.safety_checker import SafetyChecker
-from PIL import Image, ImageOps
+from PIL import Image
 import logging
 from config import config, Args
 from connection_manager import ConnectionManager, ServerFullException
@@ -127,8 +127,8 @@ class App:
             self.prompt_travel_scheduler = PromptTravelScheduler(
                 min_factor=getattr(self.args, 'prompt_travel_min_factor', 0.0),
                 max_factor=getattr(self.args, 'prompt_travel_max_factor', 1.0),
-                factor_increment=getattr(self.args, 'prompt_travel_factor_increment', 0.005),
-                stabilize_duration=getattr(self.args, 'prompt_travel_stabilize_duration', 15),
+                factor_increment=getattr(self.args, 'prompt_travel_factor_increment', 0.025),
+                stabilize_duration=getattr(self.args, 'prompt_travel_stabilize_duration', 3),
                 oscillate=getattr(self.args, 'prompt_travel_oscillate', True),
                 enabled=getattr(self.args, 'use_prompt_travel_scheduler', False),
                 debug=getattr(self.args, 'debug', False),
@@ -348,12 +348,6 @@ class App:
                         acid_time = time.time() - acid_start_time
                         # print(f"[{user_id}] Acid update time: {acid_time:.4f}s")
                 
-                # Apply horizontal mirroring if enabled
-                if self.args.mirror_horizontal and image is not None:
-                    image = ImageOps.mirror(image)
-                    if self.args.debug:
-                        print(f"[{user_id}] Image mirrored horizontally.")
-
                 # Push the frame to the WebRTC video track
                 video_track = self.video_tracks.get(user_id)
                 if video_track:

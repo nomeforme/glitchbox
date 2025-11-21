@@ -21,8 +21,13 @@ def main():
     
     parser.add_argument('--input-size', type=int, default=518)
     parser.add_argument('--encoder', type=str, default='vits', choices=['vits', 'vitb', 'vitl', 'vitg'])
+    parser.add_argument('--load_from', type=str, help='Path to the checkpoint file')
 
     args = parser.parse_args()
+    
+    # Check if CUDA is available
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is required for this model. Please run on a machine with GPU support.")
     
     # we are undergoing company review procedures to release Depth-Anything-Giant checkpoint
     model_configs = {
@@ -33,20 +38,40 @@ def main():
     }
     
     depth_anything = DepthAnythingV2(**model_configs[args.encoder])
-    checkpoint_path = os.path.join(ROOT_DIR, 'modules', 'depth_anything', 'depth_anything_v2', 'checkpoints', f'depth_anything_{args.encoder}14.pth')
-    depth_anything.load_state_dict(torch.load(checkpoint_path, map_location='cpu'))
-    depth_anything = depth_anything.to('cpu').eval()
+    
+    # Use the provided checkpoint path if specified, otherwise use the default path
+    if args.load_from:
+        checkpoint_path = args.load_from
+    else:
+        checkpoint_path = os.path.join(ROOT_DIR, 'modules', 'depth_anything', 'depth_anything_v2', 'checkpoints', f'depth_anything_{args.encoder}14.pth')
+    
+    # Load model and convert to float16
+    depth_anything.load_state_dict(torch.load(checkpoint_path, map_location='cuda'))
+    depth_anything = depth_anything.to('cuda').half().eval()
 
-    # Define dummy input data
-    dummy_input = torch.ones((3, args.input_size, args.input_size)).unsqueeze(0)
+    # Define dummy input data in float16
+    dummy_input = torch.ones((3, args.input_size, args.input_size), dtype=torch.float16).unsqueeze(0).cuda()
 
     # Provide an example input to the model, this is necessary for exporting to ONNX
-    example_output = depth_anything.forward(dummy_input)
+    with torch.no_grad():
+        example_output = depth_anything.forward(dummy_input)
 
     onnx_path = f'depth_anything_v2_{args.encoder}.onnx'
 
     # Export the PyTorch model to ONNX format
-    torch.onnx.export(depth_anything, dummy_input, onnx_path, opset_version=11, input_names=["input"], output_names=["output"], verbose=True)
+    torch.onnx.export(
+        depth_anything,
+        dummy_input,
+        onnx_path,
+        opset_version=11,
+        input_names=["input"],
+        output_names=["output"],
+        verbose=True,
+        dynamic_axes={
+            'input': {0: 'batch_size'},
+            'output': {0: 'batch_size'}
+        }
+    )
 
     print(f"Model exported to {onnx_path}")
 
