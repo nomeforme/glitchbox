@@ -40,7 +40,8 @@ class StatusBar(QWidget):
         self.proc_status.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         self.layout.addWidget(self.proc_status)
         
-        self.setMaximumHeight(30)
+        self.setMinimumHeight(35)
+        self.setMaximumHeight(40)
 
     def update_connection_status(self, connected: bool):
         """Update connection status display"""

@@ -132,7 +132,6 @@ class WebSocketClient(QThread):
 
             # Set a long timeout for curation switching (pipeline reinitialization can take time)
             timeout = aiohttp.ClientTimeout(total=300)  # 5 minutes total timeout
-
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(url, json={"curation_index": curation_index}) as response:
                     if response.status == 200:
@@ -143,6 +142,9 @@ class WebSocketClient(QThread):
                         error_text = await response.text()
                         print(f"[WebSocket] Failed to update curation index: {error_text}")
                         return False, f"Server error: {response.status}"
+        except asyncio.TimeoutError:
+            print(f"[WebSocket] Curation index update timed out")
+            return False, "Request timed out"
         except Exception as e:
             print(f"[WebSocket] Error updating curation index: {e}")
             return False, f"Network error: {str(e)}"
