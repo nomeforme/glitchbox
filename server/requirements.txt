@@ -47,6 +47,9 @@ elevenlabs==2.1.0
 openai==1.84.0
 replicate==1.0.7
 ffmpeg-python==0.2.0
+grpcio>=1.60.0
+grpcio-tools>=1.60.0
+pyzmq>=25.0.0
 # Git-based packages
 git+https://github.com/lunarring/lunar_tools.git
 # git+https://github.com/tencent-ailab/IP-Adapter.git

@@ -18,6 +18,7 @@ class WebSocketClient(QThread):
     connection_error = Signal(str)
     settings_received = Signal(dict)
     status_changed = Signal(str)
+    param_updated = Signal(dict)  # For server-pushed param updates (e.g., from gRPC)
     
     def __init__(self, uri="ws://localhost:7860", max_retries=10, initial_retry_delay=1.0):
         super().__init__()
@@ -258,9 +259,20 @@ class WebSocketClient(QThread):
                 if self.current_frame is not None and self.processing:
                     await self.send_frame(self.current_frame)
                     
+            elif status == 'param_update':
+                # Handle server-pushed param updates (from gRPC)
+                params = data.get('params', {})
+                if params:
+                    print(f"[WebSocket] Received param update from server: {list(params.keys())}")
+                    # Update local params
+                    for key, value in params.items():
+                        self.params[key] = value
+                    # Emit signal for UI update
+                    self.param_updated.emit(params)
+
             elif status == 'error':
                 self.connection_error.emit(data.get('message', 'Unknown error'))
-                
+
             return None
                     
         except Exception as e:

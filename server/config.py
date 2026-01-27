@@ -20,6 +20,9 @@ class Args(NamedTuple):
     onediff: bool = False
     compel: bool = False
     debug: bool = False
+    # gRPC server settings
+    grpc_port: int = 50051
+    grpc_enabled: bool = True
     use_acid_processor: bool = False
     # Enable depth estimation
     use_depth_estimator: bool = False
@@ -720,6 +723,22 @@ parser.add_argument(
     action="store_true",
     default=False,
     help="Enable mock server mode for testing",
+)
+
+# gRPC server arguments
+parser.add_argument(
+    "--grpc-port",
+    dest="grpc_port",
+    type=int,
+    default=50051,
+    help="Port for gRPC server (default: 50051)",
+)
+parser.add_argument(
+    "--no-grpc",
+    dest="grpc_enabled",
+    action="store_false",
+    default=True,
+    help="Disable gRPC server",
 )
 
 parser.set_defaults(taesd=USE_TAESD)

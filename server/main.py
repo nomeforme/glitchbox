@@ -41,6 +41,17 @@ import torch
 
 import numpy as np
 import zmq
+
+# Import gRPC server
+try:
+    from grpc_server import GRPCServer
+    GRPC_AVAILABLE = True
+except ImportError as e:
+    print(f"[main.py] Warning: gRPC import failed: {e}")
+    print("[main.py] gRPC server will not be available")
+    GRPC_AVAILABLE = False
+    GRPCServer = None
+
 # import pycuda.driver as cuda
 
 # # Print detailed CUDA device information
@@ -320,7 +331,19 @@ class App:
         self.zmq_context = zmq.Context()
         self.zmq_socket = self.zmq_context.socket(zmq.PUB)
         self.zmq_socket.bind("tcp://*:5555")
-        
+
+        # Initialize gRPC server if enabled
+        self.grpc_server = None
+        if GRPC_AVAILABLE and getattr(self.args, 'grpc_enabled', True):
+            self.grpc_server = GRPCServer(
+                port=getattr(self.args, 'grpc_port', 50051),
+                on_curation_switch=self._handle_grpc_curation_switch,
+                debug=getattr(self.args, 'debug', False)
+            )
+            print(f"[main.py] gRPC server initialized on port {getattr(self.args, 'grpc_port', 50051)}")
+        else:
+            print("[main.py] gRPC server disabled or not available")
+
         self.init_app()
 
     async def warmup_all_pipes(self):
@@ -430,7 +453,12 @@ class App:
             if self.use_image_saver:
                 await self.image_saver.start()
                 print("[main.py] Image saver started")
-            
+
+            # Start gRPC server if enabled
+            if self.grpc_server:
+                self.grpc_server.start()
+                print(f"[main.py] gRPC server started on port {getattr(self.args, 'grpc_port', 50051)}")
+
             # Initialize embeddings service if prompt travel is enabled
             print(f"[main.py] Use prompt travel: {self.use_prompt_travel}")
             print(f"[main.py] Has pipeline pipe: {hasattr(self.pipeline, 'pipe')}")
@@ -483,12 +511,17 @@ class App:
         async def shutdown_event():
             # Shutdown
             print("Application shutdown")
-            
+
+            # Stop gRPC server if running
+            if self.grpc_server:
+                self.grpc_server.stop()
+                print("[main.py] gRPC server stopped")
+
             # Stop image saver if enabled
             if self.use_image_saver:
                 await self.image_saver.stop()
                 print("[main.py] Image saver stopped")
-            
+
             # No explicit cleanup needed for the async embeddings service
         
         @self.app.websocket("/api/ws/{user_id}")
@@ -553,6 +586,17 @@ class App:
                         params = SimpleNamespace(**vars(params))
                         # Add acid_settings back as an attribute
                         setattr(params, 'acid_settings', acid_settings)
+
+                        # Apply any pending gRPC parameters
+                        params, grpc_sync_params = self._apply_grpc_pending_params(params)
+
+                        # Send param updates to frontend if any gRPC params were applied
+                        if grpc_sync_params:
+                            await self.conn_manager.send_json(user_id, {
+                                "status": "param_update",
+                                "params": grpc_sync_params
+                            })
+                            print(f"[main.py] Sent param update to frontend: {list(grpc_sync_params.keys())}")
 
                         print(f"[main.py] Received params: {params}")
                         print(f"[main.py] params type: {type(params)}")
@@ -1313,17 +1357,93 @@ class App:
     def _apply_background_removal(self, pil_image):
         """
         Apply background removal to a PIL image using MODNet.
-        
+
         Args:
             pil_image (PIL.Image): Input image
-            
+
         Returns:
             PIL.Image: Image with background removed
         """
         if not self.use_background_removal:
             return pil_image
-            
+
         return self.bg_removal_processor.process_image(pil_image)
+
+    def _handle_grpc_curation_switch(self, curation_index: int):
+        """
+        Handle curation switch request from gRPC.
+
+        This is called synchronously from the gRPC thread, so we queue
+        the actual work to be done on the main thread.
+
+        Args:
+            curation_index: The new curation index to switch to
+        """
+        print(f"[main.py] gRPC curation switch requested: index={curation_index}")
+        # The actual curation switch will be handled through the pending params
+        # mechanism on the next frame cycle, or through the HTTP API endpoint
+
+    def _apply_grpc_pending_params(self, params):
+        """
+        Apply any pending parameters from gRPC to the params object.
+
+        Args:
+            params: The SimpleNamespace params object to update
+
+        Returns:
+            Tuple of (updated params object, dict of applied params for frontend sync)
+        """
+        if not self.grpc_server:
+            return params, {}
+
+        pending = self.grpc_server.get_pending_params()
+        if not pending:
+            return params, {}
+
+        print(f"[main.py] Applying gRPC pending params: {list(pending.keys())}")
+
+        # Collect prompt travel settings to update scheduler directly
+        prompt_travel_updates = {}
+        # Collect params to sync to frontend (exclude internal-only params)
+        frontend_sync_params = {}
+
+        for key, value in pending.items():
+            if key == 'acid_settings':
+                # Merge acid settings into existing acid_settings
+                existing_acid = getattr(params, 'acid_settings', {})
+                if isinstance(existing_acid, dict):
+                    existing_acid.update(value)
+                    setattr(params, 'acid_settings', existing_acid)
+                else:
+                    setattr(params, 'acid_settings', value)
+                # Also update acid processor directly
+                if self.use_acid_processor:
+                    self._update_acid_settings(value)
+                # Add individual acid params to frontend sync
+                for acid_key, acid_value in value.items():
+                    frontend_sync_params[acid_key] = acid_value
+            elif key == 'curation_index':
+                # Curation switches are handled separately via HTTP API
+                print(f"[main.py] Curation index change via gRPC: {value}")
+            elif key.startswith('use_prompt_') or key.startswith('prompt_travel_') or key in ('loop_prompts',):
+                # Collect prompt travel settings
+                prompt_travel_updates[key] = value
+                setattr(params, key, value)
+                frontend_sync_params[key] = value
+            else:
+                # Direct param update
+                setattr(params, key, value)
+                frontend_sync_params[key] = value
+
+        # Apply prompt travel scheduler updates directly
+        if prompt_travel_updates and self.use_prompt_travel and hasattr(self, 'prompt_travel_scheduler'):
+            print(f"[main.py] Updating prompt travel scheduler from gRPC: {prompt_travel_updates}")
+            self._update_acid_settings(prompt_travel_updates)
+
+        # Update gRPC server state with applied params
+        self.grpc_server.update_state(pending)
+
+        return params, frontend_sync_params
 
 print(f"Device: {device}")
 print(f"torch_dtype: {torch_dtype}")

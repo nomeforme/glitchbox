@@ -1,0 +1,158 @@
+syntax = "proto3";
+
+package generation_control;
+
+// Generation control service for real-time diffusion parameters
+service GenerationControl {
+    // Update the prompt
+    rpc SetPrompt(PromptRequest) returns (ControlResponse);
+
+    // Update generation parameters (seed, steps, guidance_scale, strength)
+    rpc SetGenerationParams(GenerationParamsRequest) returns (ControlResponse);
+
+    // Update ControlNet parameters
+    rpc SetControlNetParams(ControlNetParamsRequest) returns (ControlResponse);
+
+    // Update LoRA parameters
+    rpc SetLoRAParams(LoRAParamsRequest) returns (ControlResponse);
+
+    // Update prompt travel parameters
+    rpc SetPromptTravelParams(PromptTravelParamsRequest) returns (ControlResponse);
+
+    // Update acid processor parameters
+    rpc SetAcidParams(AcidParamsRequest) returns (ControlResponse);
+
+    // Switch curation index
+    rpc SwitchCuration(SwitchCurationRequest) returns (ControlResponse);
+
+    // Get current state of all parameters
+    rpc GetCurrentState(GetStateRequest) returns (CurrentStateResponse);
+
+    // Batch update multiple parameter groups at once
+    rpc BatchUpdate(BatchUpdateRequest) returns (ControlResponse);
+}
+
+// Common response for control operations
+message ControlResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+// Prompt update request
+message PromptRequest {
+    string prompt = 1;
+    optional string target_prompt = 2;
+    optional float prompt_travel_factor = 3;
+}
+
+// Generation parameters request
+message GenerationParamsRequest {
+    optional int32 seed = 1;
+    optional int32 num_inference_steps = 2;
+    optional float guidance_scale = 3;
+    optional float strength = 4;
+    optional int32 width = 5;
+    optional int32 height = 6;
+}
+
+// ControlNet parameters request
+message ControlNetParamsRequest {
+    optional float controlnet_scale = 1;
+    optional float controlnet_start = 2;
+    optional float controlnet_end = 3;
+}
+
+// LoRA parameters request
+message LoRAParamsRequest {
+    optional float lora_scale = 1;
+    optional int32 pipe_index = 2;
+}
+
+// Prompt travel parameters request
+message PromptTravelParamsRequest {
+    optional bool enabled = 1;
+    optional float min_factor = 2;
+    optional float max_factor = 3;
+    optional float factor_increment = 4;
+    optional int32 stabilize_duration = 5;
+    optional bool oscillate = 6;
+    optional bool use_prompt_scheduler = 7;
+    optional bool loop_prompts = 8;
+}
+
+// Acid processor parameters request
+message AcidParamsRequest {
+    optional float acid_strength = 1;
+    optional float zoom_factor = 2;
+    optional int32 x_shift = 3;
+    optional int32 y_shift = 4;
+    optional float coef_noise = 5;
+    optional bool do_acid_tracers = 6;
+    optional float acid_strength_foreground = 7;
+    optional bool do_acid_wobblers = 8;
+    optional float color_matching = 9;
+    optional bool do_human_seg = 10;
+    optional bool do_blur = 11;
+    optional float brightness = 12;
+}
+
+// Switch curation request
+message SwitchCurationRequest {
+    int32 curation_index = 1;
+}
+
+// Get state request (empty for now, can add filters later)
+message GetStateRequest {
+}
+
+// Current state response containing all parameters
+message CurrentStateResponse {
+    bool success = 1;
+
+    // Prompt state
+    string prompt = 2;
+    string target_prompt = 3;
+    float prompt_travel_factor = 4;
+
+    // Generation params
+    int32 seed = 5;
+    int32 num_inference_steps = 6;
+    float guidance_scale = 7;
+    float strength = 8;
+    int32 width = 9;
+    int32 height = 10;
+
+    // ControlNet params
+    float controlnet_scale = 11;
+    float controlnet_start = 12;
+    float controlnet_end = 13;
+
+    // LoRA params
+    float lora_scale = 14;
+    int32 pipe_index = 15;
+
+    // Prompt travel params
+    bool prompt_travel_enabled = 16;
+    float prompt_travel_min_factor = 17;
+    float prompt_travel_max_factor = 18;
+    float prompt_travel_factor_increment = 19;
+
+    // Acid params
+    float acid_strength = 20;
+    float acid_zoom_factor = 21;
+    int32 acid_x_shift = 22;
+    int32 acid_y_shift = 23;
+
+    // Curation
+    int32 curation_index = 24;
+}
+
+// Batch update request - allows updating multiple parameter groups at once
+message BatchUpdateRequest {
+    optional PromptRequest prompt_params = 1;
+    optional GenerationParamsRequest generation_params = 2;
+    optional ControlNetParamsRequest controlnet_params = 3;
+    optional LoRAParamsRequest lora_params = 4;
+    optional PromptTravelParamsRequest prompt_travel_params = 5;
+    optional AcidParamsRequest acid_params = 6;
+}

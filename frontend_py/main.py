@@ -460,6 +460,7 @@ class MainWindow(QMainWindow):
         self.ws_client.connection_error.connect(self.handle_connection_error)
         self.ws_client.settings_received.connect(self.handle_settings)
         self.ws_client.status_changed.connect(self.handle_status_change)
+        self.ws_client.param_updated.connect(self.handle_param_update)
         self.camera_thread.frame_ready.connect(self.handle_camera_frame)
         
         # Track signal connections to prevent duplication
@@ -692,6 +693,14 @@ class MainWindow(QMainWindow):
             if hasattr(self, 'toggle_auto_curation_button'):
                 self.toggle_auto_curation_button.setText("Start Auto Curation Updates")
 
+    def handle_param_update(self, params: dict):
+        """Handle param updates pushed from server (e.g., from gRPC)"""
+        print(f"[UI] Received param update from server: {list(params.keys())}")
+        for param_id, value in params.items():
+            # Update control panel UI
+            self.control_panel.update_control(param_id, value)
+        self.status_bar.update_processing_status(f"Params updated from server: {', '.join(params.keys())}")
+
     def handle_status_change(self, status: str):
         """Handle WebSocket status changes"""
         if status.startswith("Retrying connection"):
@@ -890,6 +899,7 @@ class MainWindow(QMainWindow):
                     self.ws_client.connection_error.connect(self.handle_connection_error)
                     self.ws_client.settings_received.connect(self.handle_settings)
                     self.ws_client.status_changed.connect(self.handle_status_change)
+                    self.ws_client.param_updated.connect(self.handle_param_update)
                     self.signal_connections_active = True
                     
                     # Reset FPS counter for fresh start
