@@ -1,6 +1,6 @@
 {
-    "prompts_file_names": ["mannequin_0_XL", "mannequin_XL"],
-    "loras": ["mannequin-0-xl", "mannequin-xl"],
+    "prompts_file_names": ["shaman_XL", "angels_short_XL"],
+    "loras": ["shaman-xl", "angels-xl"],
     "adapter_weights_sets": [
         [1.0, 0.0],
         [0.8, 0.2],

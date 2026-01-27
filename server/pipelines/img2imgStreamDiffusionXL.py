@@ -391,7 +391,7 @@ class Pipeline:
             warmup=10,
             vae_id=None,
             acceleration="none",
-            mode="img2img",
+            mode="txt2img",
             use_denoising_batch=True,
             cfg_type="none",
             use_safety_checker=args.safety_checker,

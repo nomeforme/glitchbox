@@ -135,7 +135,7 @@ class Pipeline:
             hide=True,
         )
         width: int = Field(
-            512, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
+            680, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
         )
         height: int = Field(
             512, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
@@ -367,8 +367,8 @@ class Pipeline:
                 output_type="pil",
                 warmup=0,
                 vae_id=None,
-                acceleration="tensorrt",  # TensorRT will compile AFTER LoRA fusion
-                mode="img2img",
+                acceleration="none",  # TensorRT will compile AFTER LoRA fusion
+                mode="txt2img",
                 use_denoising_batch=True,
                 cfg_type="none",
                 use_safety_checker=args.safety_checker,

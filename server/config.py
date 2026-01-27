@@ -599,7 +599,7 @@ parser.add_argument(
     "--use-upscaler",
     dest="use_upscaler",
     action="store_true",
-    default=True,
+    default=False,
     help="Enable upscaler for output images",
 )
 parser.add_argument(
@@ -685,7 +685,7 @@ parser.add_argument(
     "--default-curation-index",
     dest="default_curation_index",
     type=int,
-    default=21, #13,
+    default=11,
     help="Default index for curation selection",
 )
 

@@ -51,7 +51,7 @@ class LoRACurationConfig:
             "pixel-art-xl": "loras/pixel-art_XL.safetensors",
             "papercut-xl": "loras/papercut_XL.safetensors",
             "melies-bw-xl": "loras/melies-bw-xl",
-            "melies-col-xl": "loras/melies_col_XL-step00000500.safetensors",
+            "melies-col-xl": "loras/melies-col-xl",
             "mannequin-0-xl": "loras/mannequin-0-xl",
             "glitch-xl": "loras/glitch-xl",
             "pixel-xl": "loras/pixel-xl",
@@ -69,6 +69,7 @@ class LoRACurationConfig:
             "dwellers-output": "loras/dwellers_output",
             "dwellers-input-merge": "loras/dwellers_merge/dwellers_input_lora.safetensors",
             "dwellers-output-merge": "loras/dwellers_merge/dwellers_output_lora.safetensors",
+            "shaman-xl": "loras/shaman-xl",
         }
 
         self._all_curations = {} # Stores all loaded JSON data {key: data}

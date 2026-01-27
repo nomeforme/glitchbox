@@ -22,7 +22,7 @@
         "target_seed": null,
         "steps": 1,
         "width": 1024,
-        "height": 1024,
+        "height": 768,
         "guidance_scale": 1.0,
         "strength": 0.8,
         "controlnet_scale": 0.55,
