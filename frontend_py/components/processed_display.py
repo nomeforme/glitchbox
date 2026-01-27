@@ -110,33 +110,46 @@ class ZMQThread(QThread):
         try:
             print("[ZMQ] Starting ZMQ stream processing...")
             self.running = True
-            
+
             while self.running:
                 try:
-                    # Receive raw bytes with timeout (using socket timeout set above)
-                    # print("[ZMQ] Waiting for data...")
+                    # Receive bytes with timeout (using socket timeout set above)
                     data = self.socket.recv()
                     if not data:
-                        # print("[ZMQ] Received empty data")
                         continue
-                        
-                    # Convert bytes to numpy array
-                    # print(f"[ZMQ] Received data of size: {len(data)} bytes")
-                    frame = np.frombuffer(data, dtype=np.uint8)
-                    
-                    # Calculate expected size based on display dimensions and upscaling
-                    expected_size = int(DISPLAY_HEIGHT * DISPLAY_WIDTH * 3 * (DISPLAY_SCALE ** 2))  # 3 channels for RGB, squared scale factor for 2D upscaling
-                    if len(frame) != expected_size:
-                        print(f"[ZMQ] Warning: Received data size {len(frame)} doesn't match expected size {expected_size}")
-                        continue
-                        
-                    # Reshape to image dimensions accounting for upscaling
-                    frame = frame.reshape(int(DISPLAY_HEIGHT * DISPLAY_SCALE), int(DISPLAY_WIDTH * DISPLAY_SCALE), 3)
-                    
+
+                    # Check if data is JPEG encoded (starts with FFD8)
+                    is_jpeg = len(data) >= 2 and data[0] == 0xFF and data[1] == 0xD8
+
+                    if is_jpeg:
+                        # Decode JPEG
+                        frame = cv2.imdecode(
+                            np.frombuffer(data, dtype=np.uint8),
+                            cv2.IMREAD_COLOR
+                        )
+                        if frame is not None:
+                            # Convert BGR to RGB
+                            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                        else:
+                            print("[ZMQ] Failed to decode JPEG frame")
+                            continue
+                    else:
+                        # Raw bytes (original behavior)
+                        frame = np.frombuffer(data, dtype=np.uint8)
+
+                        # Calculate expected size based on display dimensions and upscaling
+                        expected_size = int(DISPLAY_HEIGHT * DISPLAY_WIDTH * 3 * (DISPLAY_SCALE ** 2))
+                        if len(frame) != expected_size:
+                            print(f"[ZMQ] Warning: Received data size {len(frame)} doesn't match expected size {expected_size}")
+                            continue
+
+                        # Reshape to image dimensions accounting for upscaling
+                        frame = frame.reshape(int(DISPLAY_HEIGHT * DISPLAY_SCALE), int(DISPLAY_WIDTH * DISPLAY_SCALE), 3)
+
                     if frame is not None:
                         self.frame_received.emit(frame)
                     else:
-                        print("[ZMQ] Failed to reshape frame")
+                        print("[ZMQ] Failed to process frame")
                         
                 except zmq.error.Again:
                     print("[ZMQ] ZMQ timeout - no data received")

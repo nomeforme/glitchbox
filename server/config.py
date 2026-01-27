@@ -23,6 +23,8 @@ class Args(NamedTuple):
     # gRPC server settings
     grpc_port: int = 50051
     grpc_enabled: bool = True
+    # ZMQ streaming settings (0 = raw bytes, 1-100 = JPEG quality)
+    zmq_jpeg_quality: int = 85
     use_acid_processor: bool = False
     # Enable depth estimation
     use_depth_estimator: bool = False
@@ -739,6 +741,15 @@ parser.add_argument(
     action="store_false",
     default=True,
     help="Disable gRPC server",
+)
+
+# ZMQ streaming arguments
+parser.add_argument(
+    "--zmq-jpeg-quality",
+    dest="zmq_jpeg_quality",
+    type=int,
+    default=85,
+    help="JPEG quality for ZMQ streaming (0 = raw bytes/disabled, 1-100 = JPEG quality). Default: 85",
 )
 
 parser.set_defaults(taesd=USE_TAESD)

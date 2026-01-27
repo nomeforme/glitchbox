@@ -41,6 +41,7 @@ import torch
 
 import numpy as np
 import zmq
+import cv2
 
 # Import gRPC server
 try:
@@ -1069,11 +1070,26 @@ class App:
                             print(f"Acid time taken: {after_acid_time}")
                     
                     # Convert PIL to numpy array and send over ZMQ
-                    print("[Server] Converting image to numpy array...")
                     image_np = np.array(image)
-                    print(f"[Server] Sending image of shape {image_np.shape} over ZMQ...")
-                    self.zmq_socket.send(image_np.tobytes())
-                    print("[Server] Image sent successfully")
+
+                    # Use JPEG compression if enabled (quality > 0)
+                    if self.args.zmq_jpeg_quality > 0:
+                        # Convert RGB to BGR for cv2
+                        image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+                        # Encode as JPEG
+                        encode_params = [cv2.IMWRITE_JPEG_QUALITY, self.args.zmq_jpeg_quality]
+                        _, encoded = cv2.imencode('.jpg', image_bgr, encode_params)
+                        self.zmq_socket.send(encoded.tobytes())
+                        if self.args.debug:
+                            raw_size = image_np.nbytes
+                            compressed_size = len(encoded)
+                            ratio = raw_size / compressed_size
+                            print(f"[ZMQ] Sent JPEG: {compressed_size/1024:.1f}KB (raw: {raw_size/1024:.1f}KB, {ratio:.1f}x compression)")
+                    else:
+                        # Send raw bytes (original behavior)
+                        self.zmq_socket.send(image_np.tobytes())
+                        if self.args.debug:
+                            print(f"[ZMQ] Sent raw: {image_np.nbytes/1024:.1f}KB")
                     
                     if self.args.debug:
                         print(f"Total processing time: {time.time() - last_time}")
