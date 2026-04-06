@@ -38,6 +38,8 @@ class StreamDiffusion:
         cfg_type: Literal["none", "full", "self", "initialize"] = "self",
         normalize_prompt_weights: bool = True,
         normalize_seed_weights: bool = True,
+        temporal_coherence: float = 0.03,  # Noise blending
+        temporal_coherence_latent: float = 0.03,  # Latent feedback blending
     ) -> None:
         self.device = torch.device(device)
         self.dtype = torch_dtype
@@ -81,6 +83,8 @@ class StreamDiffusion:
 
         self.do_add_noise = do_add_noise
         self.use_denoising_batch = use_denoising_batch
+        self.temporal_coherence = temporal_coherence  # Noise blending
+        self.temporal_coherence_latent = temporal_coherence_latent  # Latent feedback blending
 
         self.similar_image_filter = False
         self.similar_filter = SimilarImageFilter()
@@ -126,6 +130,7 @@ class StreamDiffusion:
         self._cached_batch_size: Optional[int] = None
         self._cached_cfg_type: Optional[str] = None
         self._cached_guidance_scale: Optional[float] = None
+        self._cached_text_embeds_ref: Optional[torch.Tensor] = None  # Track prompt changes
         
 
     def _check_unet_tensorrt(self) -> bool:
@@ -136,8 +141,13 @@ class StreamDiffusion:
 
     def _get_cached_sdxl_conditioning(self, batch_size: int, cfg_type: str, guidance_scale: float) -> Optional[Dict[str, torch.Tensor]]:
         """Retrieve cached SDXL conditioning tensors if configuration matches"""
-        if (self._cached_batch_size == batch_size and 
-            self._cached_cfg_type == cfg_type and 
+        # Check if prompt changed by comparing tensor reference
+        current_embeds = getattr(self, 'add_text_embeds', None)
+        embeds_unchanged = (self._cached_text_embeds_ref is current_embeds)
+
+        if (embeds_unchanged and
+            self._cached_batch_size == batch_size and
+            self._cached_cfg_type == cfg_type and
             self._cached_guidance_scale == guidance_scale and
             len(self._sdxl_conditioning_cache) > 0):
             return {
@@ -146,14 +156,15 @@ class StreamDiffusion:
             }
         return None
 
-    def _cache_sdxl_conditioning(self, batch_size: int, cfg_type: str, guidance_scale: float, 
+    def _cache_sdxl_conditioning(self, batch_size: int, cfg_type: str, guidance_scale: float,
                                 text_embeds: torch.Tensor, time_ids: torch.Tensor) -> None:
         """Cache SDXL conditioning tensors for reuse"""
         self._cached_batch_size = batch_size
         self._cached_cfg_type = cfg_type
         self._cached_guidance_scale = guidance_scale
-        self._sdxl_conditioning_cache['text_embeds'] = text_embeds.clone()
-        self._sdxl_conditioning_cache['time_ids'] = time_ids.clone()
+        self._cached_text_embeds_ref = getattr(self, 'add_text_embeds', None)  # Track current prompt
+        self._sdxl_conditioning_cache['text_embeds'] = text_embeds
+        self._sdxl_conditioning_cache['time_ids'] = time_ids
 
     def _build_sdxl_conditioning(self, batch_size: int) -> Dict[str, torch.Tensor]:
         """Build SDXL conditioning tensors with optimized tensor operations"""
@@ -537,6 +548,50 @@ class StreamDiffusion:
         )
         return noisy_samples
 
+    def get_temporal_coherent_noise(
+        self,
+        noise: torch.Tensor,
+        target_shape: Optional[Tuple[int, ...]] = None,
+    ) -> torch.Tensor:
+        """
+        Blend random noise with re-noised previous frame's latent for temporal coherence.
+
+        When temporal_coherence > 0, this blends the random noise with a re-noised
+        version of the previous frame's latent output to create smoother transitions
+        without degrading to black over time.
+
+        Args:
+            noise: The random noise tensor to potentially blend
+            target_shape: Optional shape to match (for slicing prev_latent_result)
+
+        Returns:
+            Blended noise tensor, or original noise if temporal_coherence is 0
+            or no previous frame exists
+        """
+        if self.temporal_coherence <= 0 or self.prev_latent_result is None:
+            return noise
+
+        tc = self.temporal_coherence
+        prev_latent = self.prev_latent_result
+
+        # Handle shape mismatch - prev_latent_result is typically (1, 4, H, W)
+        # while noise might be (batch_size, 4, H, W) for denoising batch
+        if noise.shape[0] != prev_latent.shape[0]:
+            # Repeat prev_latent to match noise batch size
+            prev_latent = prev_latent.repeat(noise.shape[0], 1, 1, 1)
+
+        # Re-noise the previous clean latent using init_noise for consistency
+        # x_t = alpha_sqrt * x_0 + beta_sqrt * noise
+        consistent_noise = self.init_noise
+        if consistent_noise.shape[0] != prev_latent.shape[0]:
+            consistent_noise = consistent_noise[0:1].repeat(prev_latent.shape[0], 1, 1, 1)
+        noised_prev = self.alpha_prod_t_sqrt * prev_latent + self.beta_prod_t_sqrt * consistent_noise
+
+        # Blend: (1 - tc) * random_noise + tc * noised_prev_latent
+        blended_noise = (1.0 - tc) * noise + tc * noised_prev
+
+        return blended_noise
+
     def scheduler_step_batch(
         self,
         model_pred_batch: torch.Tensor,
@@ -865,9 +920,11 @@ class StreamDiffusion:
                 x_0_pred_out = x_0_pred_batch[-1].unsqueeze(0)
                 
                 if self.do_add_noise:
+                    # Apply temporal coherence blending if enabled
+                    noise_to_add = self.get_temporal_coherent_noise(self.init_noise[1:])
                     self.x_t_latent_buffer = (
                         self.alpha_prod_t_sqrt[1:] * x_0_pred_batch[:-1]
-                        + self.beta_prod_t_sqrt[1:] * self.init_noise[1:]
+                        + self.beta_prod_t_sqrt[1:] * noise_to_add
                     )
                 else:
                     self.x_t_latent_buffer = (
@@ -880,18 +937,21 @@ class StreamDiffusion:
             self.init_noise = x_t_latent
             for idx, t in enumerate(self.sub_timesteps_tensor):
                 t = t.view(1,).repeat(self.frame_bff_size,)
-                
+
                 x_0_pred, model_pred = self.unet_step(x_t_latent, t, idx)
-                
+
                 if idx < len(self.sub_timesteps_tensor) - 1:
                     if self.do_add_noise:
+                        # Apply temporal coherence blending if enabled
+                        random_noise = torch.randn_like(
+                            x_0_pred, device=self.device, dtype=self.dtype
+                        )
+                        noise_to_add = self.get_temporal_coherent_noise(random_noise)
                         x_t_latent = self.alpha_prod_t_sqrt[
                             idx + 1
                         ] * x_0_pred + self.beta_prod_t_sqrt[
                             idx + 1
-                        ] * torch.randn_like(
-                            x_0_pred, device=self.device, dtype=self.dtype
-                        )
+                        ] * noise_to_add
                     else:
                         x_t_latent = self.alpha_prod_t_sqrt[idx + 1] * x_0_pred
             x_0_pred_out = x_0_pred
@@ -907,6 +967,7 @@ class StreamDiffusion:
         start.record()
         
         if x is not None:
+            print(f"[pipeline.py __call__] temporal_coherence_latent={self.temporal_coherence_latent}, has_prev={self.prev_latent_result is not None}", flush=True)
             x = self.image_processor.preprocess(x, self.height, self.width).to(
                 device=self.device, dtype=self.dtype
             )
@@ -921,9 +982,23 @@ class StreamDiffusion:
                     return self.prev_image_result
             
             x_t_latent = self.encode_image(x)
-            
+
             # LATENT PREPROCESSING HOOKS: After VAE encoding, before diffusion
             x_t_latent = self._apply_latent_preprocessing_hooks(x_t_latent)
+
+            # TEMPORAL COHERENCE (Latent Blending): Blend input latent with re-noised previous output
+            if self.temporal_coherence_latent > 0 and self.prev_latent_result is not None:
+                tc = self.temporal_coherence_latent
+                prev_latent = self.prev_latent_result
+                # Handle shape mismatch if needed
+                if prev_latent.shape[0] != x_t_latent.shape[0]:
+                    prev_latent = prev_latent[0:1].repeat(x_t_latent.shape[0], 1, 1, 1)
+                # Re-noise using init_noise for consistency
+                consistent_noise = self.init_noise
+                if consistent_noise.shape[0] != prev_latent.shape[0]:
+                    consistent_noise = consistent_noise[0:1].repeat(prev_latent.shape[0], 1, 1, 1)
+                noised_prev = self.alpha_prod_t_sqrt * prev_latent + self.beta_prod_t_sqrt * consistent_noise
+                x_t_latent = (1.0 - tc) * x_t_latent + tc * noised_prev
         else:
             # TODO: check the dimension of x_t_latent
             x_t_latent = torch.randn((1, 4, self.latent_height, self.latent_width)).to(
@@ -1025,6 +1100,29 @@ class StreamDiffusion:
         else:
             x_t_latent = self.init_noise[0:1].repeat(batch_size, 1, 1, 1)
 
+        # TEMPORAL COHERENCE (Noise Blending): Blend init noise with re-noised previous latent
+        if self.temporal_coherence > 0 and self.prev_latent_result is not None:
+            tc = self.temporal_coherence
+            prev_latent = self.prev_latent_result
+            if x_t_latent.shape[0] != prev_latent.shape[0]:
+                prev_latent = prev_latent[0:1].repeat(x_t_latent.shape[0], 1, 1, 1)
+            # Re-noise using init_noise for consistency (same noise as current frame)
+            noised_prev = self.alpha_prod_t_sqrt * prev_latent + self.beta_prod_t_sqrt * x_t_latent
+            x_t_latent = (1.0 - tc) * x_t_latent + tc * noised_prev
+
+        # TEMPORAL COHERENCE (Latent Blending): Blend with re-noised previous latent
+        if self.temporal_coherence_latent > 0 and self.prev_latent_result is not None:
+            tc = self.temporal_coherence_latent
+            prev_latent = self.prev_latent_result
+            if x_t_latent.shape[0] != prev_latent.shape[0]:
+                prev_latent = prev_latent[0:1].repeat(x_t_latent.shape[0], 1, 1, 1)
+            # Re-noise using init_noise for consistency (same noise as current frame)
+            consistent_noise = self.init_noise
+            if consistent_noise.shape[0] != prev_latent.shape[0]:
+                consistent_noise = consistent_noise[0:1].repeat(prev_latent.shape[0], 1, 1, 1)
+            noised_prev = self.alpha_prod_t_sqrt * prev_latent + self.beta_prod_t_sqrt * consistent_noise
+            x_t_latent = (1.0 - tc) * x_t_latent + tc * noised_prev
+
         x_0_pred_out = self.predict_x0_batch(x_t_latent)
         
         # LATENT POSTPROCESSING HOOKS: After diffusion, before VAE decoding
@@ -1048,6 +1146,29 @@ class StreamDiffusion:
         else:
             x_t_latent = self.init_noise[0:1].repeat(batch_size, 1, 1, 1)
 
+        # TEMPORAL COHERENCE (Noise Blending): Blend init noise with re-noised previous latent
+        if self.temporal_coherence > 0 and self.prev_latent_result is not None:
+            tc = self.temporal_coherence
+            prev_latent = self.prev_latent_result
+            if x_t_latent.shape[0] != prev_latent.shape[0]:
+                prev_latent = prev_latent[0:1].repeat(x_t_latent.shape[0], 1, 1, 1)
+            # Re-noise using init_noise for consistency (same noise as current frame)
+            noised_prev = self.alpha_prod_t_sqrt * prev_latent + self.beta_prod_t_sqrt * x_t_latent
+            x_t_latent = (1.0 - tc) * x_t_latent + tc * noised_prev
+
+        # TEMPORAL COHERENCE (Latent Blending): Blend with re-noised previous latent
+        if self.temporal_coherence_latent > 0 and self.prev_latent_result is not None:
+            tc = self.temporal_coherence_latent
+            prev_latent = self.prev_latent_result
+            if x_t_latent.shape[0] != prev_latent.shape[0]:
+                prev_latent = prev_latent[0:1].repeat(x_t_latent.shape[0], 1, 1, 1)
+            # Re-noise using init_noise for consistency (same noise as current frame)
+            consistent_noise = self.init_noise
+            if consistent_noise.shape[0] != prev_latent.shape[0]:
+                consistent_noise = consistent_noise[0:1].repeat(prev_latent.shape[0], 1, 1, 1)
+            noised_prev = self.alpha_prod_t_sqrt * prev_latent + self.beta_prod_t_sqrt * consistent_noise
+            x_t_latent = (1.0 - tc) * x_t_latent + tc * noised_prev
+
         # Prepare UNet call arguments
         unet_kwargs = {
             'sample': x_t_latent,
@@ -1056,12 +1177,22 @@ class StreamDiffusion:
             'return_dict': False,
         }
 
-        # Add SDXL-specific conditioning if this is an SDXL model
+        # Add SDXL-specific conditioning if this is an SDXL model (with caching)
         if self.is_sdxl and hasattr(self, 'add_text_embeds') and hasattr(self, 'add_time_ids'):
             if self.add_text_embeds is not None and self.add_time_ids is not None:
-                # For txt2img, replicate conditioning to match batch size
-                add_text_embeds = self.add_text_embeds[1:2].repeat(batch_size, 1) if self.add_text_embeds.shape[0] > 1 else self.add_text_embeds.repeat(batch_size, 1)
-                add_time_ids = self.add_time_ids[1:2].repeat(batch_size, 1) if self.add_time_ids.shape[0] > 1 else self.add_time_ids.repeat(batch_size, 1)
+                # Try to use cached conditioning first
+                cached_conditioning = self._get_cached_sdxl_conditioning(batch_size, self.cfg_type, self.guidance_scale)
+                if cached_conditioning is not None:
+                    add_text_embeds = cached_conditioning['text_embeds']
+                    add_time_ids = cached_conditioning['time_ids']
+                else:
+                    # Build and cache conditioning - use expand() instead of repeat() for efficiency
+                    source_text = self.add_text_embeds[1:2] if self.add_text_embeds.shape[0] > 1 else self.add_text_embeds
+                    source_time = self.add_time_ids[1:2] if self.add_time_ids.shape[0] > 1 else self.add_time_ids
+                    add_text_embeds = source_text.expand(batch_size, -1).contiguous()
+                    add_time_ids = source_time.expand(batch_size, -1).contiguous()
+                    # Cache for next frame
+                    self._cache_sdxl_conditioning(batch_size, self.cfg_type, self.guidance_scale, add_text_embeds, add_time_ids)
 
                 unet_kwargs['added_cond_kwargs'] = {
                     'text_embeds': add_text_embeds,

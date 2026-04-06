@@ -21,7 +21,7 @@ except ImportError as e:
     pb2_grpc = None
     GenerationControlServicer = None
     print(f"[gRPC] Warning: gRPC imports failed: {e}")
-    print("[gRPC] Run: python -m grpc_tools.protoc -I grpc/protos --python_out=grpc --grpc_python_out=grpc grpc/protos/generation_control.proto")
+    print("[gRPC] Run: python -m grpc_tools.protoc -I grpc_server/protos --python_out=grpc_server --grpc_python_out=grpc_server grpc_server/protos/generation_control.proto")
 
 
 class GRPCServer:
@@ -33,7 +33,7 @@ class GRPCServer:
     """
 
     def __init__(self,
-                 port: int = 50051,
+                 port: int = 50053,
                  host: str = "0.0.0.0",
                  max_workers: int = 10,
                  on_curation_switch: Optional[Callable[[int], None]] = None,
@@ -86,7 +86,7 @@ class GRPCServer:
         if not GRPC_AVAILABLE:
             self._log("gRPC not available - server not started")
             self._log("Run proto compilation first:")
-            self._log("  cd server && python -m grpc_tools.protoc -I grpc/protos --python_out=grpc --grpc_python_out=grpc grpc/protos/generation_control.proto")
+            self._log("  cd server && python -m grpc_tools.protoc -I grpc_server/protos --python_out=grpc_server --grpc_python_out=grpc_server grpc_server/protos/generation_control.proto")
             return
 
         if self._running:
@@ -159,3 +159,65 @@ class GRPCServer:
         """
         if self._servicer:
             self._servicer.update_current_state(params)
+
+    def get_sticky_overrides(self) -> dict:
+        """
+        Get sticky param values that should override frontend values.
+
+        These params persist for several frames after a gRPC update
+        to prevent the frontend's old values from overwriting them
+        before the frontend receives the sync update.
+
+        Returns:
+            Dictionary of param names to values that should override frontend
+        """
+        if self._servicer:
+            return self._servicer.get_sticky_overrides()
+        return {}
+
+    def decrement_sticky_frames(self):
+        """
+        Decrement the frame counter for all sticky params.
+
+        Should be called once per frame cycle after applying overrides.
+        """
+        if self._servicer:
+            self._servicer.decrement_sticky_frames()
+
+    def get_interpolated_prompt(self) -> tuple:
+        """
+        Get the current interpolated prompt state for smooth transitions.
+
+        Returns:
+            Tuple of (source_prompt, target_prompt, interpolation_factor)
+        """
+        if self._servicer:
+            return self._servicer.get_interpolated_prompt()
+        return ('', '', 1.0)
+
+    def advance_prompt_transition(self) -> bool:
+        """
+        Advance the prompt transition by one frame.
+
+        Returns:
+            True if transition still active, False if completed
+        """
+        if self._servicer:
+            return self._servicer.advance_prompt_transition()
+        return False
+
+    def is_transition_active(self) -> bool:
+        """Check if a prompt transition is currently active."""
+        if self._servicer:
+            return self._servicer.get_transition_state()['active']
+        return False
+
+    def set_default_transition_frames(self, frames: int):
+        """
+        Set the default number of transition frames (0-100).
+
+        Args:
+            frames: Default frames for transitions without explicit count
+        """
+        if self._servicer:
+            self._servicer.set_default_transition_frames(frames)

@@ -150,6 +150,26 @@ class Pipeline:
             hide=True,
             id="controlnet_scale",
         )
+        temporal_coherence: float = Field(
+            0.03,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Temporal Coherence: Noise Blending",
+            field="range",
+            id="temporal_coherence",
+            description="Blend previous latent into noise (0=off, subtle effect)",
+        )
+        temporal_coherence_latent: float = Field(
+            0.03,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Temporal Coherence: Latent Blending",
+            field="range",
+            id="temporal_coherence_latent",
+            description="Blend input with previous output latent (0=off, stronger effect)",
+        )
         # Add boost factor parameters
         boost_factor_bass: float = Field(
             1.0,
@@ -599,6 +619,15 @@ class Pipeline:
                 stream_wrapper.stream._controlnet_module.update_controlnet_scale(index=0, scale=params.controlnet_scale)
                 self.last_controlnet_scale = params.controlnet_scale
                 print(f"[img2imgStreamDiffusion.py] Updated ControlNet scale to {params.controlnet_scale}")
+
+        # Update temporal coherence if provided (runtime adjustable)
+        temporal_coherence = getattr(params, 'temporal_coherence', None)
+        temporal_coherence_latent = getattr(params, 'temporal_coherence_latent', None)
+        if temporal_coherence is not None or temporal_coherence_latent is not None:
+            stream_wrapper.update_stream_params(
+                temporal_coherence=temporal_coherence,
+                temporal_coherence_latent=temporal_coherence_latent
+            )
 
         # Preprocess input image and generate
         image_tensor = stream_wrapper.preprocess_image(params.image)

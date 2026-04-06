@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Union, Any, Tuple
 
+print("[wrapper.py] MODULE LOADED - debug prints active", flush=True)
+
 import torch
 import numpy as np
 from PIL import Image
@@ -311,6 +313,10 @@ class StreamDiffusionWrapper:
         # Store acceleration settings for ControlNet integration
         self._acceleration = acceleration
         self._engine_dir = engine_dir
+        # Store additional settings for post-LoRA TensorRT building
+        self._model_id_or_path = model_id_or_path
+        self._t_index_list = t_index_list
+        self._use_tiny_vae = use_tiny_vae
 
         if device_ids is not None:
             self.stream.unet = torch.nn.DataParallel(
@@ -504,6 +510,9 @@ class StreamDiffusionWrapper:
         latent_postprocessing_config: Optional[List[Dict[str, Any]]] = None,
         use_safety_checker: Optional[bool] = None,
         safety_checker_threshold: Optional[float] = None,
+        # Temporal coherence
+        temporal_coherence: Optional[float] = None,
+        temporal_coherence_latent: Optional[float] = None,
     ) -> None:
         """
         Update streaming parameters efficiently in a single call.
@@ -549,6 +558,12 @@ class StreamDiffusionWrapper:
             Whether to use the safety checker. Only supported for TensorRT acceleration.
         safety_checker_threshold : Optional[float]
             The threshold for the safety checker.
+        temporal_coherence : Optional[float]
+            Temporal coherence - noise blending (0.0 to 1.0). When > 0, blends the
+            previous frame's latent with random noise for smoother transitions.
+        temporal_coherence_latent : Optional[float]
+            Temporal coherence - latent blending (0.0 to 1.0). When > 0, blends the
+            input latent with previous output latent before diffusion runs.
         """
         # Handle all parameters via parameter updater (including ControlNet)
         self.stream._param_updater.update_stream_params(
@@ -570,6 +585,8 @@ class StreamDiffusionWrapper:
             image_postprocessing_config=image_postprocessing_config,
             latent_preprocessing_config=latent_preprocessing_config,
             latent_postprocessing_config=latent_postprocessing_config,
+            temporal_coherence=temporal_coherence,
+            temporal_coherence_latent=temporal_coherence_latent,
         )
         if use_safety_checker is not None:
             self.use_safety_checker = use_safety_checker and (self._acceleration == "tensorrt")
@@ -596,6 +613,7 @@ class StreamDiffusionWrapper:
         Union[Image.Image, List[Image.Image]]
             The generated image.
         """
+        print(f"[wrapper.py __call__] ENTERED mode={self.mode}, skip_diffusion={self.skip_diffusion}", flush=True)
         if self.skip_diffusion:
             return self._process_skip_diffusion(image, prompt)
         
@@ -723,7 +741,9 @@ class StreamDiffusionWrapper:
             image = self.preprocess_image(image)
 
         # Full pipeline with diffusion
+        print(f"[wrapper.py] Calling self.stream(image), temporal_coherence_latent={self.stream.temporal_coherence_latent}", flush=True)
         image_tensor = self.stream(image)
+        print(f"[wrapper.py] self.stream(image) returned", flush=True)
         image = self.postprocess_image(image_tensor, output_type=self.output_type)
         if self.use_safety_checker:
             if self.output_type != "pt":
@@ -2206,7 +2226,328 @@ class StreamDiffusionWrapper:
         
         logger.info("   Next model load will rebuild engines with these smaller settings")
 
+    def build_tensorrt_unet_engine(
+        self,
+        pipe_identifier: str = "default",
+        engine_dir: Optional[Union[str, Path]] = None,
+        replace_stream_unet: bool = True,
+    ):
+        """
+        Build TensorRT engine for the current (LoRA-fused) PyTorch UNet.
 
+        This method should be called AFTER LoRA fusion to build an optimized
+        TensorRT engine that includes the fused LoRA weights.
+
+        Args:
+            pipe_identifier: Unique identifier for this engine (e.g., "pipe_0", "pipe_1")
+                           Used in the engine path to differentiate between engines
+            engine_dir: Directory to store engines (defaults to self._engine_dir or 'engines')
+            replace_stream_unet: If True, replaces self.stream.unet with the TensorRT engine
+
+        Returns:
+            The built TensorRT UNet engine, or None if building failed
+        """
+        import os
+        from pathlib import Path
+
+        logger.info(f"Building TensorRT UNet engine for pipe: {pipe_identifier}")
+
+        # Validate that we have a PyTorch UNet to convert
+        if not hasattr(self, 'stream') or not self.stream:
+            logger.error("No stream object available")
+            return None
+
+        # Get the PyTorch UNet (could be from stream.unet or stream.pipe.unet)
+        pytorch_unet = None
+        if hasattr(self.stream, 'pipe') and hasattr(self.stream.pipe, 'unet'):
+            pytorch_unet = self.stream.pipe.unet
+        elif hasattr(self.stream, 'unet'):
+            # Check if it's already a TensorRT engine
+            if 'Engine' not in type(self.stream.unet).__name__:
+                pytorch_unet = self.stream.unet
+
+        if pytorch_unet is None:
+            logger.error("No PyTorch UNet found to convert to TensorRT")
+            return None
+
+        try:
+            from polygraphy import cuda
+            from .acceleration.tensorrt import TorchVAEEncoder
+            from .acceleration.tensorrt.runtime_engines.unet_engine import AutoencoderKLEngine
+            from .acceleration.tensorrt.models.models import UNet
+            from .acceleration.tensorrt.engine_manager import EngineManager, EngineType
+            from .model_detection import extract_unet_architecture, validate_architecture
+            from .acceleration.tensorrt.export_wrappers.unet_unified_export import UnifiedExportWrapper
+        except ImportError as e:
+            logger.error(f"TensorRT dependencies not available: {e}")
+            return None
+
+        # Use provided engine_dir or fall back to instance variable
+        engine_dir = engine_dir if engine_dir else getattr(self, '_engine_dir', 'engines')
+        engine_manager = EngineManager(engine_dir)
+
+        # Determine model type from stored detection results
+        model_type = getattr(self, '_detected_model_type', 'SD15')
+        is_sdxl = getattr(self, '_is_sdxl', False)
+
+        # Determine embedding dimension
+        if is_sdxl:
+            embedding_dim = 2048  # SDXL dual text encoder
+        else:
+            embedding_dim = self.stream.text_encoder.config.hidden_size
+
+        logger.info(f"Building TensorRT engine: model_type={model_type}, is_sdxl={is_sdxl}, embedding_dim={embedding_dim}")
+
+        # Check if ControlNet is being used
+        use_controlnet_trt = self.use_controlnet
+        unet_arch = {}
+
+        if use_controlnet_trt:
+            try:
+                unet_arch = extract_unet_architecture(pytorch_unet)
+                unet_arch = validate_architecture(unet_arch, model_type)
+                logger.info(f"Including ControlNet support for {model_type}")
+            except Exception as e:
+                logger.warning(f"ControlNet architecture detection failed: {e}")
+                use_controlnet_trt = False
+
+        # Generate engine path with pipe identifier
+        # We append the pipe_identifier to make each engine unique
+        base_unet_path = engine_manager.get_engine_path(
+            EngineType.UNET,
+            model_id_or_path=getattr(self, '_model_id_or_path', 'unknown'),
+            max_batch_size=self.max_batch_size,
+            min_batch_size=self.min_batch_size,
+            mode=self.mode,
+            use_lcm_lora=False,  # LoRA is already fused
+            use_tiny_vae=getattr(self, '_use_tiny_vae', False),
+            t_index_list=getattr(self, '_t_index_list', [0, 16, 32, 45]),
+        )
+
+        # Modify the engine path to include pipe_identifier
+        unet_path = Path(str(base_unet_path).replace('.engine', f'_{pipe_identifier}.engine'))
+        logger.info(f"UNet engine path: {unet_path}")
+
+        # Create UNet model config
+        unet_model = UNet(
+            fp16=True,
+            device=self.device,
+            max_batch_size=self.max_batch_size,
+            min_batch_size=self.min_batch_size,
+            embedding_dim=embedding_dim,
+            unet_dim=pytorch_unet.config.in_channels,
+            use_control=use_controlnet_trt,
+            unet_arch=unet_arch if use_controlnet_trt else None,
+            use_ipadapter=False,  # IPAdapter not supported in post-LoRA building yet
+            image_height=self.height,
+            image_width=self.width,
+        )
+
+        # Build control input names if needed
+        control_input_names = None
+        if use_controlnet_trt:
+            all_input_names = unet_model.get_input_names()
+            control_input_names = [name for name in all_input_names if name != 'ipadapter_scale']
+
+        # Create export wrapper for the LoRA-fused UNet
+        wrapped_unet = UnifiedExportWrapper(
+            pytorch_unet,
+            use_controlnet=use_controlnet_trt,
+            use_ipadapter=False,
+            control_input_names=control_input_names,
+            num_tokens=4
+        )
+
+        # Check if engine already exists
+        if unet_path.exists():
+            logger.info(f"TensorRT engine already exists at {unet_path}, loading...")
+        else:
+            logger.info(f"Building TensorRT engine (this may take a few minutes)...")
+
+        # Build and load the engine
+        cuda_stream = cuda.Stream()
+
+        try:
+            unet_engine = engine_manager.compile_and_load_engine(
+                EngineType.UNET,
+                unet_path,
+                load_engine=True,
+                model=wrapped_unet,
+                model_config=unet_model,
+                batch_size=self.stream.trt_unet_batch_size,
+                cuda_stream=cuda_stream,
+                use_controlnet_trt=use_controlnet_trt,
+                use_ipadapter_trt=False,
+                unet_arch=unet_arch,
+                engine_build_options={
+                    'opt_image_height': self.height,
+                    'opt_image_width': self.width,
+                }
+            )
+
+            logger.info(f"TensorRT UNet engine built/loaded successfully for pipe: {pipe_identifier}")
+
+            if replace_stream_unet:
+                self.stream.unet = unet_engine
+                logger.info("Replaced stream.unet with TensorRT engine")
+
+            return unet_engine
+
+        except Exception as e:
+            logger.error(f"Failed to build TensorRT engine: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def build_tensorrt_vae_engines(
+        self,
+        engine_dir: Optional[Union[str, Path]] = None,
+        replace_stream_vae: bool = True,
+    ):
+        """
+        Build TensorRT engines for VAE encoder and decoder.
+
+        Args:
+            engine_dir: Directory to store engines
+            replace_stream_vae: If True, replaces self.stream.vae with TensorRT engines
+
+        Returns:
+            The built TensorRT VAE engine, or None if building failed
+        """
+        from pathlib import Path
+
+        logger.info("Building TensorRT VAE engines")
+
+        if not hasattr(self, 'stream') or not self.stream:
+            logger.error("No stream object available")
+            return None
+
+        # Get the PyTorch VAE
+        pytorch_vae = None
+        if hasattr(self.stream, 'pipe') and hasattr(self.stream.pipe, 'vae'):
+            pytorch_vae = self.stream.pipe.vae
+        elif hasattr(self.stream, 'vae'):
+            if 'Engine' not in type(self.stream.vae).__name__:
+                pytorch_vae = self.stream.vae
+
+        if pytorch_vae is None:
+            logger.error("No PyTorch VAE found to convert to TensorRT")
+            return None
+
+        try:
+            from polygraphy import cuda
+            from .acceleration.tensorrt import TorchVAEEncoder
+            from .acceleration.tensorrt.runtime_engines.unet_engine import AutoencoderKLEngine
+            from .acceleration.tensorrt.models.models import VAE, VAEEncoder
+            from .acceleration.tensorrt.engine_manager import EngineManager, EngineType
+        except ImportError as e:
+            logger.error(f"TensorRT dependencies not available: {e}")
+            return None
+
+        engine_dir = engine_dir if engine_dir else getattr(self, '_engine_dir', 'engines')
+        engine_manager = EngineManager(engine_dir)
+
+        # Get batch size for VAE
+        vae_batch_size = self.batch_size if self.mode == "txt2img" else self.stream.frame_bff_size
+
+        # Generate engine paths
+        vae_decoder_path = engine_manager.get_engine_path(
+            EngineType.VAE_DECODER,
+            model_id_or_path=getattr(self, '_model_id_or_path', 'unknown'),
+            max_batch_size=vae_batch_size,
+            min_batch_size=vae_batch_size,
+            mode=self.mode,
+        )
+
+        vae_encoder_path = engine_manager.get_engine_path(
+            EngineType.VAE_ENCODER,
+            model_id_or_path=getattr(self, '_model_id_or_path', 'unknown'),
+            max_batch_size=vae_batch_size,
+            min_batch_size=vae_batch_size,
+            mode=self.mode,
+        )
+
+        # Store VAE config before building
+        vae_config = pytorch_vae.config
+        vae_dtype = pytorch_vae.dtype
+
+        # Build VAE decoder
+        vae_decoder_model = VAE(
+            device=self.device,
+            max_batch_size=vae_batch_size,
+            min_batch_size=vae_batch_size,
+        )
+
+        engine_manager.compile_and_load_engine(
+            EngineType.VAE_DECODER,
+            vae_decoder_path,
+            load_engine=False,
+            model=pytorch_vae,
+            model_config=vae_decoder_model,
+            batch_size=vae_batch_size,
+            cuda_stream=None,
+            stream_vae=pytorch_vae,
+            engine_build_options={
+                'opt_image_height': self.height,
+                'opt_image_width': self.width,
+                'build_dynamic_shape': True,
+                'min_image_resolution': 384,
+                'max_image_resolution': 1024,
+            }
+        )
+
+        # Build VAE encoder
+        vae_encoder = TorchVAEEncoder(pytorch_vae)
+        vae_encoder_model = VAEEncoder(
+            device=self.device,
+            max_batch_size=vae_batch_size,
+            min_batch_size=vae_batch_size,
+        )
+
+        engine_manager.compile_and_load_engine(
+            EngineType.VAE_ENCODER,
+            vae_encoder_path,
+            load_engine=False,
+            model=vae_encoder,
+            model_config=vae_encoder_model,
+            batch_size=vae_batch_size,
+            cuda_stream=None,
+            engine_build_options={
+                'opt_image_height': self.height,
+                'opt_image_width': self.width,
+                'build_dynamic_shape': True,
+                'min_image_resolution': 384,
+                'max_image_resolution': 1024,
+            }
+        )
+
+        # Load the engines
+        cuda_stream = cuda.Stream()
+
+        try:
+            vae_engine = AutoencoderKLEngine(
+                str(vae_encoder_path),
+                str(vae_decoder_path),
+                cuda_stream,
+                self.stream.pipe.vae_scale_factor,
+                use_cuda_graph=True,
+            )
+            vae_engine.config = vae_config
+            vae_engine.dtype = vae_dtype
+
+            logger.info("TensorRT VAE engines built/loaded successfully")
+
+            if replace_stream_vae:
+                self.stream.vae = vae_engine
+                logger.info("Replaced stream.vae with TensorRT engine")
+
+            return vae_engine
+
+        except Exception as e:
+            logger.error(f"Failed to build/load TensorRT VAE engines: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
 
 
 

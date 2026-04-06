@@ -254,6 +254,8 @@ class StreamParameterUpdater(OrchestratorUser):
         image_postprocessing_config: Optional[List[Dict[str, Any]]] = None,
         latent_preprocessing_config: Optional[List[Dict[str, Any]]] = None,
         latent_postprocessing_config: Optional[List[Dict[str, Any]]] = None,
+        temporal_coherence: Optional[float] = None,
+        temporal_coherence_latent: Optional[float] = None,
     ) -> None:
         """Update streaming parameters efficiently in a single call."""
 
@@ -331,6 +333,20 @@ class StreamParameterUpdater(OrchestratorUser):
             if latent_postprocessing_config is not None:
                 logger.info(f"update_stream_params: Updating latent postprocessing configuration")
                 self._update_hook_config('latent_postprocessing', latent_postprocessing_config)
+
+            # Handle temporal coherence (noise blending) update
+            if temporal_coherence is not None:
+                # Clamp to valid range [0.0, 1.0]
+                temporal_coherence = max(0.0, min(1.0, temporal_coherence))
+                self.stream.temporal_coherence = temporal_coherence
+                logger.info(f"update_stream_params: Temporal coherence (noise) set to {temporal_coherence}")
+
+            # Handle temporal coherence (latent blending) update
+            if temporal_coherence_latent is not None:
+                # Clamp to valid range [0.0, 1.0]
+                temporal_coherence_latent = max(0.0, min(1.0, temporal_coherence_latent))
+                self.stream.temporal_coherence_latent = temporal_coherence_latent
+                logger.info(f"update_stream_params: Temporal coherence (latent) set to {temporal_coherence_latent}")
 
     @torch.no_grad()
     def update_prompt_weights(

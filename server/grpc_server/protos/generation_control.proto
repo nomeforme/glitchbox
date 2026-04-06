@@ -43,6 +43,7 @@ message PromptRequest {
     string prompt = 1;
     optional string target_prompt = 2;
     optional float prompt_travel_factor = 3;
+    optional int32 transition_frames = 4;  // 0-100, number of frames to blend from old to new prompt
 }
 
 // Generation parameters request
@@ -53,6 +54,8 @@ message GenerationParamsRequest {
     optional float strength = 4;
     optional int32 width = 5;
     optional int32 height = 6;
+    optional float temporal_coherence = 7;  // 0.0-1.0, noise blending
+    optional float temporal_coherence_latent = 8;  // 0.0-1.0, latent feedback blending
 }
 
 // ControlNet parameters request
@@ -145,6 +148,15 @@ message CurrentStateResponse {
 
     // Curation
     int32 curation_index = 24;
+
+    // Temporal coherence
+    float temporal_coherence = 25;
+    float temporal_coherence_latent = 26;
+
+    // Prompt transition
+    int32 prompt_transition_frames = 27;  // Current transition frames setting
+    float prompt_transition_progress = 28;  // Current transition progress (0.0-1.0)
+    bool prompt_transition_active = 29;  // Whether a transition is in progress
 }
 
 // Batch update request - allows updating multiple parameter groups at once

@@ -10,18 +10,19 @@ class Args(NamedTuple):
     max_queue_size: int
     timeout: float
     safety_checker: bool
-    torch_compile: bool
     taesd: bool
     pipeline: str
     ssl_certfile: str
     ssl_keyfile: str
     sfast: bool
     tensorrt: bool = False
+    torch_compile: bool = False
+    torch_compile_regional: bool = True  # Use regional compilation for faster cold start
     onediff: bool = False
     compel: bool = False
     debug: bool = False
     # gRPC server settings
-    grpc_port: int = 50051
+    grpc_port: int = 50053
     grpc_enabled: bool = True
     # ZMQ streaming settings (0 = raw bytes, 1-100 = JPEG quality)
     zmq_jpeg_quality: int = 85
@@ -204,6 +205,13 @@ parser.add_argument(
     action="store_true",
     default=False,
     help="Enable TensorRT acceleration",
+)
+parser.add_argument(
+    "--torch-compile-full",
+    dest="torch_compile_regional",
+    action="store_false",
+    default=True,
+    help="Use full model compilation instead of regional (longer cold start, slightly faster)",
 )
 parser.add_argument(
     "--onediff",
@@ -732,8 +740,8 @@ parser.add_argument(
     "--grpc-port",
     dest="grpc_port",
     type=int,
-    default=50051,
-    help="Port for gRPC server (default: 50051)",
+    default=50053,
+    help="Port for gRPC server (default: 50053)",
 )
 parser.add_argument(
     "--no-grpc",

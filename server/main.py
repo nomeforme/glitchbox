@@ -337,11 +337,11 @@ class App:
         self.grpc_server = None
         if GRPC_AVAILABLE and getattr(self.args, 'grpc_enabled', True):
             self.grpc_server = GRPCServer(
-                port=getattr(self.args, 'grpc_port', 50051),
+                port=getattr(self.args, 'grpc_port', 50053),
                 on_curation_switch=self._handle_grpc_curation_switch,
                 debug=getattr(self.args, 'debug', False)
             )
-            print(f"[main.py] gRPC server initialized on port {getattr(self.args, 'grpc_port', 50051)}")
+            print(f"[main.py] gRPC server initialized on port {getattr(self.args, 'grpc_port', 50053)}")
         else:
             print("[main.py] gRPC server disabled or not available")
 
@@ -458,7 +458,7 @@ class App:
             # Start gRPC server if enabled
             if self.grpc_server:
                 self.grpc_server.start()
-                print(f"[main.py] gRPC server started on port {getattr(self.args, 'grpc_port', 50051)}")
+                print(f"[main.py] gRPC server started on port {getattr(self.args, 'grpc_port', 50053)}")
 
             # Initialize embeddings service if prompt travel is enabled
             print(f"[main.py] Use prompt travel: {self.use_prompt_travel}")
@@ -900,13 +900,12 @@ class App:
                                               hasattr(self, 'prompt_travel_scheduler') and \
                                               self.prompt_travel_scheduler.enabled
 
-                            if not seed_already_set:
-                                # Seed travel is independent - run it
+                            if not seed_already_set and getattr(params, 'use_latent_travel', False):
+                                # Seed travel is independent - only run if use_latent_travel is enabled in UI
                                 current_seed, next_seed, seed_interpolation_factor = self.seed_travel_scheduler.update()
                                 setattr(params, 'seed', current_seed)
                                 setattr(params, 'target_seed', next_seed)
                                 setattr(params, 'latent_travel_factor', seed_interpolation_factor)
-                                setattr(params, 'use_latent_travel', True)
                                 print(f"[main.py] Independent seed travel: seed {current_seed} → {next_seed}, factor={seed_interpolation_factor:.3f}")
 
                         if info.input_mode == "image":
@@ -1403,6 +1402,10 @@ class App:
         """
         Apply any pending parameters from gRPC to the params object.
 
+        This method also applies "sticky" params - gRPC values that persist
+        for several frames to prevent the frontend's old values from
+        overwriting them before the frontend receives the sync update.
+
         Args:
             params: The SimpleNamespace params object to update
 
@@ -1412,44 +1415,66 @@ class App:
         if not self.grpc_server:
             return params, {}
 
+        # Get newly pending params (one-time application)
         pending = self.grpc_server.get_pending_params()
-        if not pending:
+
+        # Get sticky overrides (persist for several frames)
+        sticky = self.grpc_server.get_sticky_overrides()
+
+        if not pending and not sticky:
             return params, {}
 
-        print(f"[main.py] Applying gRPC pending params: {list(pending.keys())}")
+        if pending:
+            print(f"[main.py] Applying gRPC pending params: {list(pending.keys())}")
+        if sticky:
+            print(f"[main.py] Applying gRPC sticky overrides: {list(sticky.keys())}")
 
         # Collect prompt travel settings to update scheduler directly
         prompt_travel_updates = {}
-        # Collect params to sync to frontend (exclude internal-only params)
+        # Collect params to sync to frontend (only from pending, not sticky)
         frontend_sync_params = {}
 
-        for key, value in pending.items():
-            if key == 'acid_settings':
-                # Merge acid settings into existing acid_settings
-                existing_acid = getattr(params, 'acid_settings', {})
-                if isinstance(existing_acid, dict):
-                    existing_acid.update(value)
-                    setattr(params, 'acid_settings', existing_acid)
+        # Helper function to apply params
+        def apply_params(param_dict, is_pending=True):
+            for key, value in param_dict.items():
+                if key == 'acid_settings':
+                    # Merge acid settings into existing acid_settings
+                    existing_acid = getattr(params, 'acid_settings', {})
+                    if isinstance(existing_acid, dict):
+                        existing_acid.update(value)
+                        setattr(params, 'acid_settings', existing_acid)
+                    else:
+                        setattr(params, 'acid_settings', value)
+                    # Also update acid processor directly
+                    if self.use_acid_processor:
+                        self._update_acid_settings(value)
+                    # Add individual acid params to frontend sync (only for pending)
+                    if is_pending:
+                        for acid_key, acid_value in value.items():
+                            frontend_sync_params[acid_key] = acid_value
+                elif key == 'curation_index':
+                    # Curation switches are handled separately via HTTP API
+                    if is_pending:
+                        print(f"[main.py] Curation index change via gRPC: {value}")
+                elif key.startswith('use_prompt_') or key.startswith('prompt_travel_') or key in ('loop_prompts',):
+                    # Collect prompt travel settings
+                    prompt_travel_updates[key] = value
+                    setattr(params, key, value)
+                    if is_pending:
+                        frontend_sync_params[key] = value
                 else:
-                    setattr(params, 'acid_settings', value)
-                # Also update acid processor directly
-                if self.use_acid_processor:
-                    self._update_acid_settings(value)
-                # Add individual acid params to frontend sync
-                for acid_key, acid_value in value.items():
-                    frontend_sync_params[acid_key] = acid_value
-            elif key == 'curation_index':
-                # Curation switches are handled separately via HTTP API
-                print(f"[main.py] Curation index change via gRPC: {value}")
-            elif key.startswith('use_prompt_') or key.startswith('prompt_travel_') or key in ('loop_prompts',):
-                # Collect prompt travel settings
-                prompt_travel_updates[key] = value
-                setattr(params, key, value)
-                frontend_sync_params[key] = value
-            else:
-                # Direct param update
-                setattr(params, key, value)
-                frontend_sync_params[key] = value
+                    # Direct param update
+                    setattr(params, key, value)
+                    if is_pending:
+                        frontend_sync_params[key] = value
+
+        # Apply pending params first (these also become sticky)
+        if pending:
+            apply_params(pending, is_pending=True)
+
+        # Apply sticky overrides (override frontend values until frontend syncs)
+        if sticky:
+            apply_params(sticky, is_pending=False)
 
         # Apply prompt travel scheduler updates directly
         if prompt_travel_updates and self.use_prompt_travel and hasattr(self, 'prompt_travel_scheduler'):
@@ -1457,7 +1482,23 @@ class App:
             self._update_acid_settings(prompt_travel_updates)
 
         # Update gRPC server state with applied params
-        self.grpc_server.update_state(pending)
+        if pending:
+            self.grpc_server.update_state(pending)
+
+        # Decrement sticky frame counters
+        self.grpc_server.decrement_sticky_frames()
+
+        # Handle active prompt transitions
+        if self.grpc_server.is_transition_active():
+            source, target, factor = self.grpc_server.get_interpolated_prompt()
+            setattr(params, 'prompt', source)
+            setattr(params, 'target_prompt', target)
+            setattr(params, 'prompt_travel_factor', factor)
+            setattr(params, 'use_prompt_travel', True)
+            print(f"[main.py] gRPC transition: {factor*100:.1f}% complete")
+
+            # Advance the transition for next frame
+            self.grpc_server.advance_prompt_transition()
 
         return params, frontend_sync_params
 

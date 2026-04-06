@@ -30,13 +30,15 @@ class GenerationControlServicer:
 
     def __init__(self,
                  on_curation_switch: Optional[Callable[[int], None]] = None,
-                 debug: bool = False):
+                 debug: bool = False,
+                 sticky_frames: int = 5):
         """
         Initialize the servicer.
 
         Args:
             on_curation_switch: Callback function for curation switches
             debug: Enable debug logging
+            sticky_frames: Number of frames gRPC params should override frontend (default 5)
         """
         self._lock = threading.RLock()
         self._pending_params: Dict[str, Any] = {}
@@ -44,6 +46,21 @@ class GenerationControlServicer:
         self._on_curation_switch = on_curation_switch
         self._debug = debug
         self._logger = logging.getLogger(__name__)
+
+        # Sticky params: params that override frontend for N frames
+        # Format: {param_name: (value, frames_remaining)}
+        self._sticky_params: Dict[str, tuple] = {}
+        self._sticky_frames = sticky_frames
+
+        # Prompt transition state for smooth blending
+        self._prompt_transition = {
+            'active': False,
+            'source_prompt': '',
+            'target_prompt': '',
+            'current_frame': 0,
+            'total_frames': 0,
+            'default_frames': 30,  # Default transition frames (0-100)
+        }
 
         # Initialize default state
         self._init_default_state()
@@ -63,6 +80,8 @@ class GenerationControlServicer:
             'strength': 0.5,
             'width': 512,
             'height': 512,
+            'temporal_coherence': 0.03,
+            'temporal_coherence_latent': 0.03,
 
             # ControlNet params
             'controlnet_scale': 1.0,
@@ -131,7 +150,182 @@ class GenerationControlServicer:
         """Queue parameter updates to be applied on next frame."""
         with self._lock:
             self._pending_params.update(params)
+            # Also make these params "sticky" to override frontend for several frames
+            for key, value in params.items():
+                self._sticky_params[key] = (value, self._sticky_frames)
             self._log(f"Queued params: {params}")
+
+    def get_sticky_overrides(self) -> Dict[str, Any]:
+        """
+        Get current sticky param values that should override frontend values.
+
+        These are params set by gRPC that should persist for several frames
+        to prevent the frontend's old values from overwriting them before
+        the frontend receives the sync update.
+
+        Returns:
+            Dictionary of param names to values that should override frontend
+        """
+        with self._lock:
+            overrides = {}
+            for key, (value, frames) in self._sticky_params.items():
+                if frames > 0:
+                    overrides[key] = value
+            return overrides
+
+    def decrement_sticky_frames(self):
+        """
+        Decrement the frame counter for all sticky params.
+
+        Should be called once per frame cycle. When a param's counter
+        reaches 0, it will no longer override frontend values.
+        """
+        with self._lock:
+            expired = []
+            for key, (value, frames) in self._sticky_params.items():
+                if frames > 1:
+                    self._sticky_params[key] = (value, frames - 1)
+                else:
+                    expired.append(key)
+
+            for key in expired:
+                del self._sticky_params[key]
+                self._log(f"Sticky param expired: {key}")
+
+    def clear_sticky_param(self, param_name: str):
+        """
+        Clear a sticky param immediately (e.g., when frontend confirms sync).
+
+        Args:
+            param_name: The name of the param to clear from sticky list
+        """
+        with self._lock:
+            if param_name in self._sticky_params:
+                del self._sticky_params[param_name]
+                self._log(f"Sticky param cleared: {param_name}")
+
+    # Prompt Transition Methods
+
+    def start_prompt_transition(self, new_prompt: str, transition_frames: int = None):
+        """
+        Start a smooth transition to a new prompt.
+
+        Args:
+            new_prompt: The target prompt to transition to
+            transition_frames: Number of frames for the transition (0-100)
+        """
+        with self._lock:
+            if transition_frames is None:
+                transition_frames = self._prompt_transition['default_frames']
+
+            # Clamp to 0-100
+            transition_frames = max(0, min(100, transition_frames))
+
+            if transition_frames == 0:
+                # Instant change, no transition
+                self._prompt_transition['active'] = False
+                self._prompt_transition['source_prompt'] = new_prompt
+                self._prompt_transition['target_prompt'] = new_prompt
+                self._prompt_transition['current_frame'] = 0
+                self._prompt_transition['total_frames'] = 0
+                self._log(f"Instant prompt change to: {new_prompt[:50]}...")
+            else:
+                # Get current effective prompt as source
+                if self._prompt_transition['active']:
+                    # Mid-transition: use interpolated value as new source
+                    source = self.get_interpolated_prompt()[0]
+                else:
+                    # Use current prompt as source
+                    source = self._current_state.get('prompt', '')
+
+                self._prompt_transition['active'] = True
+                self._prompt_transition['source_prompt'] = source
+                self._prompt_transition['target_prompt'] = new_prompt
+                self._prompt_transition['current_frame'] = 0
+                self._prompt_transition['total_frames'] = transition_frames
+                self._log(f"Starting {transition_frames}-frame transition: '{source[:30]}...' -> '{new_prompt[:30]}...'")
+
+    def get_interpolated_prompt(self) -> tuple:
+        """
+        Get the current interpolated prompt state.
+
+        Returns:
+            Tuple of (source_prompt, target_prompt, interpolation_factor)
+            - If no transition active: (current_prompt, current_prompt, 1.0)
+            - If transition active: (source, target, progress 0.0-1.0)
+        """
+        with self._lock:
+            if not self._prompt_transition['active']:
+                current = self._current_state.get('prompt', '')
+                return (current, current, 1.0)
+
+            source = self._prompt_transition['source_prompt']
+            target = self._prompt_transition['target_prompt']
+            current = self._prompt_transition['current_frame']
+            total = self._prompt_transition['total_frames']
+
+            if total <= 0:
+                return (target, target, 1.0)
+
+            progress = min(1.0, current / total)
+            return (source, target, progress)
+
+    def advance_prompt_transition(self) -> bool:
+        """
+        Advance the prompt transition by one frame.
+
+        Should be called once per frame cycle.
+
+        Returns:
+            True if transition is still active, False if completed
+        """
+        with self._lock:
+            if not self._prompt_transition['active']:
+                return False
+
+            self._prompt_transition['current_frame'] += 1
+
+            if self._prompt_transition['current_frame'] >= self._prompt_transition['total_frames']:
+                # Transition complete
+                final_prompt = self._prompt_transition['target_prompt']
+                self._prompt_transition['active'] = False
+                self._prompt_transition['source_prompt'] = final_prompt
+                self._current_state['prompt'] = final_prompt
+                self._log(f"Transition complete: {final_prompt[:50]}...")
+                return False
+
+            return True
+
+    def get_transition_state(self) -> Dict[str, Any]:
+        """
+        Get the current transition state for status queries.
+
+        Returns:
+            Dictionary with transition state info
+        """
+        with self._lock:
+            total = self._prompt_transition['total_frames']
+            current = self._prompt_transition['current_frame']
+            progress = (current / total) if total > 0 else 1.0
+
+            return {
+                'active': self._prompt_transition['active'],
+                'progress': min(1.0, progress),
+                'frames_remaining': max(0, total - current),
+                'total_frames': total,
+                'default_frames': self._prompt_transition['default_frames'],
+            }
+
+    def set_default_transition_frames(self, frames: int):
+        """
+        Set the default number of transition frames.
+
+        Args:
+            frames: Default frames (0-100) for transitions without explicit frame count
+        """
+        with self._lock:
+            self._prompt_transition['default_frames'] = max(0, min(100, frames))
+            self._log(f"Default transition frames set to: {frames}")
 
     # gRPC Service Methods
 
@@ -139,6 +333,31 @@ class GenerationControlServicer:
         """Handle SetPrompt RPC."""
         self._log(f"SetPrompt called: prompt='{request.prompt[:50] if request.prompt else ''}...'")
 
+        # Check if this is a transition request
+        if request.HasField('transition_frames'):
+            transition_frames = request.transition_frames
+            self._log(f"Transition requested: {transition_frames} frames")
+
+            # Start the smooth transition
+            self.start_prompt_transition(request.prompt, transition_frames)
+
+            # Queue the transition state to be applied
+            source, target, factor = self.get_interpolated_prompt()
+            params = {
+                'prompt': source,
+                'target_prompt': target,
+                'prompt_travel_factor': factor,
+                'use_prompt_travel': True,
+                '_grpc_transition_active': True,  # Internal flag for main.py
+            }
+            self._queue_params(params)
+
+            return pb2.ControlResponse(
+                success=True,
+                message=f"Prompt transition started: {transition_frames} frames to '{request.prompt[:30]}...'"
+            )
+
+        # Standard prompt update (instant or with explicit target/factor)
         params = {'prompt': request.prompt}
 
         if request.HasField('target_prompt'):
@@ -172,6 +391,10 @@ class GenerationControlServicer:
             params['width'] = request.width
         if request.HasField('height'):
             params['height'] = request.height
+        if request.HasField('temporal_coherence'):
+            params['temporal_coherence'] = request.temporal_coherence
+        if request.HasField('temporal_coherence_latent'):
+            params['temporal_coherence_latent'] = request.temporal_coherence_latent
 
         if params:
             self._queue_params(params)
@@ -346,6 +569,7 @@ class GenerationControlServicer:
 
         with self._lock:
             state = self._current_state.copy()
+            transition = self.get_transition_state()
 
         return pb2.CurrentStateResponse(
             success=True,
@@ -372,6 +596,11 @@ class GenerationControlServicer:
             acid_x_shift=state.get('acid_x_shift', 0),
             acid_y_shift=state.get('acid_y_shift', 0),
             curation_index=state.get('curation_index', 0),
+            temporal_coherence=state.get('temporal_coherence', 0.03),
+            temporal_coherence_latent=state.get('temporal_coherence_latent', 0.03),
+            prompt_transition_frames=transition['default_frames'],
+            prompt_transition_progress=transition['progress'],
+            prompt_transition_active=transition['active'],
         )
 
     def BatchUpdate(self, request, context):

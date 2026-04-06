@@ -186,6 +186,26 @@ class Pipeline:
             hide=True,
             id="controlnet_scale",
         )
+        temporal_coherence: float = Field(
+            0.03,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Temporal Coherence: Noise Blending",
+            field="range",
+            id="temporal_coherence",
+            description="Blend previous latent into noise (0=off, subtle effect)",
+        )
+        temporal_coherence_latent: float = Field(
+            0.03,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Temporal Coherence: Latent Blending",
+            field="range",
+            id="temporal_coherence_latent",
+            description="Blend input with previous output latent (0=off, stronger effect)",
+        )
         # Add boost factor parameters
         boost_factor_bass: float = Field(
             1.0,
@@ -311,6 +331,22 @@ class Pipeline:
         # Store lora_config for later use
         self.lora_config = lora_config
         self.pipes = []
+
+        # Check if TensorRT acceleration is enabled
+        self.use_tensorrt = getattr(args, 'tensorrt', False)
+        if self.use_tensorrt:
+            print(f"[img2imgStreamDiffusionXL.py] TensorRT acceleration ENABLED")
+        else:
+            print(f"[img2imgStreamDiffusionXL.py] TensorRT acceleration DISABLED (use --tensorrt to enable)")
+
+        # Check if torch.compile acceleration is enabled
+        self.use_torch_compile = getattr(args, 'torch_compile', False)
+        self.use_regional_compile = getattr(args, 'torch_compile_regional', True)
+        if self.use_torch_compile:
+            compile_mode = "regional (faster cold start)" if self.use_regional_compile else "full model"
+            print(f"[img2imgStreamDiffusionXL.py] torch.compile acceleration ENABLED ({compile_mode})")
+        else:
+            print(f"[img2imgStreamDiffusionXL.py] torch.compile DISABLED (use --torch-compile to enable)")
 
         # Check if upscaler is enabled
         self.use_upscaler = getattr(args, 'use_upscaler', False)
@@ -539,20 +575,35 @@ class Pipeline:
                             self._load_and_fuse_embeddings(target_pipe, embedding_path, token_str=token_str)
                             print(f"[img2imgStreamDiffusionXL.py] Textual inversion embeddings fused for LoRA: {lora_name}")
 
-            # Now build TensorRT engine for this LoRA-fused UNet
-            # For idx==0, keep it loaded. For idx>0, build and unload
-            print(f"[img2imgStreamDiffusionXL.py] Building TensorRT engine for UNet {idx}...")
-
-            # TODO: Implement TensorRT building here
-            # For now, we'll just store the UNet engine reference
+            # Now build TensorRT engine for this LoRA-fused UNet (if enabled)
+            # For idx==0, build and keep loaded. For idx>0, store PyTorch UNet for now
+            print(f"[img2imgStreamDiffusionXL.py] Processing UNet {idx}...")
 
             if idx == 0:
-                # Keep pipe 0's UNet loaded in GPU - it's already in shared_wrapper
-                print(f"[img2imgStreamDiffusionXL.py] UNet {idx} will remain loaded in GPU (shared_wrapper)")
-                self.unet_engines.append(self.shared_wrapper.stream.unet)
+                if self.use_tensorrt:
+                    # Build TensorRT engine for pipe 0's LoRA-fused UNet
+                    print(f"[img2imgStreamDiffusionXL.py] Building TensorRT engine for pipe 0...")
+                    unet_engine = self.shared_wrapper.build_tensorrt_unet_engine(
+                        pipe_identifier=f"pipe_{idx}",
+                        replace_stream_unet=True
+                    )
+                    if unet_engine is not None:
+                        self.unet_engines.append(unet_engine)
+                        print(f"[img2imgStreamDiffusionXL.py] TensorRT UNet engine built and loaded for pipe 0")
+                    else:
+                        # Fallback to PyTorch UNet if TensorRT build fails
+                        print(f"[img2imgStreamDiffusionXL.py] TensorRT build failed, using PyTorch UNet for pipe 0")
+                        self.unet_engines.append(self.shared_wrapper.stream.unet)
+                else:
+                    # No TensorRT - use PyTorch UNet
+                    print(f"[img2imgStreamDiffusionXL.py] Using PyTorch UNet for pipe 0 (TensorRT disabled)")
+                    self.unet_engines.append(self.shared_wrapper.stream.unet)
             else:
                 # For pipe 1+: Store the fused PyTorch UNet (already on CPU)
-                print(f"[img2imgStreamDiffusionXL.py] Storing UNet {idx} (already on CPU)")
+                # TensorRT building for multiple pipes requires more complex architecture
+                # For now, store PyTorch UNet for hot-swapping
+                print(f"[img2imgStreamDiffusionXL.py] Storing PyTorch UNet {idx} (already on CPU)")
+                print(f"[img2imgStreamDiffusionXL.py] NOTE: Pipe {idx} uses PyTorch UNet (no TensorRT)")
 
                 # Store the fused UNet (it's already on CPU)
                 self.unet_engines.append(target_pipe.unet)
@@ -567,9 +618,24 @@ class Pipeline:
                 gc.collect()
                 print(f"[img2imgStreamDiffusionXL.py] UNet {idx} stored on CPU")
 
-        # Clean up PyTorch UNet/VAE from shared_wrapper now that LoRAs are fused
-        print(f"[img2imgStreamDiffusionXL.py] Cleaning up PyTorch models after TensorRT load...")
-        self.shared_wrapper.cleanup_pytorch_models_after_tensorrt()
+        # Build TensorRT VAE engines (shared across all pipes) if TensorRT is enabled
+        if self.use_tensorrt:
+            print(f"[img2imgStreamDiffusionXL.py] Building TensorRT VAE engines...")
+            vae_engine = self.shared_wrapper.build_tensorrt_vae_engines(replace_stream_vae=True)
+            if vae_engine is not None:
+                print(f"[img2imgStreamDiffusionXL.py] TensorRT VAE engines built successfully")
+            else:
+                print(f"[img2imgStreamDiffusionXL.py] TensorRT VAE build failed, using PyTorch VAE")
+
+            # Clean up PyTorch UNet/VAE from shared_wrapper now that TensorRT engines are loaded
+            print(f"[img2imgStreamDiffusionXL.py] Cleaning up PyTorch models after TensorRT load...")
+            self.shared_wrapper.cleanup_pytorch_models_after_tensorrt()
+        elif self.use_torch_compile:
+            # Apply torch.compile if TensorRT is not enabled
+            print(f"[img2imgStreamDiffusionXL.py] Applying torch.compile to UNet...")
+            self._apply_torch_compile()
+        else:
+            print(f"[img2imgStreamDiffusionXL.py] No acceleration enabled (use --tensorrt or --torch-compile)")
 
         # Prepare the shared wrapper with default prompt
         default_seed = 4402026899276587
@@ -706,6 +772,130 @@ class Pipeline:
         print(f"[img2imgStreamDiffusionXL.py] Successfully fused textual inversion embeddings!")
         print(f"[img2imgStreamDiffusionXL.py] You can now use tokens: {token_str} in your prompts")
 
+    def _apply_torch_compile(self):
+        """
+        Apply torch.compile to the UNet for acceleration.
+
+        Supports two modes:
+        - Regional compilation: Compiles repeated transformer blocks individually.
+          This drastically reduces cold start time (7-8x faster) while maintaining
+          similar runtime speedup as full compilation.
+        - Full compilation: Compiles the entire UNet as one graph.
+          Slightly faster at runtime but much longer cold start.
+        """
+        import torch
+
+        unet = self.shared_wrapper.stream.unet
+
+        # Check if UNet is a TensorRT engine (shouldn't compile TRT engines)
+        if 'Engine' in type(unet).__name__:
+            print(f"[img2imgStreamDiffusionXL.py] UNet is TensorRT engine, skipping torch.compile")
+            return
+
+        # Enable TF32 for better performance on Ampere+ GPUs
+        torch.set_float32_matmul_precision('high')
+
+        if self.use_regional_compile:
+            # Regional compilation: compile repeated transformer blocks
+            # This reduces cold start from ~60s to ~8s while maintaining speedup
+            print(f"[img2imgStreamDiffusionXL.py] Applying REGIONAL torch.compile to transformer blocks...")
+
+            compiled_blocks = 0
+
+            # Compile down_blocks (repeated encoder blocks)
+            if hasattr(unet, 'down_blocks'):
+                for i, block in enumerate(unet.down_blocks):
+                    if hasattr(block, 'attentions') and block.attentions is not None:
+                        for j, attn in enumerate(block.attentions):
+                            unet.down_blocks[i].attentions[j] = torch.compile(
+                                attn,
+                                mode="reduce-overhead",
+                                fullgraph=True,
+                                dynamic=True
+                            )
+                            compiled_blocks += 1
+                    if hasattr(block, 'resnets'):
+                        for j, resnet in enumerate(block.resnets):
+                            unet.down_blocks[i].resnets[j] = torch.compile(
+                                resnet,
+                                mode="reduce-overhead",
+                                fullgraph=True,
+                                dynamic=True
+                            )
+                            compiled_blocks += 1
+
+            # Compile mid_block
+            if hasattr(unet, 'mid_block') and unet.mid_block is not None:
+                if hasattr(unet.mid_block, 'attentions'):
+                    for i, attn in enumerate(unet.mid_block.attentions):
+                        unet.mid_block.attentions[i] = torch.compile(
+                            attn,
+                            mode="reduce-overhead",
+                            fullgraph=True,
+                            dynamic=True
+                        )
+                        compiled_blocks += 1
+                if hasattr(unet.mid_block, 'resnets'):
+                    for i, resnet in enumerate(unet.mid_block.resnets):
+                        unet.mid_block.resnets[i] = torch.compile(
+                            resnet,
+                            mode="reduce-overhead",
+                            fullgraph=True,
+                            dynamic=True
+                        )
+                        compiled_blocks += 1
+
+            # Compile up_blocks (repeated decoder blocks)
+            if hasattr(unet, 'up_blocks'):
+                for i, block in enumerate(unet.up_blocks):
+                    if hasattr(block, 'attentions') and block.attentions is not None:
+                        for j, attn in enumerate(block.attentions):
+                            unet.up_blocks[i].attentions[j] = torch.compile(
+                                attn,
+                                mode="reduce-overhead",
+                                fullgraph=True,
+                                dynamic=True
+                            )
+                            compiled_blocks += 1
+                    if hasattr(block, 'resnets'):
+                        for j, resnet in enumerate(block.resnets):
+                            unet.up_blocks[i].resnets[j] = torch.compile(
+                                resnet,
+                                mode="reduce-overhead",
+                                fullgraph=True,
+                                dynamic=True
+                            )
+                            compiled_blocks += 1
+
+            print(f"[img2imgStreamDiffusionXL.py] Regional compilation complete: {compiled_blocks} blocks compiled")
+            print(f"[img2imgStreamDiffusionXL.py] First inference will trigger JIT compilation (faster than full compile)")
+
+        else:
+            # Full model compilation
+            print(f"[img2imgStreamDiffusionXL.py] Applying FULL torch.compile to UNet...")
+            print(f"[img2imgStreamDiffusionXL.py] WARNING: First inference will have long cold start (~60s+)")
+
+            self.shared_wrapper.stream.unet = torch.compile(
+                unet,
+                mode="reduce-overhead",
+                fullgraph=True,
+                dynamic=True
+            )
+
+            print(f"[img2imgStreamDiffusionXL.py] Full UNet compilation complete")
+
+        # Also compile VAE decoder for additional speedup
+        vae = self.shared_wrapper.stream.vae
+        if 'Engine' not in type(vae).__name__ and hasattr(vae, 'decoder'):
+            print(f"[img2imgStreamDiffusionXL.py] Compiling VAE decoder...")
+            vae.decoder = torch.compile(
+                vae.decoder,
+                mode="reduce-overhead",
+                fullgraph=True,
+                dynamic=True
+            )
+            print(f"[img2imgStreamDiffusionXL.py] VAE decoder compilation complete")
+
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
         # Get pipe_index from params, default to 0 if not provided
         pipe_index = getattr(params, 'pipe_index', 0)
@@ -723,6 +913,7 @@ class Pipeline:
             # Each pipe has its own LoRA-fused TensorRT UNet engine
             # Other components (VAE, text encoders, ControlNet) are shared
 
+            # NOTE: UNet swap is disabled - causes OOM with multiple PyTorch UNets
             # Perform the actual UNet swap
             # target_unet = self.unet_engines[pipe_index]
             # self.shared_wrapper.stream.unet = target_unet
@@ -965,9 +1156,20 @@ class Pipeline:
                 self.last_controlnet_scale = params.controlnet_scale
                 print(f"[img2imgStreamDiffusion.py] Updated ControlNet scale to {params.controlnet_scale}")
 
+        # Update temporal coherence if provided (runtime adjustable)
+        temporal_coherence = getattr(params, 'temporal_coherence', None)
+        temporal_coherence_latent = getattr(params, 'temporal_coherence_latent', None)
+        if temporal_coherence is not None or temporal_coherence_latent is not None:
+            stream_wrapper.update_stream_params(
+                temporal_coherence=temporal_coherence,
+                temporal_coherence_latent=temporal_coherence_latent
+            )
+
         # Preprocess input image and generate
         image_tensor = stream_wrapper.preprocess_image(params.image)
+        print(f"[img2imgStreamDiffusionXL.py] About to call stream_wrapper(image=...), type={type(stream_wrapper)}", flush=True)
         output_image = stream_wrapper(image=image_tensor)
+        print(f"[img2imgStreamDiffusionXL.py] stream_wrapper() returned, type={type(output_image)}", flush=True)
 
         # Debug controlnet: paste preprocessed control image in bottom-right corner
         if params.debug_controlnet:
