@@ -33,3 +33,5 @@ server/SD-Psychedelic-Lab
 
 # Ignore log files
 *.log.env
+*.log
+
