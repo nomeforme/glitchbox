@@ -37,6 +37,8 @@ Glitchbox exposes an [MCP (Model Context Protocol)](https://modelcontextprotocol
 
 ### Claude Code Configuration
 
+#### stdio (local -- MCP client spawns the server)
+
 Add to your project's `.mcp.json` (or `~/.claude/settings.json`):
 
 ```json
@@ -54,7 +56,22 @@ Add to your project's `.mcp.json` (or `~/.claude/settings.json`):
 }
 ```
 
-Set `GLITCHBOX_GRPC_HOST` to the IP of the machine running the glitchbox server if connecting remotely.
+#### SSE (remote -- connects to a running server)
+
+When the glitchbox server is already running, the SSE endpoint is available automatically. Add to `.mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "glitchbox": {
+      "type": "sse",
+      "url": "http://<host>:7860/mcp/sse"
+    }
+  }
+}
+```
+
+Replace `<host>` with the IP or hostname of the machine running glitchbox (e.g. `192.168.1.247`).
 
 ### Prerequisites
 
