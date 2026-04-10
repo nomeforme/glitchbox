@@ -80,6 +80,21 @@ class GenerationControlStub(object):
                 request_serializer=generation__control__pb2.BatchUpdateRequest.SerializeToString,
                 response_deserializer=generation__control__pb2.ControlResponse.FromString,
                 _registered_method=True)
+        self.StartPromptJourney = channel.unary_unary(
+                '/generation_control.GenerationControl/StartPromptJourney',
+                request_serializer=generation__control__pb2.PromptJourneyRequest.SerializeToString,
+                response_deserializer=generation__control__pb2.PromptJourneyResponse.FromString,
+                _registered_method=True)
+        self.GetJourneyStatus = channel.unary_unary(
+                '/generation_control.GenerationControl/GetJourneyStatus',
+                request_serializer=generation__control__pb2.GetStateRequest.SerializeToString,
+                response_deserializer=generation__control__pb2.PromptJourneyStatus.FromString,
+                _registered_method=True)
+        self.StopPromptJourney = channel.unary_unary(
+                '/generation_control.GenerationControl/StopPromptJourney',
+                request_serializer=generation__control__pb2.GetStateRequest.SerializeToString,
+                response_deserializer=generation__control__pb2.ControlResponse.FromString,
+                _registered_method=True)
 
 
 class GenerationControlServicer(object):
@@ -149,6 +164,27 @@ class GenerationControlServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def StartPromptJourney(self, request, context):
+        """Start an autonomous prompt journey (headless mode)
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def GetJourneyStatus(self, request, context):
+        """Get status of a running prompt journey
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def StopPromptJourney(self, request, context):
+        """Stop a running prompt journey
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_GenerationControlServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -195,6 +231,21 @@ def add_GenerationControlServicer_to_server(servicer, server):
             'BatchUpdate': grpc.unary_unary_rpc_method_handler(
                     servicer.BatchUpdate,
                     request_deserializer=generation__control__pb2.BatchUpdateRequest.FromString,
+                    response_serializer=generation__control__pb2.ControlResponse.SerializeToString,
+            ),
+            'StartPromptJourney': grpc.unary_unary_rpc_method_handler(
+                    servicer.StartPromptJourney,
+                    request_deserializer=generation__control__pb2.PromptJourneyRequest.FromString,
+                    response_serializer=generation__control__pb2.PromptJourneyResponse.SerializeToString,
+            ),
+            'GetJourneyStatus': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetJourneyStatus,
+                    request_deserializer=generation__control__pb2.GetStateRequest.FromString,
+                    response_serializer=generation__control__pb2.PromptJourneyStatus.SerializeToString,
+            ),
+            'StopPromptJourney': grpc.unary_unary_rpc_method_handler(
+                    servicer.StopPromptJourney,
+                    request_deserializer=generation__control__pb2.GetStateRequest.FromString,
                     response_serializer=generation__control__pb2.ControlResponse.SerializeToString,
             ),
     }
@@ -441,6 +492,87 @@ class GenerationControl(object):
             target,
             '/generation_control.GenerationControl/BatchUpdate',
             generation__control__pb2.BatchUpdateRequest.SerializeToString,
+            generation__control__pb2.ControlResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StartPromptJourney(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/generation_control.GenerationControl/StartPromptJourney',
+            generation__control__pb2.PromptJourneyRequest.SerializeToString,
+            generation__control__pb2.PromptJourneyResponse.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def GetJourneyStatus(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/generation_control.GenerationControl/GetJourneyStatus',
+            generation__control__pb2.GetStateRequest.SerializeToString,
+            generation__control__pb2.PromptJourneyStatus.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def StopPromptJourney(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/generation_control.GenerationControl/StopPromptJourney',
+            generation__control__pb2.GetStateRequest.SerializeToString,
             generation__control__pb2.ControlResponse.FromString,
             options,
             channel_credentials,

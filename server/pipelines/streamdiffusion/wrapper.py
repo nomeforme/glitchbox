@@ -613,7 +613,7 @@ class StreamDiffusionWrapper:
         Union[Image.Image, List[Image.Image]]
             The generated image.
         """
-        print(f"[wrapper.py __call__] ENTERED mode={self.mode}, skip_diffusion={self.skip_diffusion}", flush=True)
+        # print(f"[wrapper.py __call__] ENTERED mode={self.mode}, skip_diffusion={self.skip_diffusion}", flush=True)
         if self.skip_diffusion:
             return self._process_skip_diffusion(image, prompt)
         

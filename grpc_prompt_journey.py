@@ -2,16 +2,16 @@
 """
 Multi-prompt journey video recorder.
 
-Connects to a remote StreamDiffusion server, sends a sequence of prompts with
-smooth interpolation between each pair, captures the JPEG frames streamed over
-ZMQ, and writes them to an MP4 video file.
+Sends the full journey spec to the server in one gRPC call, then records
+the ZMQ frame stream into an MP4 video. The server generates all frames
+autonomously — no frame-by-frame coordination needed.
 
 Required files on this machine (copy from server repo):
   - generation_control_pb2.py
   - generation_control_pb2_grpc.py
 
 Install:
-  pip install grpcio zmq opencv-python numpy
+  pip install grpcio pyzmq opencv-python numpy
 """
 
 import argparse
@@ -19,7 +19,6 @@ import time
 import threading
 import signal
 import sys
-from pathlib import Path
 
 import cv2
 import numpy as np
@@ -38,64 +37,13 @@ ZMQ_PORT = 5555
 
 # Default prompts — edit these or pass via --prompts-file
 DEFAULT_PROMPTS = [
-    "a majestic mountain at golden sunset, cinematic lighting",
-    "a starry night sky over a calm ocean, milky way visible",
-    "an underwater coral reef glowing with bioluminescence",
-    "a neon cyberpunk cityscape in the rain, reflections on wet streets",
-    "a vast alien desert with two moons rising, purple sky",
+    "twisted bodies Pale beige sculptural forms with flowing organic shapes and smooth ovoid elements against black background.",
+    "water Dramatic black and white portrait of face submerged in splashing water against dark background.",
+    "twisted bodies Pale cream sculptural figures with flowing organic tendrils merging together against black background.",
+    "water Dynamic water splash frozen mid-motion against black background, high contrast monochrome photography with crystalline droplet details.",
+    "twisted bodies Pale beige sculptural figures in dynamic motion against black background, organic flowing forms intertwined.",
+    "water Transparent water sculpture forming human face with dynamic splashing droplets on black background.",
 ]
-
-
-class FrameReceiver:
-    """Background thread that receives JPEG frames from ZMQ and buffers the latest."""
-
-    def __init__(self, server_ip: str, zmq_port: int):
-        self.address = f"tcp://{server_ip}:{zmq_port}"
-        self.latest_frame = None
-        self.frame_count = 0
-        self.lock = threading.Lock()
-        self._stop = threading.Event()
-        self._thread = None
-
-    def start(self):
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
-
-    def stop(self):
-        self._stop.set()
-        if self._thread:
-            self._thread.join(timeout=3)
-
-    def _run(self):
-        ctx = zmq.Context()
-        sub = ctx.socket(zmq.SUB)
-        sub.setsockopt(zmq.RCVTIMEO, 2000)
-        sub.setsockopt_string(zmq.SUBSCRIBE, "")
-        sub.connect(self.address)
-        print(f"[ZMQ] Connected to {self.address}")
-
-        while not self._stop.is_set():
-            try:
-                data = sub.recv()
-                frame = cv2.imdecode(
-                    np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR
-                )
-                if frame is not None:
-                    with self.lock:
-                        self.latest_frame = frame
-                        self.frame_count += 1
-            except zmq.Again:
-                continue
-            except Exception as e:
-                print(f"[ZMQ] Error: {e}")
-                break
-
-        sub.close()
-        ctx.term()
-
-    def get_frame(self):
-        with self.lock:
-            return self.latest_frame
 
 
 def load_prompts(path: str) -> list[str]:
@@ -119,6 +67,10 @@ def run_journey(
     fps: int,
     output: str,
     loop: bool,
+    curation_index: int = None,
+    pipe_index: int = None,
+    input_video: str = None,
+    controlnet_scale: float = None,
 ):
     # --- Connect gRPC ---
     channel = grpc.insecure_channel(f"{server_ip}:{grpc_port}")
@@ -128,25 +80,86 @@ def run_journey(
     try:
         state = stub.GetCurrentState(pb2.GetStateRequest())
         print(f"[gRPC] Connected — current prompt: {state.prompt!r}")
-        print(f"[gRPC] Resolution: {state.width}x{state.height}")
     except grpc.RpcError as e:
         print(f"[gRPC] Connection failed: {e}")
         sys.exit(1)
 
-    # --- Start frame receiver ---
-    receiver = FrameReceiver(server_ip, zmq_port)
-    receiver.start()
+    # --- Switch curation / pipe if requested ---
+    if curation_index is not None:
+        print(f"[gRPC] Switching to curation index {curation_index} (this rebuilds the pipeline, may take a while)...")
+        resp = stub.SwitchCuration(pb2.SwitchCurationRequest(curation_index=curation_index))
+        print(f"[gRPC] Curation switch: {resp.message}")
+        # Wait for the pipeline to finish rebuilding
+        print("[gRPC] Waiting for pipeline reload...", end="", flush=True)
+        time.sleep(5)
+        for _ in range(60):  # up to 60 more seconds
+            try:
+                stub.GetCurrentState(pb2.GetStateRequest())
+                break
+            except grpc.RpcError:
+                print(".", end="", flush=True)
+                time.sleep(1)
+        print(" done.")
 
-    # Wait for first frame so we know the resolution
+    if pipe_index is not None:
+        print(f"[gRPC] Setting pipe index to {pipe_index}")
+        stub.SetLoRAParams(pb2.LoRAParamsRequest(pipe_index=pipe_index))
+
+    if controlnet_scale is not None:
+        print(f"[gRPC] Setting ControlNet scale to {controlnet_scale}")
+        stub.SetControlNetParams(pb2.ControlNetParamsRequest(controlnet_scale=controlnet_scale))
+
+    # --- Start ZMQ receiver FIRST (so we don't miss early frames) ---
+    zmq_address = f"tcp://{server_ip}:{zmq_port}"
+    zmq_ctx = zmq.Context()
+    zmq_sub = zmq_ctx.socket(zmq.SUB)
+    zmq_sub.setsockopt(zmq.RCVTIMEO, 5000)
+    zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "")
+    zmq_sub.connect(zmq_address)
+    print(f"[ZMQ] Connected to {zmq_address}")
+
+    # --- Send the full journey to the server ---
+    print(f"[gRPC] Starting journey: {len(prompts)} prompts, "
+          f"{transition_frames} transition frames, {hold_frames} hold frames"
+          f"{', looping' if loop else ''}"
+          f"{f', input video: {input_video}' if input_video else ''}")
+
+    journey_kwargs = dict(
+        prompts=prompts,
+        transition_frames=transition_frames,
+        hold_frames=hold_frames,
+        loop=loop,
+    )
+    if input_video:
+        journey_kwargs['input_video'] = input_video
+
+    response = stub.StartPromptJourney(pb2.PromptJourneyRequest(**journey_kwargs))
+
+    if not response.success:
+        print(f"[gRPC] Server rejected journey: {response.message}")
+        sys.exit(1)
+
+    total_frames = response.total_frames
+    print(f"[gRPC] Server accepted: {response.message}")
+    print(f"[gRPC] Total frames to generate: {total_frames}")
+
+    # --- Wait for first frame to get resolution ---
     print("[ZMQ] Waiting for first frame...")
-    deadline = time.time() + 10
-    while receiver.get_frame() is None:
-        if time.time() > deadline:
-            print("[ZMQ] Timeout waiting for frames. Is the server streaming?")
-            sys.exit(1)
-        time.sleep(0.1)
+    first_frame = None
+    for _ in range(60):  # up to 30s at 500ms intervals
+        try:
+            data = zmq_sub.recv()
+            frame = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+            if frame is not None:
+                first_frame = frame
+                break
+        except zmq.Again:
+            continue
 
-    first_frame = receiver.get_frame()
+    if first_frame is None:
+        print("[ZMQ] Timeout waiting for frames. Is the server in --headless mode?")
+        sys.exit(1)
+
     h, w = first_frame.shape[:2]
     print(f"[Video] Frame size: {w}x{h}")
 
@@ -157,10 +170,223 @@ def run_journey(
         print(f"[Video] Failed to open {output} for writing")
         sys.exit(1)
 
-    frame_interval = 1.0 / fps
-    total_written = 0
+    # Write the first frame
+    if first_frame.shape[:2] != (h, w):
+        first_frame = cv2.resize(first_frame, (w, h))
+    writer.write(first_frame)
+    frames_written = 1
 
     # Graceful shutdown
+    stop_event = threading.Event()
+
+    def on_signal(sig, _):
+        print("\n[!] Interrupted — finishing video...")
+        stop_event.set()
+        # Tell server to stop too
+        try:
+            stub.StopPromptJourney(pb2.GetStateRequest())
+        except Exception:
+            pass
+
+    signal.signal(signal.SIGINT, on_signal)
+
+    # --- Record frames until journey completes ---
+    print(f"\nRecording {total_frames} frames to {output} @ {fps} fps...")
+    last_status_time = time.time()
+
+    while not stop_event.is_set():
+        try:
+            data = zmq_sub.recv()
+        except zmq.Again:
+            # Check if journey is done
+            try:
+                status = stub.GetJourneyStatus(pb2.GetStateRequest())
+                if status.completed:
+                    print(f"\n[gRPC] Journey completed on server")
+                    break
+            except Exception:
+                pass
+            continue
+
+        frame = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if frame is None:
+            continue
+
+        if frame.shape[:2] != (h, w):
+            frame = cv2.resize(frame, (w, h))
+        writer.write(frame)
+        frames_written += 1
+
+        # Print progress periodically
+        now = time.time()
+        if now - last_status_time > 2.0:
+            try:
+                status = stub.GetJourneyStatus(pb2.GetStateRequest())
+                pct = status.progress * 100
+                print(f"  [{status.current_frame}/{status.total_frames}] "
+                      f"{pct:.0f}% — {status.current_prompt[:50]}...",
+                      end="\r")
+                if status.completed:
+                    print(f"\n[gRPC] Journey completed on server")
+                    break
+            except Exception:
+                pass
+            last_status_time = now
+
+    # Drain any remaining frames in the ZMQ buffer
+    zmq_sub.setsockopt(zmq.RCVTIMEO, 500)
+    while True:
+        try:
+            data = zmq_sub.recv()
+            frame = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+            if frame is not None:
+                if frame.shape[:2] != (h, w):
+                    frame = cv2.resize(frame, (w, h))
+                writer.write(frame)
+                frames_written += 1
+        except zmq.Again:
+            break
+
+    # --- Finalize ---
+    writer.release()
+    zmq_sub.close()
+    zmq_ctx.term()
+    channel.close()
+
+    duration = frames_written / fps if fps else 0
+    print(f"\nDone! Wrote {frames_written} frames ({duration:.1f}s) to {output}")
+
+
+def run_scheduler(
+    server_ip: str,
+    grpc_port: int,
+    zmq_port: int,
+    fps: int,
+    output: str,
+    duration_seconds: float,
+    curation_index: int = None,
+    pipe_index: int = None,
+    input_video: str = None,
+    controlnet_scale: float = None,
+    temporal_coherence: float = None,
+    audio_file: str = None,
+):
+    """Record using the server's built-in prompt travel scheduler."""
+    channel = grpc.insecure_channel(f"{server_ip}:{grpc_port}")
+    stub = pb2_grpc.GenerationControlStub(channel)
+
+    # Verify connection
+    try:
+        state = stub.GetCurrentState(pb2.GetStateRequest())
+        print(f"[gRPC] Connected — current prompt: {state.prompt!r}")
+    except grpc.RpcError as e:
+        print(f"[gRPC] Connection failed: {e}")
+        sys.exit(1)
+
+    # Switch curation if requested
+    if curation_index is not None:
+        print(f"[gRPC] Switching to curation index {curation_index}...")
+        resp = stub.SwitchCuration(pb2.SwitchCurationRequest(curation_index=curation_index))
+        print(f"[gRPC] Curation switch: {resp.message}")
+        print("[gRPC] Waiting for pipeline reload...", end="", flush=True)
+        time.sleep(5)
+        for _ in range(60):
+            try:
+                stub.GetCurrentState(pb2.GetStateRequest())
+                break
+            except grpc.RpcError:
+                print(".", end="", flush=True)
+                time.sleep(1)
+        print(" done.")
+
+    if pipe_index is not None:
+        print(f"[gRPC] Setting pipe index to {pipe_index}")
+        stub.SetLoRAParams(pb2.LoRAParamsRequest(pipe_index=pipe_index))
+
+    if controlnet_scale is not None:
+        print(f"[gRPC] Setting ControlNet scale to {controlnet_scale}")
+        stub.SetControlNetParams(pb2.ControlNetParamsRequest(controlnet_scale=controlnet_scale))
+
+    if temporal_coherence is not None:
+        print(f"[gRPC] Setting temporal coherence to {temporal_coherence}")
+        stub.SetGenerationParams(pb2.GenerationParamsRequest(
+            temporal_coherence=temporal_coherence,
+            temporal_coherence_latent=temporal_coherence,
+        ))
+
+    # If input video or audio specified, start a dummy journey to pass the paths
+    if input_video or audio_file:
+        journey_kwargs = dict(
+            prompts=["_scheduler_", "_scheduler_"],
+            transition_frames=999999,
+            hold_frames=0,
+            loop=False,
+        )
+        if input_video:
+            journey_kwargs['input_video'] = input_video
+        if audio_file:
+            journey_kwargs['audio_file'] = audio_file
+        stub.StartPromptJourney(pb2.PromptJourneyRequest(**journey_kwargs))
+        # Immediately stop the journey so the scheduler takes over
+        stub.StopPromptJourney(pb2.GetStateRequest())
+
+    # Enable the server's prompt travel scheduler
+    print("[gRPC] Enabling server prompt travel scheduler...")
+    stub.SetPromptTravelParams(pb2.PromptTravelParamsRequest(
+        enabled=True,
+        use_prompt_scheduler=True,
+        loop_prompts=True,
+        oscillate=True,
+        factor_increment=0.005,  # Slow, smooth transitions
+        stabilize_duration=0,    # No pause at endpoints
+    ))
+
+    # Start ZMQ receiver
+    zmq_address = f"tcp://{server_ip}:{zmq_port}"
+    zmq_ctx = zmq.Context()
+    zmq_sub = zmq_ctx.socket(zmq.SUB)
+    zmq_sub.setsockopt(zmq.RCVTIMEO, 5000)
+    zmq_sub.setsockopt_string(zmq.SUBSCRIBE, "")
+    zmq_sub.connect(zmq_address)
+    print(f"[ZMQ] Connected to {zmq_address}")
+
+    # Wait for first frame
+    print("[ZMQ] Waiting for first frame...")
+    first_frame = None
+    for _ in range(60):
+        try:
+            data = zmq_sub.recv()
+            frame = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+            if frame is not None:
+                first_frame = frame
+                break
+        except zmq.Again:
+            continue
+
+    if first_frame is None:
+        print("[ZMQ] Timeout waiting for frames.")
+        sys.exit(1)
+
+    h, w = first_frame.shape[:2]
+    print(f"[Video] Frame size: {w}x{h}")
+
+    # Discard warmup frames (pipeline needs a few frames to settle)
+    print("[ZMQ] Discarding warmup frames...", end="", flush=True)
+    for _ in range(20):
+        try:
+            data = zmq_sub.recv()
+            frame = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+            if frame is not None:
+                first_frame = frame
+        except zmq.Again:
+            pass
+    print(" done.")
+
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(output, fourcc, fps, (w, h))
+    writer.write(first_frame)
+    frames_written = 1
+
     stop_event = threading.Event()
 
     def on_signal(sig, _):
@@ -169,85 +395,59 @@ def run_journey(
 
     signal.signal(signal.SIGINT, on_signal)
 
-    # --- Disable the server's auto-scheduler so we control the factor ---
+    total_frames = int(duration_seconds * fps) if duration_seconds else 0
+    print(f"\nRecording for {duration_seconds}s ({total_frames} frames) to {output} @ {fps} fps...")
+    print("Press Ctrl+C to stop early.\n")
+    start_time = time.time()
+
+    while not stop_event.is_set():
+        # Check duration
+        if duration_seconds and (time.time() - start_time) >= duration_seconds:
+            print(f"\n[Recording] Duration reached ({duration_seconds}s)")
+            break
+
+        try:
+            data = zmq_sub.recv()
+        except zmq.Again:
+            continue
+
+        frame = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if frame is None:
+            continue
+
+        if frame.shape[:2] != (h, w):
+            frame = cv2.resize(frame, (w, h))
+        writer.write(frame)
+        frames_written += 1
+
+        if frames_written % 100 == 0:
+            elapsed = time.time() - start_time
+            print(f"  {frames_written} frames ({elapsed:.1f}s elapsed)")
+
+    # Disable scheduler
     stub.SetPromptTravelParams(pb2.PromptTravelParamsRequest(enabled=False))
 
-    def capture_frames(n_frames: int):
-        """Write n_frames to video at the configured fps."""
-        nonlocal total_written
-        for _ in range(n_frames):
-            if stop_event.is_set():
-                return
-            t0 = time.time()
-            frame = receiver.get_frame()
+    # Drain remaining frames
+    zmq_sub.setsockopt(zmq.RCVTIMEO, 500)
+    while True:
+        try:
+            data = zmq_sub.recv()
+            frame = cv2.imdecode(np.frombuffer(data, dtype=np.uint8), cv2.IMREAD_COLOR)
             if frame is not None:
                 if frame.shape[:2] != (h, w):
                     frame = cv2.resize(frame, (w, h))
                 writer.write(frame)
-                total_written += 1
-            elapsed = time.time() - t0
-            sleep_time = frame_interval - elapsed
-            if sleep_time > 0:
-                time.sleep(sleep_time)
-
-    # --- Append first prompt again if looping ---
-    if loop:
-        prompts = prompts + [prompts[0]]
-
-    # --- Run the journey ---
-    print(f"\n{'='*60}")
-    print(f"  Prompt Journey — {len(prompts)} prompts")
-    print(f"  {transition_frames} transition frames + {hold_frames} hold frames each")
-    print(f"  Output: {output} @ {fps} fps")
-    print(f"{'='*60}\n")
-
-    for i in range(len(prompts) - 1):
-        if stop_event.is_set():
+                frames_written += 1
+        except zmq.Again:
             break
 
-        src = prompts[i]
-        dst = prompts[i + 1]
-        print(f"[{i+1}/{len(prompts)-1}] {src!r}")
-        print(f"       -> {dst!r}")
-
-        # Set source prompt and hold
-        stub.SetPrompt(pb2.PromptRequest(
-            prompt=src,
-            target_prompt=dst,
-            prompt_travel_factor=0.0,
-        ))
-        print(f"  Holding source for {hold_frames} frames...")
-        capture_frames(hold_frames)
-
-        # Interpolate source -> target
-        print(f"  Transitioning over {transition_frames} frames...")
-        for step in range(transition_frames):
-            if stop_event.is_set():
-                break
-            factor = step / max(transition_frames - 1, 1)
-            stub.SetPrompt(pb2.PromptRequest(
-                prompt=src,
-                target_prompt=dst,
-                prompt_travel_factor=factor,
-            ))
-            capture_frames(1)
-
-    # Hold on final prompt
-    if not stop_event.is_set():
-        print(f"  Holding final prompt for {hold_frames} frames...")
-        stub.SetPrompt(pb2.PromptRequest(
-            prompt=prompts[-1],
-            prompt_travel_factor=0.0,
-        ))
-        capture_frames(hold_frames)
-
-    # --- Finalize ---
     writer.release()
-    receiver.stop()
+    zmq_sub.close()
+    zmq_ctx.term()
     channel.close()
 
-    duration = total_written / fps if fps else 0
-    print(f"\nDone! Wrote {total_written} frames ({duration:.1f}s) to {output}")
+    duration_actual = frames_written / fps if fps else 0
+    print(f"\nDone! Wrote {frames_written} frames ({duration_actual:.1f}s) to {output}")
 
 
 def main():
@@ -290,29 +490,81 @@ def main():
         "--loop", action="store_true",
         help="Loop back to first prompt at the end",
     )
+    parser.add_argument(
+        "--curation", type=int, default=None,
+        help="Curation index to switch to before starting (e.g. 27 for shaman_XL)",
+    )
+    parser.add_argument(
+        "--pipe-index", type=int, default=None,
+        help="Pipe index (LoRA weight blend) to use (e.g. 0=first, 2=50/50)",
+    )
+    parser.add_argument(
+        "--input-video", type=str, default=None,
+        help="Server-side path to input video for ControlNet depth guidance",
+    )
+    parser.add_argument(
+        "--controlnet-scale", type=float, default=None,
+        help="ControlNet conditioning scale (default: 0.55, try 1.0-1.5 for stronger guidance)",
+    )
+    parser.add_argument(
+        "--temporal-coherence", type=float, default=None,
+        help="Temporal coherence for noise/latent blending (default: 0.03, try 0.1-0.3 for smoother)",
+    )
+    parser.add_argument(
+        "--audio", type=str, default=None,
+        help="Server-side path to audio file for FFT-driven effects (zoom, LoRA switching). Duration defaults to audio length.",
+    )
+    parser.add_argument(
+        "--scheduler", action="store_true",
+        help="Use the server's built-in prompt travel scheduler instead of journey prompts",
+    )
+    parser.add_argument(
+        "--duration", type=float, default=30,
+        help="Recording duration in seconds for --scheduler mode (default: 30)",
+    )
 
     args = parser.parse_args()
 
-    prompts = DEFAULT_PROMPTS
-    if args.prompts_file:
-        prompts = load_prompts(args.prompts_file)
-        print(f"Loaded {len(prompts)} prompts from {args.prompts_file}")
+    if args.scheduler:
+        run_scheduler(
+            server_ip=args.server,
+            grpc_port=args.grpc_port,
+            zmq_port=args.zmq_port,
+            fps=args.fps,
+            output=args.output,
+            duration_seconds=args.duration,
+            curation_index=args.curation,
+            pipe_index=args.pipe_index,
+            input_video=args.input_video,
+            controlnet_scale=args.controlnet_scale,
+            temporal_coherence=args.temporal_coherence,
+            audio_file=args.audio,
+        )
+    else:
+        prompts = DEFAULT_PROMPTS
+        if args.prompts_file:
+            prompts = load_prompts(args.prompts_file)
+            print(f"Loaded {len(prompts)} prompts from {args.prompts_file}")
 
-    if len(prompts) < 2:
-        print("Need at least 2 prompts for a journey!")
-        sys.exit(1)
+        if len(prompts) < 2:
+            print("Need at least 2 prompts for a journey!")
+            sys.exit(1)
 
-    run_journey(
-        prompts=prompts,
-        server_ip=args.server,
-        grpc_port=args.grpc_port,
-        zmq_port=args.zmq_port,
-        transition_frames=args.transition_frames,
-        hold_frames=args.hold_frames,
-        fps=args.fps,
-        output=args.output,
-        loop=args.loop,
-    )
+        run_journey(
+            prompts=prompts,
+            server_ip=args.server,
+            grpc_port=args.grpc_port,
+            zmq_port=args.zmq_port,
+            transition_frames=args.transition_frames,
+            hold_frames=args.hold_frames,
+            fps=args.fps,
+            output=args.output,
+            loop=args.loop,
+            curation_index=args.curation,
+            pipe_index=args.pipe_index,
+            input_video=args.input_video,
+            controlnet_scale=args.controlnet_scale,
+        )
 
 
 if __name__ == "__main__":

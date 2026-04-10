@@ -30,6 +30,15 @@ service GenerationControl {
 
     // Batch update multiple parameter groups at once
     rpc BatchUpdate(BatchUpdateRequest) returns (ControlResponse);
+
+    // Start an autonomous prompt journey (headless mode)
+    rpc StartPromptJourney(PromptJourneyRequest) returns (PromptJourneyResponse);
+
+    // Get status of a running prompt journey
+    rpc GetJourneyStatus(GetStateRequest) returns (PromptJourneyStatus);
+
+    // Stop a running prompt journey
+    rpc StopPromptJourney(GetStateRequest) returns (ControlResponse);
 }
 
 // Common response for control operations
@@ -157,6 +166,36 @@ message CurrentStateResponse {
     int32 prompt_transition_frames = 27;  // Current transition frames setting
     float prompt_transition_progress = 28;  // Current transition progress (0.0-1.0)
     bool prompt_transition_active = 29;  // Whether a transition is in progress
+}
+
+// Prompt journey request - send all prompts and config at once
+message PromptJourneyRequest {
+    repeated string prompts = 1;
+    int32 transition_frames = 2;  // frames per prompt-to-prompt interpolation
+    int32 hold_frames = 3;        // frames to hold on each prompt
+    bool loop = 4;                // loop back to first prompt at end
+    string input_video = 5;       // server-side path to input video for ControlNet depth guidance
+    string audio_file = 6;        // server-side path to audio file for FFT-driven effects
+}
+
+// Prompt journey response
+message PromptJourneyResponse {
+    bool success = 1;
+    string message = 2;
+    int32 total_frames = 3;       // total frames that will be generated
+}
+
+// Prompt journey status
+message PromptJourneyStatus {
+    bool active = 1;              // whether a journey is running
+    int32 current_frame = 2;      // current frame number
+    int32 total_frames = 3;       // total frames to generate
+    float progress = 4;           // 0.0-1.0 overall progress
+    int32 current_segment = 5;    // which prompt pair (0-indexed)
+    int32 total_segments = 6;     // total prompt pairs
+    string current_prompt = 7;
+    string target_prompt = 8;
+    bool completed = 9;           // true when journey finished
 }
 
 // Batch update request - allows updating multiple parameter groups at once

@@ -62,6 +62,22 @@ class GenerationControlServicer:
             'default_frames': 30,  # Default transition frames (0-100)
         }
 
+        # Prompt journey state (for headless autonomous generation)
+        self._journey = {
+            'active': False,
+            'completed': False,
+            'prompts': [],
+            'transition_frames': 120,
+            'hold_frames': 30,
+            'loop': False,
+            'current_frame': 0,
+            'total_frames': 0,
+            'current_segment': 0,
+            'total_segments': 0,
+            'current_prompt': '',
+            'target_prompt': '',
+        }
+
         # Initialize default state
         self._init_default_state()
 
@@ -113,6 +129,11 @@ class GenerationControlServicer:
         if self._debug:
             self._logger.info(f"[gRPC Service] {message}")
             print(f"[gRPC Service] {message}")
+
+    def has_pending_params(self) -> bool:
+        """Check if there are any pending parameters without consuming them."""
+        with self._lock:
+            return bool(self._pending_params)
 
     def get_and_clear_pending_params(self) -> Dict[str, Any]:
         """
@@ -644,3 +665,144 @@ class GenerationControlServicer:
             success=True,
             message="No parameters in batch update"
         )
+
+    # --- Prompt Journey RPCs ---
+
+    def StartPromptJourney(self, request, context):
+        """Start an autonomous prompt journey."""
+        self._log("StartPromptJourney called")
+
+        prompts = list(request.prompts)
+        if len(prompts) < 2:
+            return pb2.PromptJourneyResponse(
+                success=False,
+                message="Need at least 2 prompts",
+                total_frames=0,
+            )
+
+        transition_frames = request.transition_frames or 120
+        hold_frames = request.hold_frames or 30
+        loop = request.loop
+        input_video = request.input_video or ""
+        audio_file = request.audio_file or ""
+
+        # If looping, add first prompt at the end
+        if loop:
+            prompts.append(prompts[0])
+
+        num_segments = len(prompts) - 1
+        total_frames = (num_segments * (hold_frames + transition_frames)) + hold_frames
+
+        with self._lock:
+            self._journey = {
+                'active': True,
+                'completed': False,
+                'prompts': prompts,
+                'transition_frames': transition_frames,
+                'hold_frames': hold_frames,
+                'loop': loop,
+                'current_frame': 0,
+                'total_frames': total_frames,
+                'current_segment': 0,
+                'total_segments': num_segments,
+                'current_prompt': prompts[0],
+                'target_prompt': prompts[1] if num_segments > 0 else prompts[0],
+                'input_video': input_video,
+                'audio_file': audio_file,
+            }
+
+        print(f"[gRPC Service] Journey started: {len(prompts)} prompts, "
+              f"{num_segments} segments, {total_frames} total frames")
+
+        return pb2.PromptJourneyResponse(
+            success=True,
+            message=f"Journey started: {num_segments} transitions, {total_frames} frames",
+            total_frames=total_frames,
+        )
+
+    def GetJourneyStatus(self, request, context):
+        """Get status of the running prompt journey."""
+        with self._lock:
+            j = self._journey
+            total = j['total_frames'] if j['total_frames'] > 0 else 1
+            return pb2.PromptJourneyStatus(
+                active=j['active'],
+                current_frame=j['current_frame'],
+                total_frames=j['total_frames'],
+                progress=j['current_frame'] / total,
+                current_segment=j['current_segment'],
+                total_segments=j['total_segments'],
+                current_prompt=j['current_prompt'],
+                target_prompt=j['target_prompt'],
+                completed=j['completed'],
+            )
+
+    def StopPromptJourney(self, request, context):
+        """Stop a running prompt journey."""
+        with self._lock:
+            was_active = self._journey['active']
+            self._journey['active'] = False
+            self._journey['completed'] = True
+
+        return pb2.ControlResponse(
+            success=True,
+            message="Journey stopped" if was_active else "No journey was running",
+        )
+
+    def get_journey_state(self) -> dict:
+        """Get the current journey state (called by the headless loop)."""
+        with self._lock:
+            return self._journey.copy()
+
+    def advance_journey_frame(self):
+        """
+        Advance the journey by one frame.
+        Returns (prompt, target_prompt, factor, active) for the current frame,
+        or None if no journey is active.
+        """
+        with self._lock:
+            j = self._journey
+            if not j['active'] or j['completed']:
+                return None
+
+            frame = j['current_frame']
+            hold = j['hold_frames']
+            trans = j['transition_frames']
+            segment_length = hold + trans
+            prompts = j['prompts']
+            num_segments = j['total_segments']
+
+            # Which segment are we in?
+            if frame < num_segments * segment_length:
+                segment = frame // segment_length
+                frame_in_segment = frame % segment_length
+
+                src = prompts[segment]
+                dst = prompts[segment + 1]
+
+                if frame_in_segment < hold:
+                    # Hold phase
+                    factor = 0.0
+                else:
+                    # Transition phase
+                    t = frame_in_segment - hold
+                    factor = t / max(trans - 1, 1)
+            else:
+                # Final hold phase
+                segment = num_segments - 1
+                src = prompts[-1]
+                dst = prompts[-1]
+                factor = 0.0
+
+            j['current_segment'] = segment
+            j['current_prompt'] = src
+            j['target_prompt'] = dst
+            j['current_frame'] = frame + 1
+
+            # Check if journey is complete
+            if frame + 1 >= j['total_frames']:
+                j['active'] = False
+                j['completed'] = True
+                print(f"[gRPC Service] Journey completed: {frame + 1} frames")
+
+            return (src, dst, factor, True)

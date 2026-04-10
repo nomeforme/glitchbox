@@ -26,6 +26,8 @@ class Args(NamedTuple):
     grpc_enabled: bool = True
     # ZMQ streaming settings (0 = raw bytes, 1-100 = JPEG quality)
     zmq_jpeg_quality: int = 85
+    # Headless mode: generate frames without requiring a WebSocket client
+    headless: bool = False
     use_acid_processor: bool = False
     # Enable depth estimation
     use_depth_estimator: bool = False
@@ -758,6 +760,14 @@ parser.add_argument(
     type=int,
     default=85,
     help="JPEG quality for ZMQ streaming (0 = raw bytes/disabled, 1-100 = JPEG quality). Default: 85",
+)
+
+# Headless mode
+parser.add_argument(
+    "--headless",
+    action="store_true",
+    default=False,
+    help="Run in headless mode: generate frames via gRPC control without requiring a WebSocket frontend",
 )
 
 parser.set_defaults(taesd=USE_TAESD)

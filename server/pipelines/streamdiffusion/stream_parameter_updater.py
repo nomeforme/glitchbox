@@ -339,14 +339,14 @@ class StreamParameterUpdater(OrchestratorUser):
                 # Clamp to valid range [0.0, 1.0]
                 temporal_coherence = max(0.0, min(1.0, temporal_coherence))
                 self.stream.temporal_coherence = temporal_coherence
-                logger.info(f"update_stream_params: Temporal coherence (noise) set to {temporal_coherence}")
+                logger.debug(f"update_stream_params: Temporal coherence (noise) set to {temporal_coherence}")
 
             # Handle temporal coherence (latent blending) update
             if temporal_coherence_latent is not None:
                 # Clamp to valid range [0.0, 1.0]
                 temporal_coherence_latent = max(0.0, min(1.0, temporal_coherence_latent))
                 self.stream.temporal_coherence_latent = temporal_coherence_latent
-                logger.info(f"update_stream_params: Temporal coherence (latent) set to {temporal_coherence_latent}")
+                logger.debug(f"update_stream_params: Temporal coherence (latent) set to {temporal_coherence_latent}")
 
     @torch.no_grad()
     def update_prompt_weights(

@@ -331,6 +331,7 @@ class Pipeline:
         # Store lora_config for later use
         self.lora_config = lora_config
         self.pipes = []
+        self._verbose = getattr(args, 'debug', False)
 
         # Check if TensorRT acceleration is enabled
         self.use_tensorrt = getattr(args, 'tensorrt', False)
@@ -897,9 +898,11 @@ class Pipeline:
             print(f"[img2imgStreamDiffusionXL.py] VAE decoder compilation complete")
 
     def predict(self, params: "Pipeline.InputParams") -> Image.Image:
+        _v = self._verbose  # shorthand for debug prints
+
         # Get pipe_index from params, default to 0 if not provided
         pipe_index = getattr(params, 'pipe_index', 0)
-        print(f"[img2imgStreamDiffusionXL.py] USING PIPE INDEX: {pipe_index}")
+        if _v: print(f"[img2imgStreamDiffusionXL.py] USING PIPE INDEX: {pipe_index}")
 
         # Ensure pipe_index is within bounds
         if pipe_index >= len(self.pipes):
@@ -909,28 +912,17 @@ class Pipeline:
         # Swap UNet if pipe index changed
         if pipe_index != self.current_pipe_idx:
             print(f"[img2imgStreamDiffusionXL.py] Swapping UNet from pipe {self.current_pipe_idx} to pipe {pipe_index}")
-            # UNet switching happens at TensorRT engine level
-            # Each pipe has its own LoRA-fused TensorRT UNet engine
-            # Other components (VAE, text encoders, ControlNet) are shared
-
-            # NOTE: UNet swap is disabled - causes OOM with multiple PyTorch UNets
-            # Perform the actual UNet swap
-            # target_unet = self.unet_engines[pipe_index]
-            # self.shared_wrapper.stream.unet = target_unet
-            # print(f"[img2imgStreamDiffusionXL.py] Successfully swapped to UNet engine {pipe_index}")
-            # print(f"[img2imgStreamDiffusionXL.py] UNet type: {type(target_unet).__name__}")
-
             self.current_pipe_idx = pipe_index
 
         # Use the shared wrapper (all pipes reference it)
         stream_wrapper = self.shared_wrapper
 
         # Generate image from input image and prompt
-        print(f"[img2imgStreamDiffusion.py] Params: {params}")
+        if _v: print(f"[img2imgStreamDiffusion.py] Params: {params}")
 
         # Handle prompt travel if enabled
         use_prompt_travel = getattr(params, "use_prompt_travel", False)
-        print(f"[img2imgStreamDiffusion.py] use_prompt_travel: {use_prompt_travel}")
+        if _v: print(f"[img2imgStreamDiffusion.py] use_prompt_travel: {use_prompt_travel}")
 
         if use_prompt_travel:
             # Check if we're in multi-file mode
@@ -943,10 +935,11 @@ class Pipeline:
                 target_prompts = getattr(params, 'target_prompt', params.prompt)  # List of prompts
                 spatial_weights = getattr(params, 'spatial_weights', None)
 
-                print(f"[img2imgStreamDiffusionXL.py] === MULTI-FILE PROMPT TRAVEL ===")
-                print(f"[img2imgStreamDiffusionXL.py] Number of files: {len(source_prompts)}")
-                print(f"[img2imgStreamDiffusionXL.py] Spatial weights: {spatial_weights}")
-                print(f"[img2imgStreamDiffusionXL.py] Temporal factor: {prompt_travel_factor:.3f}")
+                if _v:
+                    print(f"[img2imgStreamDiffusionXL.py] === MULTI-FILE PROMPT TRAVEL ===")
+                    print(f"[img2imgStreamDiffusionXL.py] Number of files: {len(source_prompts)}")
+                    print(f"[img2imgStreamDiffusionXL.py] Spatial weights: {spatial_weights}")
+                    print(f"[img2imgStreamDiffusionXL.py] Temporal factor: {prompt_travel_factor:.3f}")
 
                 # Encode all prompts and compute weighted spatial blend for source
                 cache = self.prompt_embeds_cache[pipe_index]
@@ -955,7 +948,7 @@ class Pipeline:
 
                 for i, prompt in enumerate(source_prompts):
                     if prompt not in cache:
-                        print(f"[img2imgStreamDiffusionXL.py] Cache MISS - encoding source prompt {i}")
+                        if _v: print(f"[img2imgStreamDiffusionXL.py] Cache MISS - encoding source prompt {i}")
                         embeds, _, pooled, _ = stream_wrapper.prompt_travel.encode_prompt_sdxl(
                             prompt=prompt,
                             device=stream_wrapper.stream.device,
@@ -978,7 +971,7 @@ class Pipeline:
 
                 for i, prompt in enumerate(target_prompts):
                     if prompt not in cache:
-                        print(f"[img2imgStreamDiffusionXL.py] Cache MISS - encoding target prompt {i}")
+                        if _v: print(f"[img2imgStreamDiffusionXL.py] Cache MISS - encoding target prompt {i}")
                         embeds, _, pooled, _ = stream_wrapper.prompt_travel.encode_prompt_sdxl(
                             prompt=prompt,
                             device=stream_wrapper.stream.device,
@@ -995,23 +988,25 @@ class Pipeline:
                 target_embeds = sum(w * e for w, e in zip(spatial_weights, target_embeds_list))
                 target_pooled = sum(w * p for w, p in zip(spatial_weights, target_pooled_list))
 
-                print(f"[img2imgStreamDiffusionXL.py] Spatially blended source/target embeddings")
-                print(f"[img2imgStreamDiffusionXL.py] Now applying temporal interpolation: {prompt_travel_factor:.3f}")
+                if _v:
+                    print(f"[img2imgStreamDiffusionXL.py] Spatially blended source/target embeddings")
+                    print(f"[img2imgStreamDiffusionXL.py] Now applying temporal interpolation: {prompt_travel_factor:.3f}")
 
             else:
                 # SINGLE-FILE MODE: Original behavior
                 source_prompt = params.prompt
                 target_prompt = getattr(params, 'target_prompt', params.prompt)
 
-                print(f"[img2imgStreamDiffusionXL.py] === SINGLE-FILE PROMPT TRAVEL ===")
-                print(f"[img2imgStreamDiffusionXL.py] factor: {prompt_travel_factor:.3f}")
-                print(f"[img2imgStreamDiffusionXL.py] source: {source_prompt[:80]}...")
-                print(f"[img2imgStreamDiffusionXL.py] target: {target_prompt[:80]}...")
+                if _v:
+                    print(f"[img2imgStreamDiffusionXL.py] === SINGLE-FILE PROMPT TRAVEL ===")
+                    print(f"[img2imgStreamDiffusionXL.py] factor: {prompt_travel_factor:.3f}")
+                    print(f"[img2imgStreamDiffusionXL.py] source: {source_prompt[:80]}...")
+                    print(f"[img2imgStreamDiffusionXL.py] target: {target_prompt[:80]}...")
 
                 # Get or compute source embeddings (with caching)
                 cache = self.prompt_embeds_cache[pipe_index]
                 if source_prompt not in cache:
-                    print(f"[img2imgStreamDiffusionXL.py] Cache MISS - encoding source prompt")
+                    if _v: print(f"[img2imgStreamDiffusionXL.py] Cache MISS - encoding source prompt")
                     source_embeds, _, source_pooled, _ = stream_wrapper.prompt_travel.encode_prompt_sdxl(
                         prompt=source_prompt,
                         device=stream_wrapper.stream.device,
@@ -1020,12 +1015,12 @@ class Pipeline:
                     )
                     cache[source_prompt] = (source_embeds, source_pooled)
                 else:
-                    print(f"[img2imgStreamDiffusionXL.py] Cache HIT - reusing source embeddings")
+                    if _v: print(f"[img2imgStreamDiffusionXL.py] Cache HIT - reusing source embeddings")
                     source_embeds, source_pooled = cache[source_prompt]
 
                 # Get or compute target embeddings (with caching)
                 if target_prompt not in cache:
-                    print(f"[img2imgStreamDiffusionXL.py] Cache MISS - encoding target prompt")
+                    if _v: print(f"[img2imgStreamDiffusionXL.py] Cache MISS - encoding target prompt")
                     target_embeds, _, target_pooled, _ = stream_wrapper.prompt_travel.encode_prompt_sdxl(
                         prompt=target_prompt,
                         device=stream_wrapper.stream.device,
@@ -1034,7 +1029,7 @@ class Pipeline:
                     )
                     cache[target_prompt] = (target_embeds, target_pooled)
                 else:
-                    print(f"[img2imgStreamDiffusionXL.py] Cache HIT - reusing target embeddings")
+                    if _v: print(f"[img2imgStreamDiffusionXL.py] Cache HIT - reusing target embeddings")
                     target_embeds, target_pooled = cache[target_prompt]
 
             # Temporal interpolation (LERP) between spatially-blended (or single) source and target
@@ -1044,8 +1039,9 @@ class Pipeline:
                 factor=prompt_travel_factor,
             )
 
-            print(f"[img2imgStreamDiffusionXL.py] Final interpolated embeddings shape: {interpolated_embeds.shape}")
-            print(f"[img2imgStreamDiffusionXL.py] Final interpolated pooled embeddings shape: {interpolated_pooled.shape}")
+            if _v:
+                print(f"[img2imgStreamDiffusionXL.py] Final interpolated embeddings shape: {interpolated_embeds.shape}")
+                print(f"[img2imgStreamDiffusionXL.py] Final interpolated pooled embeddings shape: {interpolated_pooled.shape}")
 
             # StreamDiffusion repeats embeddings for batch_size, so we need to match that
             batch_size = stream_wrapper.stream.batch_size
@@ -1055,8 +1051,9 @@ class Pipeline:
             stream_wrapper.stream.prompt_embeds = interpolated_embeds_batched
             stream_wrapper.stream.add_text_embeds = interpolated_pooled  # SDXL pooled embeddings
 
-            print(f"[img2imgStreamDiffusionXL.py] Set prompt_embeds with shape: {interpolated_embeds_batched.shape}")
-            print(f"[img2imgStreamDiffusionXL.py] Set add_text_embeds with shape: {interpolated_pooled.shape}")
+            if _v:
+                print(f"[img2imgStreamDiffusionXL.py] Set prompt_embeds with shape: {interpolated_embeds_batched.shape}")
+                print(f"[img2imgStreamDiffusionXL.py] Set add_text_embeds with shape: {interpolated_pooled.shape}")
 
         else:
             # If prompt changed and not using prompt travel, update it via prepare()
@@ -1070,7 +1067,7 @@ class Pipeline:
                 )
                 self.last_prompt = prompt
 
-            print(f"[img2imgStreamDiffusion.py] NOTE: No prompt travel used, prepared prompt: {prompt}")
+            if _v: print(f"[img2imgStreamDiffusion.py] NOTE: No prompt travel used, prepared prompt: {prompt}")
 
         # Handle seed and latent travel
         use_latent_travel = getattr(params, 'use_latent_travel', False)
@@ -1085,29 +1082,29 @@ class Pipeline:
         # Create settings tuple to check if anything changed
         current_latent_travel_settings = (use_latent_travel, seed, target_seed, latent_travel_factor, latent_travel_method)
 
-        # DEBUG: Always log to see if we're checking seeds every frame
-        print(f"[img2imgStreamDiffusionXL.py] Frame seed check - use_latent_travel: {use_latent_travel}, seed: {seed}, factor: {latent_travel_factor:.3f}")
-        print(f"[img2imgStreamDiffusionXL.py] Settings changed: {current_latent_travel_settings != self.last_latent_travel_settings}")
+        if _v:
+            print(f"[img2imgStreamDiffusionXL.py] Frame seed check - use_latent_travel: {use_latent_travel}, seed: {seed}, factor: {latent_travel_factor:.3f}")
+            print(f"[img2imgStreamDiffusionXL.py] Settings changed: {current_latent_travel_settings != self.last_latent_travel_settings}")
 
-        # Check current init_noise to see if it's changing
-        if hasattr(stream_wrapper.stream, 'init_noise') and stream_wrapper.stream.init_noise is not None:
-            noise_mean = stream_wrapper.stream.init_noise.mean().item()
-            noise_std = stream_wrapper.stream.init_noise.std().item()
-            print(f"[img2imgStreamDiffusionXL.py] Current init_noise stats - mean: {noise_mean:.6f}, std: {noise_std:.6f}")
+            # Check current init_noise to see if it's changing
+            if hasattr(stream_wrapper.stream, 'init_noise') and stream_wrapper.stream.init_noise is not None:
+                noise_mean = stream_wrapper.stream.init_noise.mean().item()
+                noise_std = stream_wrapper.stream.init_noise.std().item()
+                print(f"[img2imgStreamDiffusionXL.py] Current init_noise stats - mean: {noise_mean:.6f}, std: {noise_std:.6f}")
 
         # IMPORTANT: Always update if latent travel is enabled, because the factor might be animating
         # Only skip update if disabled and settings haven't changed
         should_update = use_latent_travel or (current_latent_travel_settings != self.last_latent_travel_settings)
 
         if should_update:
-            print(f"[img2imgStreamDiffusionXL.py] Updating seed/latent travel settings")
-            print(f"[img2imgStreamDiffusionXL.py]   use_latent_travel: {use_latent_travel}")
-            print(f"[img2imgStreamDiffusionXL.py]   seed: {seed}, target_seed: {target_seed}")
-            print(f"[img2imgStreamDiffusionXL.py]   latent_travel_factor: {latent_travel_factor}, method: {latent_travel_method}")
+            if _v:
+                print(f"[img2imgStreamDiffusionXL.py] Updating seed/latent travel settings")
+                print(f"[img2imgStreamDiffusionXL.py]   use_latent_travel: {use_latent_travel}")
+                print(f"[img2imgStreamDiffusionXL.py]   seed: {seed}, target_seed: {target_seed}")
+                print(f"[img2imgStreamDiffusionXL.py]   latent_travel_factor: {latent_travel_factor}, method: {latent_travel_method}")
 
             if use_latent_travel:
                 # Use seed blending with StreamDiffusion's built-in seed_list
-                # Weight calculation: source gets (1 - factor), target gets factor
                 source_weight = 1.0 - latent_travel_factor
                 target_weight = latent_travel_factor
 
@@ -1116,8 +1113,9 @@ class Pipeline:
                     (target_seed, target_weight)
                 ]
 
-                print(f"[img2imgStreamDiffusionXL.py] Applying seed blending: seed_list={seed_list}, method={latent_travel_method}")
-                print(f"[img2imgStreamDiffusionXL.py] This will blend {source_weight*100:.1f}% of seed {seed} with {target_weight*100:.1f}% of seed {target_seed}")
+                if _v:
+                    print(f"[img2imgStreamDiffusionXL.py] Applying seed blending: seed_list={seed_list}, method={latent_travel_method}")
+                    print(f"[img2imgStreamDiffusionXL.py] This will blend {source_weight*100:.1f}% of seed {seed} with {target_weight*100:.1f}% of seed {target_seed}")
 
                 # Store noise BEFORE update
                 noise_before = stream_wrapper.stream.init_noise.clone() if hasattr(stream_wrapper.stream, 'init_noise') else None
@@ -1129,7 +1127,7 @@ class Pipeline:
                 )
 
                 # Check if noise actually changed
-                if noise_before is not None and hasattr(stream_wrapper.stream, 'init_noise'):
+                if _v and noise_before is not None and hasattr(stream_wrapper.stream, 'init_noise'):
                     noise_after = stream_wrapper.stream.init_noise
                     noise_diff = (noise_after - noise_before).abs().mean().item()
                     print(f"[img2imgStreamDiffusionXL.py] Noise changed by: {noise_diff:.6f} (should be >0 if blending worked)")
@@ -1137,16 +1135,15 @@ class Pipeline:
                         print(f"[img2imgStreamDiffusionXL.py] WARNING: Noise didn't change! Seed blending may not be working.")
             else:
                 # Just use fixed seed without blending
-                print(f"[img2imgStreamDiffusionXL.py] Using fixed seed: {seed}")
+                if _v: print(f"[img2imgStreamDiffusionXL.py] Using fixed seed: {seed}")
                 stream_wrapper.update_stream_params(seed=seed)
 
             self.last_latent_travel_settings = current_latent_travel_settings
 
         # Update ControlNet control image (use input image for structural guidance)
-        # ControlNet is statically enabled for this pipeline
         control_image = getattr(params, 'control_image', params.image)
         if control_image is not None:
-            print(f"[img2imgStreamDiffusion.py] Updating control image for ControlNet structural guidance")
+            if _v: print(f"[img2imgStreamDiffusion.py] Updating control image for ControlNet structural guidance")
             stream_wrapper.update_control_image(index=0, image=control_image)
 
         # Update ControlNet conditioning scale from params (runtime adjustable)
@@ -1154,7 +1151,7 @@ class Pipeline:
             if params.controlnet_scale != self.last_controlnet_scale:
                 stream_wrapper.stream._controlnet_module.update_controlnet_scale(index=0, scale=params.controlnet_scale)
                 self.last_controlnet_scale = params.controlnet_scale
-                print(f"[img2imgStreamDiffusion.py] Updated ControlNet scale to {params.controlnet_scale}")
+                if _v: print(f"[img2imgStreamDiffusion.py] Updated ControlNet scale to {params.controlnet_scale}")
 
         # Update temporal coherence if provided (runtime adjustable)
         temporal_coherence = getattr(params, 'temporal_coherence', None)
@@ -1167,9 +1164,9 @@ class Pipeline:
 
         # Preprocess input image and generate
         image_tensor = stream_wrapper.preprocess_image(params.image)
-        print(f"[img2imgStreamDiffusionXL.py] About to call stream_wrapper(image=...), type={type(stream_wrapper)}", flush=True)
+        if _v: print(f"[img2imgStreamDiffusionXL.py] About to call stream_wrapper(image=...), type={type(stream_wrapper)}", flush=True)
         output_image = stream_wrapper(image=image_tensor)
-        print(f"[img2imgStreamDiffusionXL.py] stream_wrapper() returned, type={type(output_image)}", flush=True)
+        if _v: print(f"[img2imgStreamDiffusionXL.py] stream_wrapper() returned, type={type(output_image)}", flush=True)
 
         # Debug controlnet: paste preprocessed control image in bottom-right corner
         if params.debug_controlnet:

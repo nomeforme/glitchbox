@@ -126,7 +126,7 @@ class DepthAnythingTRT:
         # --- Determine Normalization Range (The Core of the New Logic) ---
         if absolute_min is not None and absolute_max is not None:
             depth_min, depth_max = absolute_min, absolute_max
-            print(f"Using absolute depth range for normalization. Min: {depth_min:.2f}, Max: {depth_max:.2f}")
+            # print(f"Using absolute depth range for normalization. Min: {depth_min:.2f}, Max: {depth_max:.2f}")
             # Clip the depth values to the specified absolute range for safety
             depth = np.clip(depth, depth_min, depth_max)
         else:
@@ -135,7 +135,7 @@ class DepthAnythingTRT:
 
         # --- Apply Normalized Distance Threshold ---
         if normalized_distance_threshold is not None and 0.0 < normalized_distance_threshold < 1.0:
-            print(f"Applying normalized distance threshold: {normalized_distance_threshold}")
+            # print(f"Applying normalized distance threshold: {normalized_distance_threshold}")
             if depth_max > depth_min:
                 # Calculate the threshold in the absolute scale of the depth map
                 cutoff_value = depth_min + (depth_max - depth_min) * normalized_distance_threshold
@@ -161,7 +161,7 @@ class DepthAnythingTRT:
             colored_depth = cv2.applyColorMap(depth_resized, cv2.COLORMAP_INFERNO)
             depth_pil = Image.fromarray(cv2.cvtColor(colored_depth, cv2.COLOR_BGR2RGB))
         
-        print(f"Depth estimation inference time: {inference_time:.2f} ms")
+        # print(f"Depth estimation inference time: {inference_time:.2f} ms")
         
         return depth_pil
     

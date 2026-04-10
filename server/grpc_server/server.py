@@ -139,6 +139,12 @@ class GRPCServer:
         """Check if the server is currently running."""
         return self._running
 
+    def has_pending_params(self) -> bool:
+        """Check if there are pending parameters without consuming them."""
+        if self._servicer:
+            return self._servicer.has_pending_params()
+        return False
+
     def get_pending_params(self):
         """
         Get and clear pending parameters from the servicer.
@@ -221,3 +227,22 @@ class GRPCServer:
         """
         if self._servicer:
             self._servicer.set_default_transition_frames(frames)
+
+    def is_journey_active(self) -> bool:
+        """Check if a prompt journey is currently active."""
+        if self._servicer:
+            state = self._servicer.get_journey_state()
+            return state['active']
+        return False
+
+    def advance_journey_frame(self):
+        """Advance the journey by one frame. Returns (src, dst, factor, active) or None."""
+        if self._servicer:
+            return self._servicer.advance_journey_frame()
+        return None
+
+    def get_journey_state(self) -> dict:
+        """Get the current journey state."""
+        if self._servicer:
+            return self._servicer.get_journey_state()
+        return {'active': False, 'completed': False}
