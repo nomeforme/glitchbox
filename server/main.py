@@ -55,12 +55,13 @@ except ImportError as e:
 
 # Import MCP server
 try:
-    from mcp_server import mount_mcp_sse
+    from mcp_server import mcp as mcp_server, mount_mcp_http
     MCP_AVAILABLE = True
 except ImportError as e:
     print(f"[main.py] Warning: MCP import failed: {e}")
     print("[main.py] MCP server will not be available")
     MCP_AVAILABLE = False
+    mcp_server = None
 
 # import pycuda.driver as cuda
 
@@ -356,10 +357,10 @@ class App:
 
         self.init_app()
 
-        # Mount MCP SSE server if available
+        # Mount MCP Streamable HTTP server if available
         if MCP_AVAILABLE:
-            mount_mcp_sse(self.app)
-            print("[main.py] MCP SSE server mounted at /mcp/")
+            mount_mcp_http(self.app)
+            print("[main.py] MCP Streamable HTTP server mounted at /mcp/")
 
     async def warmup_all_pipes(self):
         """Warmup all pipes by making dummy predictions to pre-trace computational graphs"""
@@ -469,6 +470,12 @@ class App:
                 await self.image_saver.start()
                 print("[main.py] Image saver started")
 
+            # Start MCP session manager if available
+            if MCP_AVAILABLE and mcp_server:
+                self._mcp_session_cm = mcp_server.session_manager.run()
+                await self._mcp_session_cm.__aenter__()
+                print("[main.py] MCP session manager started")
+
             # Start gRPC server if enabled
             if self.grpc_server:
                 self.grpc_server.start()
@@ -526,6 +533,11 @@ class App:
         async def shutdown_event():
             # Shutdown
             print("Application shutdown")
+
+            # Stop MCP session manager if running
+            if MCP_AVAILABLE and hasattr(self, '_mcp_session_cm'):
+                await self._mcp_session_cm.__aexit__(None, None, None)
+                print("[main.py] MCP session manager stopped")
 
             # Stop gRPC server if running
             if self.grpc_server:
