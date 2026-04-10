@@ -1,4 +1,4 @@
-"""SSE transport mount for embedding the MCP server in a FastAPI/Starlette app."""
+"""Streamable HTTP transport mount for embedding the MCP server in a FastAPI/Starlette app."""
 
 from starlette.applications import Starlette
 from starlette.routing import Mount
@@ -6,11 +6,14 @@ from starlette.routing import Mount
 from .server import mcp
 
 
-def mount_mcp_sse(app: Starlette) -> None:
-    """Mount the MCP SSE transport on a FastAPI/Starlette app at /mcp/.
+def mount_mcp_http(app: Starlette) -> None:
+    """Mount the MCP Streamable HTTP transport on a FastAPI/Starlette app at /mcp/.
 
-    Endpoints:
-        GET  /mcp/sse        -- SSE event stream (client connects here)
-        POST /mcp/messages/  -- client sends messages here
+    Endpoint:
+        POST /mcp/mcp  -- Streamable HTTP endpoint (client connects here)
+
+    The session manager must be started separately via
+    ``mcp.session_manager.run()`` during the application lifespan.
     """
-    app.mount("/mcp", Mount(path="", app=mcp.sse_app()))
+    mcp.settings.streamable_http_path = "/"
+    app.mount("/mcp", Mount(path="", app=mcp.streamable_http_app()))

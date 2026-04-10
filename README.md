@@ -56,16 +56,16 @@ Add to your project's `.mcp.json` (or `~/.claude/settings.json`):
 }
 ```
 
-#### SSE (remote -- connects to a running server)
+#### Streamable HTTP (remote -- connects to a running server)
 
-When the glitchbox server is already running, the SSE endpoint is available automatically. Add to `.mcp.json`:
+When the glitchbox server is already running, the MCP endpoint is available automatically. Add to `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "glitchbox": {
-      "type": "sse",
-      "url": "http://<host>:7860/mcp/sse"
+      "type": "streamable-http",
+      "url": "http://<host>:7860/mcp/"
     }
   }
 }
