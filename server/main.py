@@ -53,6 +53,15 @@ except ImportError as e:
     GRPC_AVAILABLE = False
     GRPCServer = None
 
+# Import MCP server
+try:
+    from mcp_server import mount_mcp_sse
+    MCP_AVAILABLE = True
+except ImportError as e:
+    print(f"[main.py] Warning: MCP import failed: {e}")
+    print("[main.py] MCP server will not be available")
+    MCP_AVAILABLE = False
+
 # import pycuda.driver as cuda
 
 # # Print detailed CUDA device information
@@ -346,6 +355,11 @@ class App:
             print("[main.py] gRPC server disabled or not available")
 
         self.init_app()
+
+        # Mount MCP SSE server if available
+        if MCP_AVAILABLE:
+            mount_mcp_sse(self.app)
+            print("[main.py] MCP SSE server mounted at /mcp/")
 
     async def warmup_all_pipes(self):
         """Warmup all pipes by making dummy predictions to pre-trace computational graphs"""

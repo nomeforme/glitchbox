@@ -51,6 +51,7 @@ dependencies = [
     "torchvision==0.22.0",
     "transformers==4.52.4",
     "uvicorn[standard]==0.34.3",
+    "mcp[cli]>=1.0.0",
     "xformers==0.0.30",
     "lunar-tools @ git+https://github.com/lunarring/lunar_tools.git",
 ]
