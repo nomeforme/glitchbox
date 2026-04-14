@@ -246,3 +246,17 @@ class GRPCServer:
         if self._servicer:
             return self._servicer.get_journey_state()
         return {'active': False, 'completed': False}
+
+    def should_headless_generate(self) -> bool:
+        """Check if headless generation should be active. Auto-stops after target frame count."""
+        if self._servicer and self._servicer._headless_generate:
+            # Check if we've generated enough frames for the requested playback duration
+            if self._servicer._headless_duration > 0 and self._servicer._headless_target_frames > 0:
+                if self._servicer._headless_frame_count >= self._servicer._headless_target_frames:
+                    self._servicer._headless_generate = False
+                    self._servicer._headless_done = True
+                    print(f"[Headless] Target reached: {self._servicer._headless_frame_count} frames "
+                          f"({self._servicer._headless_duration}s @ {self._servicer._headless_target_frames / self._servicer._headless_duration:.0f}fps)")
+                    return False
+            return True
+        return False

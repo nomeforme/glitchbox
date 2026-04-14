@@ -46,6 +46,13 @@ class GenerationControlServicer:
         self._on_curation_switch = on_curation_switch
         self._debug = debug
         self._logger = logging.getLogger(__name__)
+        # Direct flag for headless loop — set by gRPC thread, read by async loop
+        self._headless_generate = False
+        self._headless_start_time = 0
+        self._headless_duration = 0  # 0 = unlimited
+        self._headless_frame_count = 0
+        self._headless_target_frames = 0
+        self._headless_done = False
 
         # Sticky params: params that override frontend for N frames
         # Format: {param_name: (value, frames_remaining)}
@@ -485,6 +492,18 @@ class GenerationControlServicer:
 
         if request.HasField('enabled'):
             params['use_prompt_travel_scheduler'] = request.enabled
+            # Set a direct flag for the headless loop (thread-safe boolean)
+            self._headless_generate = request.enabled
+            if request.enabled:
+                import time as _time
+                self._headless_start_time = _time.time()
+                self._headless_frame_count = 0
+                self._headless_done = False
+                # Compute target frames from journey's duration and fps
+                j = self._journey
+                fps = j.get('output_fps', 20)
+                dur = self._headless_duration
+                self._headless_target_frames = int(dur * fps) if dur > 0 else 0
         if request.HasField('min_factor'):
             params['prompt_travel_min_factor'] = request.min_factor
         if request.HasField('max_factor'):
@@ -685,6 +704,12 @@ class GenerationControlServicer:
         loop = request.loop
         input_video = request.input_video or ""
         audio_file = request.audio_file or ""
+        duration = request.duration or 0
+        output_path = request.output_path or ""
+        output_fps = request.fps or 20
+
+        # Store duration for headless timer
+        self._headless_duration = duration
 
         # If looping, add first prompt at the end
         if loop:
@@ -709,6 +734,8 @@ class GenerationControlServicer:
                 'target_prompt': prompts[1] if num_segments > 0 else prompts[0],
                 'input_video': input_video,
                 'audio_file': audio_file,
+                'output_path': output_path,
+                'output_fps': output_fps,
             }
 
         print(f"[gRPC Service] Journey started: {len(prompts)} prompts, "
@@ -725,16 +752,21 @@ class GenerationControlServicer:
         with self._lock:
             j = self._journey
             total = j['total_frames'] if j['total_frames'] > 0 else 1
+            # Use headless frame count if scheduler is active (not journey)
+            cur_frame = self._headless_frame_count if self._headless_frame_count > 0 else j['current_frame']
+            done = self._headless_done if self._headless_frame_count > 0 else j['completed']
+            total = self._headless_target_frames if self._headless_target_frames > 0 else j['total_frames']
             return pb2.PromptJourneyStatus(
-                active=j['active'],
-                current_frame=j['current_frame'],
-                total_frames=j['total_frames'],
+                active=j['active'] or self._headless_generate,
+                current_frame=cur_frame,
+                total_frames=total,
                 progress=j['current_frame'] / total,
                 current_segment=j['current_segment'],
                 total_segments=j['total_segments'],
                 current_prompt=j['current_prompt'],
                 target_prompt=j['target_prompt'],
-                completed=j['completed'],
+                completed=done,
+                output_file=j.get('output_path', ''),
             )
 
     def StopPromptJourney(self, request, context):

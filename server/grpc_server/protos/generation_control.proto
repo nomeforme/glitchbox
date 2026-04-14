@@ -176,6 +176,9 @@ message PromptJourneyRequest {
     bool loop = 4;                // loop back to first prompt at end
     string input_video = 5;       // server-side path to input video for ControlNet depth guidance
     string audio_file = 6;        // server-side path to audio file for FFT-driven effects
+    float duration = 7;           // max generation duration in seconds (0 = unlimited)
+    string output_path = 8;       // server-side path to save output video
+    int32 fps = 9;                // output video playback framerate (default: 20)
 }
 
 // Prompt journey response
@@ -196,6 +199,7 @@ message PromptJourneyStatus {
     string current_prompt = 7;
     string target_prompt = 8;
     bool completed = 9;           // true when journey finished
+    string output_file = 10;      // server-side path to completed video file
 }
 
 // Batch update request - allows updating multiple parameter groups at once

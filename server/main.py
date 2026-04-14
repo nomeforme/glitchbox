@@ -333,6 +333,8 @@ class App:
         # Initialize ZMQ context and socket
         self.zmq_context = zmq.Context()
         self.zmq_socket = self.zmq_context.socket(zmq.PUB)
+        self.zmq_socket.setsockopt(zmq.SNDHWM, 2)  # Keep only last 2 frames
+        self.zmq_socket.setsockopt(zmq.SNDBUF, 20 * 1024 * 1024)  # 20MB send buffer
         self.zmq_socket.bind("tcp://*:5555")
 
         # Initialize gRPC server if enabled
@@ -1011,6 +1013,14 @@ class App:
             queue_size = self.conn_manager.get_user_count()
             return JSONResponse({"queue_size": queue_size})
 
+        @self.app.get("/api/download")
+        async def download_file(path: str):
+            """Download a generated video file from the server."""
+            from fastapi.responses import FileResponse
+            if os.path.exists(path) and path.startswith("/tmp/glitchbox_"):
+                return FileResponse(path, media_type="video/mp4", filename=os.path.basename(path))
+            return JSONResponse({"error": "File not found"}, status_code=404)
+
         @self.app.get("/api/stream/{user_id}")
         async def stream(user_id: uuid.UUID, request: Request):
             """Stream processed frames"""
@@ -1416,8 +1426,10 @@ class App:
         video_frame_idx = 0
         video_total_frames = 0
         prev_video_frame = None  # For inter-frame blending
+        prev_output_image = None  # Previous diffused output for feedback
         audio_analyzer = None  # File-based audio FFT
         audio_duration = None  # Duration of audio file in seconds
+        video_writer = None  # cv2.VideoWriter for output video
 
         while True:
             try:
@@ -1426,18 +1438,20 @@ class App:
                 has_pending = (self.grpc_server and
                                (self.grpc_server.has_pending_params() or
                                 self.grpc_server.is_transition_active()))
-                has_scheduler = (hasattr(self, '_headless_scheduler_active') and
-                                 self._headless_scheduler_active)
-
-                # Scheduler is only activated by explicit gRPC SetPromptTravelParams call
-                # (not by server config defaults)
+                has_scheduler = (self.grpc_server and
+                                 self.grpc_server.should_headless_generate())
 
                 if not has_journey and not has_pending and not has_scheduler:
-                    # Clean up video capture when idle
+                    # Clean up when idle
                     if video_cap is not None:
                         video_cap.release()
                         video_cap = None
                         print("[Headless] Input video released")
+                    if video_writer is not None:
+                        video_writer.release()
+                        print(f"[Headless] Output video saved: {self._headless_output_path} ({frame_count} frames)")
+                        video_writer = None
+                        frame_count = 0
                     await asyncio.sleep(0.05)
                     continue
 
@@ -1463,6 +1477,18 @@ class App:
                         print(f"[Headless] Opened input video: {input_video_path} "
                               f"({video_total_frames} frames, {video_fps:.1f}fps, "
                               f"reading every {video_frame_skip} frames)")
+
+                # Open output video writer if needed
+                if video_writer is None and self.grpc_server:
+                    journey_state = self.grpc_server.get_journey_state()
+                    output_path = journey_state.get('output_path', '')
+                    output_fps = journey_state.get('output_fps', 20)
+                    if output_path:
+                        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+                        # First frame will set the resolution
+                        self._headless_output_path = output_path
+                        self._headless_output_fps = output_fps
+                        print(f"[Headless] Will write output to: {output_path} @ {output_fps}fps")
 
                 # Load audio file if specified and not yet loaded
                 if audio_analyzer is None:
@@ -1507,23 +1533,23 @@ class App:
                         video_frame_idx += 1
                     if ret:
                         frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-                        new_frame = np.array(Image.fromarray(frame_rgb).resize((width, height)))
-                        # Blend with previous frame to reduce inter-frame jitter
-                        if prev_video_frame is not None:
-                            blend = 0.5  # 50/50 blend with previous frame
-                            blended = (blend * prev_video_frame + (1 - blend) * new_frame).astype(np.uint8)
-                            input_pil = Image.fromarray(blended)
-                        else:
-                            input_pil = Image.fromarray(new_frame)
-                        prev_video_frame = new_frame
+                        input_pil = Image.fromarray(frame_rgb).resize((width, height))
                         params.image = input_pil
                     else:
                         params.image = dummy_image
                 else:
                     params.image = dummy_image
 
+                # Blend previous output with current input for temporal stability
+                if prev_output_image is not None and params.image:
+                    feedback_strength = 0.7
+                    prev_arr = np.array(prev_output_image.resize((width, height), Image.LANCZOS) if prev_output_image.size != (width, height) else prev_output_image)
+                    curr_arr = np.array(params.image)
+                    if prev_arr.shape == curr_arr.shape:
+                        blended = (feedback_strength * prev_arr + (1 - feedback_strength) * curr_arr).astype(np.uint8)
+                        params.image = Image.fromarray(blended)
+
                 # Apply acid processing to input (same as standard client)
-                # This blends the previous diffused output with the current input
                 if self.use_acid_processor and params.image:
                     params.image = self._apply_acid_processing(params.image)
 
@@ -1598,23 +1624,8 @@ class App:
                     scheduler_factor, scheduler_seed = self.prompt_travel_scheduler.update()
                     setattr(params, 'prompt_travel_factor', scheduler_factor)
 
-                    # Handle seed travel
-                    if hasattr(self, 'seed_travel_scheduler') and self.seed_travel_scheduler is not None:
-                        if self.seed_travel_scheduler.match_prompt_travel:
-                            current_seed, next_seed, seed_factor = self.seed_travel_scheduler.update(
-                                external_factor=scheduler_factor
-                            )
-                        else:
-                            current_seed, next_seed, seed_factor = self.seed_travel_scheduler.update()
-                        setattr(params, 'seed', current_seed)
-                        setattr(params, 'target_seed', next_seed)
-                        setattr(params, 'latent_travel_factor', seed_factor)
-                    elif scheduler_seed is not None:
-                        current_seed, next_seed = self.prompt_travel_scheduler.get_seeds()
-                        setattr(params, 'seed', current_seed)
-                        setattr(params, 'target_seed', next_seed)
-                        latent_weight = scheduler_factor - int(scheduler_factor)
-                        setattr(params, 'latent_travel_factor', latent_weight)
+                    # Disable seed/latent travel in headless scheduler mode to prevent jitter
+                    setattr(params, 'use_latent_travel', False)
 
                     # Use scheduled prompts if prompt scheduler is enabled
                     if self.prompt_travel_scheduler.use_prompt_scheduler:
@@ -1630,6 +1641,10 @@ class App:
                         print(f"[Headless] Scheduler frame {frame_count}, "
                               f"factor={scheduler_factor:.3f}, "
                               f"prompt={getattr(params, 'prompt', '?')[:50]}...")
+
+                # Ensure image is at native pipeline resolution before predict
+                if params.image and params.image.size != (width, height):
+                    params.image = params.image.resize((width, height), Image.LANCZOS)
 
                 # Generate frame (hold lock to prevent race with curation switch)
                 if not self._pipeline_lock.acquire(blocking=False):
@@ -1648,22 +1663,47 @@ class App:
                     await asyncio.sleep(0.01)
                     continue
 
+                # Store output for feedback into next frame
+                prev_output_image = image
+
+                if frame_count == 0:
+                    print(f"[Headless] Output image size: {image.size}")
+
                 # Apply post-processing
                 if self.use_acid_processor:
-                    img_diffusion = np.array(image)
+                    # Use native resolution for acid processor (not upscaled)
+                    acid_image = image.resize((width, height), Image.LANCZOS) if image.size != (width, height) else image
+                    img_diffusion = np.array(acid_image)
                     self.acid_processor.update(img_diffusion)
 
-                # Publish over ZMQ
+                # Write to output video file (lossless, no ZMQ)
                 image_np = np.array(image)
-                if self.args.zmq_jpeg_quality > 0:
-                    image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
-                    encode_params = [cv2.IMWRITE_JPEG_QUALITY, self.args.zmq_jpeg_quality]
+                image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
+
+                if video_writer is None and hasattr(self, '_headless_output_path') and self._headless_output_path:
+                    h_out, w_out = image_bgr.shape[:2]
+                    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+                    video_writer = cv2.VideoWriter(
+                        self._headless_output_path, fourcc,
+                        self._headless_output_fps, (w_out, h_out)
+                    )
+                    print(f"[Headless] Video writer opened: {self._headless_output_path} "
+                          f"({w_out}x{h_out} @ {self._headless_output_fps}fps)")
+
+                if video_writer is not None:
+                    video_writer.write(image_bgr)
+
+                # Also send via ZMQ for live monitoring (optional, non-blocking)
+                try:
+                    encode_params = [cv2.IMWRITE_JPEG_QUALITY, 85]
                     _, encoded = cv2.imencode('.jpg', image_bgr, encode_params)
-                    self.zmq_socket.send(encoded.tobytes())
-                else:
-                    self.zmq_socket.send(image_np.tobytes())
+                    self.zmq_socket.send(encoded.tobytes(), zmq.NOBLOCK)
+                except zmq.Again:
+                    pass
 
                 frame_count += 1
+                if self.grpc_server and self.grpc_server._servicer:
+                    self.grpc_server._servicer._headless_frame_count = frame_count
 
                 # Yield to event loop
                 await asyncio.sleep(0)
