@@ -282,8 +282,16 @@ class App:
                 print("[main.py] Using default frequency bin boost factors")
                 treble_boost_factors = None
 
+            # Use adapter_weights_sets count for num_pipes so the sound controller
+            # can map audio to all LoRA weight combos (PEFT pipeline has only 1 pipe
+            # but multiple weight sets in the config)
+            num_lora_pipes = len(self.pipeline.pipes)
+            if self.lora_config is not None:
+                weights_sets = self.lora_config.get_default_adapter_weights()
+                if len(weights_sets) > num_lora_pipes:
+                    num_lora_pipes = len(weights_sets)
             self.lora_sound_controller = LoraSoundController(
-                num_pipes=len(self.pipeline.pipes),
+                num_pipes=num_lora_pipes,
                 num_prompts=len(self.prompt_travel_scheduler.prompt_scheduler.prompts),
                 enabled=self.use_lora_sound_control,
                 debug=getattr(self.args, 'debug', False),
@@ -1650,6 +1658,19 @@ class App:
                             )
                             setattr(params, 'pipe_index', new_pipe_index)
 
+                            # Map pipe_index to LoRA weights for PEFT pipeline
+                            # Uses adapter_weights_sets from lora_config to blend LoRAs based on audio
+                            if self.lora_config is not None:
+                                adapter_weights_set_curation = self.lora_config.get_adapter_weights_set_curation()
+                                default_curation_key = self.lora_config.default_curation_key
+                                if default_curation_key in adapter_weights_set_curation:
+                                    weights_sets = adapter_weights_set_curation[default_curation_key]
+                                    if new_pipe_index < len(weights_sets):
+                                        lora_weights = weights_sets[new_pipe_index]
+                                    else:
+                                        lora_weights = weights_sets[-1]
+                                    setattr(params, 'lora_weights', lora_weights)
+
                 # Apply journey state if active
                 if has_journey:
                     result = self.grpc_server.advance_journey_frame()
@@ -1681,15 +1702,36 @@ class App:
                     # Use continuous factor-based prompt scheduling (same as WebSocket path)
                     if self.prompt_travel_scheduler.use_prompt_scheduler and \
                        self.prompt_travel_scheduler.prompt_scheduler is not None:
+                        # Get adapter weights for current pipe_index to enable multi-file prompt blending
+                        # This ensures prompts match the LoRA weights (e.g. water prompts when water LoRA is active)
+                        adapter_weights = None
+                        if self.lora_config is not None:
+                            pipe_index = getattr(params, 'pipe_index', 0)
+                            adapter_weights_set_curation = self.lora_config.get_adapter_weights_set_curation()
+                            default_curation_key = self.lora_config.default_curation_key
+                            if default_curation_key in adapter_weights_set_curation:
+                                weights_sets = adapter_weights_set_curation[default_curation_key]
+                                if pipe_index < len(weights_sets):
+                                    adapter_weights = weights_sets[pipe_index]
+                                elif weights_sets:
+                                    adapter_weights = weights_sets[-1]
+
                         source_prompts, target_prompts, interpolation_weight, spatial_weights = \
                             self.prompt_travel_scheduler.prompt_scheduler.get_prompts_from_factor(
-                                scheduler_factor
+                                scheduler_factor,
+                                weights=adapter_weights
                             )
 
                         if source_prompts and target_prompts:
+                            is_multi_file = isinstance(source_prompts, list)
                             setattr(params, 'prompt', source_prompts)
                             setattr(params, 'target_prompt', target_prompts)
                             setattr(params, 'prompt_travel_factor', interpolation_weight)
+                            if is_multi_file and spatial_weights:
+                                setattr(params, 'spatial_weights', spatial_weights)
+                                setattr(params, 'multi_file_prompts', True)
+                            else:
+                                setattr(params, 'multi_file_prompts', False)
                     else:
                         # No prompt scheduler — just set the raw factor
                         setattr(params, 'prompt_travel_factor', scheduler_factor)
