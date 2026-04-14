@@ -42,6 +42,25 @@ DEFAULT_PROMPTS = [
 ]
 
 
+def upload_file(server_ip, local_path):
+    """Upload a local file to the server, return the server-side path."""
+    import urllib.request
+    import json as _json
+    print(f"[Upload] Uploading: {local_path}...")
+    with open(local_path, "rb") as f:
+        data = f.read()
+    filename = os.path.basename(local_path)
+    req = urllib.request.Request(
+        f"http://{server_ip}:7860/api/upload?filename={filename}",
+        data=data, method="POST",
+    )
+    req.add_header("Content-Type", "application/octet-stream")
+    resp = urllib.request.urlopen(req)
+    server_path = _json.loads(resp.read())["path"]
+    print(f"[Upload] Uploaded to server: {server_path}")
+    return server_path
+
+
 def load_prompts(path):
     prompts = []
     with open(path) as f:
@@ -215,8 +234,12 @@ def record_zmq_stream(zmq_sub, writer, h, w, fps, duration_seconds, stub=None):
 
 
 def run_journey(prompts, server_ip, grpc_port, zmq_port, transition_frames,
-                hold_frames, fps, output, loop, input_video=None, **setup_kwargs):
+                hold_frames, fps, output, loop, input_video=None, init_image=None, **setup_kwargs):
     channel, stub = connect_and_setup(server_ip, grpc_port, **setup_kwargs)
+
+    # Upload init image if provided (overrides input_video)
+    if init_image:
+        input_video = upload_file(server_ip, init_image)
     zmq_ctx, zmq_sub = zmq_connect(server_ip, zmq_port)
 
     print(f"[gRPC] Starting journey: {len(prompts)} prompts, "
@@ -253,29 +276,19 @@ def run_journey(prompts, server_ip, grpc_port, zmq_port, transition_frames,
 
 
 def run_scheduler(server_ip, grpc_port, zmq_port, fps, output, duration_seconds,
-                  input_video=None, audio_file=None, **setup_kwargs):
+                  input_video=None, audio_file=None, init_image=None, **setup_kwargs):
     channel, stub = connect_and_setup(server_ip, grpc_port, **setup_kwargs)
+
+    # Upload init image if provided (overrides input_video)
+    if init_image:
+        input_video = upload_file(server_ip, init_image)
 
     # Upload audio file to server if it's a local path
     server_audio_path = audio_file
     local_audio_path = None
     if audio_file and not audio_file.startswith("/"):
-        # Local file — upload to server
         local_audio_path = audio_file
-        print(f"[Upload] Uploading audio: {audio_file}...")
-        import urllib.request
-        with open(audio_file, "rb") as f:
-            audio_data = f.read()
-        filename = os.path.basename(audio_file)
-        req = urllib.request.Request(
-            f"http://{server_ip}:7860/api/upload?filename={filename}",
-            data=audio_data, method="POST",
-        )
-        req.add_header("Content-Type", "application/octet-stream")
-        resp = urllib.request.urlopen(req)
-        import json as _json
-        server_audio_path = _json.loads(resp.read())["path"]
-        print(f"[Upload] Audio uploaded to server: {server_audio_path}")
+        server_audio_path = upload_file(server_ip, audio_file)
     elif audio_file:
         local_audio_path = None  # Audio is already on server
 
@@ -380,6 +393,7 @@ def main():
     parser.add_argument("--curation", type=int, default=None, help="Curation index (e.g. 21)")
     parser.add_argument("--pipe-index", type=int, default=None, help="LoRA pipe index")
     parser.add_argument("--input-video", type=str, default=None, help="Server-side video path or 'noise'")
+    parser.add_argument("--init-image", type=str, default=None, help="Local init image to upload and use as input")
     parser.add_argument("--controlnet-scale", type=float, default=None, help="ControlNet scale")
     parser.add_argument("--temporal-coherence", type=float, default=None, help="Temporal coherence (try 0.2-0.4)")
     parser.add_argument("--audio", type=str, default=None, help="Server-side audio file for FFT effects")
@@ -397,7 +411,8 @@ def main():
         run_scheduler(
             server_ip=args.server, grpc_port=args.grpc_port, zmq_port=args.zmq_port,
             fps=args.fps, output=args.output, duration_seconds=args.duration,
-            input_video=args.input_video, audio_file=args.audio, **setup_kwargs,
+            input_video=args.input_video, audio_file=args.audio,
+            init_image=args.init_image, **setup_kwargs,
         )
     else:
         prompts = DEFAULT_PROMPTS
@@ -411,7 +426,8 @@ def main():
             prompts=prompts, server_ip=args.server, grpc_port=args.grpc_port,
             zmq_port=args.zmq_port, transition_frames=args.transition_frames,
             hold_frames=args.hold_frames, fps=args.fps, output=args.output,
-            loop=args.loop, input_video=args.input_video, **setup_kwargs,
+            loop=args.loop, input_video=args.input_video,
+            init_image=args.init_image, **setup_kwargs,
         )
 
 

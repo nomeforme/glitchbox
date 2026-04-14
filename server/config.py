@@ -39,6 +39,10 @@ class Args(NamedTuple):
     depth_absolute_max: float = 18.0
     # Use camera as control image
     use_camera_as_control: bool = False
+    # Disable ControlNet to save VRAM
+    no_controlnet: bool = False
+    # Init image feedback strength (0.0 = only init image, 1.0 = only previous output)
+    feedback_strength: float = 0.7
     # Enable prompt travel
     use_prompt_travel: bool = False
     use_latent_travel: bool = False
@@ -428,6 +432,20 @@ parser.add_argument(
     action="store_true",
     default=False,
     help="Remove the background from the image feed"
+)
+parser.add_argument(
+    "--feedback-strength",
+    dest="feedback_strength",
+    type=float,
+    default=0.7,
+    help="Init image feedback strength: 0.0 = only init image, 1.0 = only previous output (default: 0.7)",
+)
+parser.add_argument(
+    "--no-controlnet",
+    dest="no_controlnet",
+    action="store_true",
+    default=False,
+    help="Disable ControlNet to save VRAM (useful for text-only generation without input video)",
 )
 # Add prompt travel argument
 parser.add_argument(

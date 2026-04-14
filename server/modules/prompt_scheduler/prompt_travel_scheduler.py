@@ -103,9 +103,11 @@ class PromptTravelScheduler:
                 self.logger.info("Prompt scheduler initialized")
 
             # Set max_factor based on number of prompts loaded
+            # Use num_prompts-1 so the factor oscillates smoothly across all prompts
+            # without hitting the modulo wrap boundary (e.g. 5%5=0 causes a jump)
             num_prompts = len(self.prompt_scheduler.prompts)
-            if num_prompts > 0:
-                self.max_factor = float(num_prompts)
+            if num_prompts > 1:
+                self.max_factor = float(num_prompts - 1)
                 print(f"[PromptTravelScheduler] Set max_factor to {self.max_factor} based on {num_prompts} prompts")
                 if self.logging_enabled:
                     self.logger.info(f"Set max_factor to {self.max_factor} based on {num_prompts} prompts")
@@ -301,11 +303,13 @@ class PromptTravelScheduler:
             self.logger.info(f"Factor increment set to: {self.factor_increment}")
             
     def set_boundaries(self, min_factor=None, max_factor=None):
-        """Set the min and max factor boundaries"""
+        """Set the min and max factor boundaries.
+        Only applies if explicitly provided — does NOT override prompt-count-based max_factor.
+        """
         if min_factor is not None:
-            self.min_factor = max(0.0, min(1.0, min_factor))
+            self.min_factor = max(0.0, min_factor)
         if max_factor is not None:
-            self.max_factor = max(0.0, min(1.0, max_factor))
+            self.max_factor = max(0.0, max_factor)
             
         if self.logging_enabled:
             self.logger.info(f"Boundaries set to: min={self.min_factor}, max={self.max_factor}")
@@ -317,8 +321,21 @@ class PromptTravelScheduler:
             self.logger.info(f"Seed generation set to: {enabled}")
             
     def set_prompt_scheduler_enabled(self, enabled):
-        """Enable or disable the prompt scheduler"""
+        """Enable or disable the prompt scheduler. Creates it lazily if needed."""
         self.use_prompt_scheduler = enabled
+        if enabled and self.prompt_scheduler is None:
+            # Lazily create the prompt scheduler (wasn't created at init)
+            from .prompt_scheduler import PromptScheduler
+            self.prompt_scheduler = PromptScheduler(
+                enabled=True,
+                loop_prompts=True,
+                prompts_file_names=self.prompts_file_names,
+            )
+            self.prompt_scheduler.load_prompts()
+            num_prompts = len(self.prompt_scheduler.prompts)
+            if num_prompts > 1:
+                self.max_factor = float(num_prompts - 1)
+                print(f"[PromptTravelScheduler] Lazy init: max_factor={self.max_factor} from {num_prompts} prompts")
         if self.prompt_scheduler is not None:
             self.prompt_scheduler.set_enabled(enabled)
         if self.logging_enabled:
@@ -331,15 +348,15 @@ class PromptTravelScheduler:
 
             # Update max_factor based on newly loaded prompts
             num_prompts = len(self.prompt_scheduler.prompts)
-            if num_prompts > 0:
-                self.max_factor = float(num_prompts)
+            if num_prompts > 1:
+                self.max_factor = float(num_prompts - 1)
                 print(f"[PromptTravelScheduler] Reloaded - updated max_factor to {self.max_factor} based on {num_prompts} prompts")
                 if self.logging_enabled:
                     self.logger.info(f"Updated max_factor to {self.max_factor} based on {num_prompts} prompts")
 
         if self.logging_enabled:
             self.logger.info("Reloading prompts")
-            
+
     def update_prompts_file_names(self, prompts_file_names):
         """
         Update the prompts file names and reload prompts.
@@ -357,8 +374,8 @@ class PromptTravelScheduler:
 
             # Update max_factor based on newly loaded prompts
             num_prompts = len(self.prompt_scheduler.prompts)
-            if num_prompts > 0:
-                self.max_factor = float(num_prompts)
+            if num_prompts > 1:
+                self.max_factor = float(num_prompts - 1)
                 print(f"[PromptTravelScheduler] Updated max_factor to {self.max_factor} based on {num_prompts} prompts")
                 if self.logging_enabled:
                     self.logger.info(f"Updated max_factor to {self.max_factor} based on {num_prompts} prompts")

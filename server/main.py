@@ -1487,14 +1487,27 @@ class App:
                         self._headless_use_noise = True
                         print(f"[Headless] Using random noise input ({width}x{height})")
                     elif input_video_path and os.path.exists(input_video_path):
-                        video_cap = cv2.VideoCapture(input_video_path)
-                        video_total_frames = int(video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                        video_fps = video_cap.get(cv2.CAP_PROP_FPS) or 25.0
-                        video_frame_idx = 0
-                        video_frame_skip = max(1, round(video_fps / 10.0))
-                        print(f"[Headless] Opened input video: {input_video_path} "
-                              f"({video_total_frames} frames, {video_fps:.1f}fps, "
-                              f"reading every {video_frame_skip} frames)")
+                        # Check if it's a single image (not a video)
+                        img_exts = {'.png', '.jpg', '.jpeg', '.bmp', '.tiff', '.webp'}
+                        is_image = os.path.splitext(input_video_path)[1].lower() in img_exts
+                        if is_image:
+                            # Load as a static init image — reuse every frame
+                            init_frame = cv2.imread(input_video_path)
+                            if init_frame is not None:
+                                init_rgb = cv2.cvtColor(init_frame, cv2.COLOR_BGR2RGB)
+                                self._headless_init_image = Image.fromarray(init_rgb).resize((width, height))
+                                print(f"[Headless] Loaded init image: {input_video_path} (resized to {width}x{height})")
+                            else:
+                                print(f"[Headless] WARNING: Failed to load init image: {input_video_path}")
+                        else:
+                            video_cap = cv2.VideoCapture(input_video_path)
+                            video_total_frames = int(video_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+                            video_fps = video_cap.get(cv2.CAP_PROP_FPS) or 25.0
+                            video_frame_idx = 0
+                            video_frame_skip = max(1, round(video_fps / 10.0))
+                            print(f"[Headless] Opened input video: {input_video_path} "
+                                  f"({video_total_frames} frames, {video_fps:.1f}fps, "
+                                  f"reading every {video_frame_skip} frames)")
 
                 # Open output video writer if needed
                 if video_writer is None and self.grpc_server:
@@ -1532,8 +1545,10 @@ class App:
                 # Build params from defaults
                 params = SimpleNamespace(**vars(base_params))
 
-                # Read input frame from video, noise, or black dummy
-                if getattr(self, '_headless_use_noise', False):
+                # Read input frame from init image, video, noise, or black dummy
+                if getattr(self, '_headless_init_image', None) is not None:
+                    params.image = self._headless_init_image
+                elif getattr(self, '_headless_use_noise', False):
                     noise_frame = np.random.randint(0, 255, (height, width, 3), dtype=np.uint8)
                     params.image = Image.fromarray(noise_frame)
                 elif video_cap is not None and video_cap.isOpened():
@@ -1562,8 +1577,9 @@ class App:
                     params.image = dummy_image
 
                 # Blend previous output with current input for temporal stability
+                # feedback_strength: 0.0 = only init/input image, 1.0 = only previous output
                 if prev_output_image is not None and params.image:
-                    feedback_strength = 0.7
+                    feedback_strength = getattr(self.args, 'feedback_strength', 0.7)
                     prev_arr = np.array(prev_output_image.resize((width, height), Image.LANCZOS) if prev_output_image.size != (width, height) else prev_output_image)
                     curr_arr = np.array(params.image)
                     if prev_arr.shape == curr_arr.shape:
@@ -1658,24 +1674,30 @@ class App:
                 # Apply server's prompt travel scheduler if active (mirrors WebSocket handler)
                 elif has_scheduler and self.use_prompt_travel and getattr(params, 'use_prompt_travel', False):
                     scheduler_factor, scheduler_seed = self.prompt_travel_scheduler.update()
-                    setattr(params, 'prompt_travel_factor', scheduler_factor)
 
                     # Disable seed/latent travel in headless scheduler mode to prevent jitter
                     setattr(params, 'use_latent_travel', False)
 
-                    # Use scheduled prompts if prompt scheduler is enabled
-                    if self.prompt_travel_scheduler.use_prompt_scheduler:
-                        current_prompt, next_prompt = self.prompt_travel_scheduler.get_prompts()
-                        if current_prompt:
-                            setattr(params, 'prompt', current_prompt)
-                        if next_prompt:
-                            setattr(params, 'target_prompt', next_prompt)
-                        interpolation_weight = scheduler_factor - int(scheduler_factor)
-                        setattr(params, 'prompt_travel_factor', interpolation_weight)
+                    # Use continuous factor-based prompt scheduling (same as WebSocket path)
+                    if self.prompt_travel_scheduler.use_prompt_scheduler and \
+                       self.prompt_travel_scheduler.prompt_scheduler is not None:
+                        source_prompts, target_prompts, interpolation_weight, spatial_weights = \
+                            self.prompt_travel_scheduler.prompt_scheduler.get_prompts_from_factor(
+                                scheduler_factor
+                            )
+
+                        if source_prompts and target_prompts:
+                            setattr(params, 'prompt', source_prompts)
+                            setattr(params, 'target_prompt', target_prompts)
+                            setattr(params, 'prompt_travel_factor', interpolation_weight)
+                    else:
+                        # No prompt scheduler — just set the raw factor
+                        setattr(params, 'prompt_travel_factor', scheduler_factor)
 
                     if frame_count % 100 == 0:
                         print(f"[Headless] Scheduler frame {frame_count}, "
                               f"factor={scheduler_factor:.3f}, "
+                              f"interp={getattr(params, 'prompt_travel_factor', '?'):.3f}, "
                               f"prompt={getattr(params, 'prompt', '?')[:50]}...")
 
                 # Ensure image is at native pipeline resolution before predict
