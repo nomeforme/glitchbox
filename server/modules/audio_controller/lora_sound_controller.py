@@ -176,7 +176,7 @@ class LoraSoundController:
                 n_fft_bins=len(normalized_energies),
                 max_freq=self.max_freq,
                 min_freq=self.min_freq,
-                n_mel_bins=5,  # Always use 5 mel bins for consistency
+                n_mel_bins=self.num_pipes,  # Match mel bins to number of pipes
                 debug=self.debug or debug
             )
             
@@ -206,7 +206,11 @@ class LoraSoundController:
                 normalized_mel = mel_bins / safe_avg
 
             # Apply boost factors in linear space to the normalized values
-            boost_arr = np.array(self.frequency_bin_boost_factors[:len(normalized_mel)])
+            # Extend boost factors to match number of mel bins (pad with 1.0)
+            boost_factors = list(self.frequency_bin_boost_factors)
+            if len(boost_factors) < len(normalized_mel):
+                boost_factors.extend([1.0] * (len(normalized_mel) - len(boost_factors)))
+            boost_arr = np.array(boost_factors[:len(normalized_mel)])
             boosted_bins = normalized_mel * boost_arr
 
             # Select bin with highest relative energy (after boost)
