@@ -14,6 +14,7 @@ Install: pip install grpcio pyzmq opencv-python numpy
 """
 
 import argparse
+import os
 import time
 import threading
 import signal
@@ -255,6 +256,29 @@ def run_scheduler(server_ip, grpc_port, zmq_port, fps, output, duration_seconds,
                   input_video=None, audio_file=None, **setup_kwargs):
     channel, stub = connect_and_setup(server_ip, grpc_port, **setup_kwargs)
 
+    # Upload audio file to server if it's a local path
+    server_audio_path = audio_file
+    local_audio_path = None
+    if audio_file and not audio_file.startswith("/"):
+        # Local file — upload to server
+        local_audio_path = audio_file
+        print(f"[Upload] Uploading audio: {audio_file}...")
+        import urllib.request
+        with open(audio_file, "rb") as f:
+            audio_data = f.read()
+        filename = os.path.basename(audio_file)
+        req = urllib.request.Request(
+            f"http://{server_ip}:7860/api/upload?filename={filename}",
+            data=audio_data, method="POST",
+        )
+        req.add_header("Content-Type", "application/octet-stream")
+        resp = urllib.request.urlopen(req)
+        import json as _json
+        server_audio_path = _json.loads(resp.read())["path"]
+        print(f"[Upload] Audio uploaded to server: {server_audio_path}")
+    elif audio_file:
+        local_audio_path = None  # Audio is already on server
+
     # Server-side output path
     server_output = f"/tmp/glitchbox_output_{int(time.time())}.mp4"
 
@@ -268,8 +292,8 @@ def run_scheduler(server_ip, grpc_port, zmq_port, fps, output, duration_seconds,
     )
     if input_video:
         journey_kwargs['input_video'] = input_video
-    if audio_file:
-        journey_kwargs['audio_file'] = audio_file
+    if server_audio_path:
+        journey_kwargs['audio_file'] = server_audio_path
     stub.StartPromptJourney(pb2.PromptJourneyRequest(**journey_kwargs))
     stub.StopPromptJourney(pb2.GetStateRequest())
 
@@ -302,15 +326,42 @@ def run_scheduler(server_ip, grpc_port, zmq_port, fps, output, duration_seconds,
     channel.close()
 
     # Download the video from server via HTTP
+    video_only = output.replace(".mp4", "_noaudio.mp4") if (audio_file or local_audio_path) else output
     print(f"\nDownloading {server_output}...")
     import urllib.request
     download_url = f"http://{server_ip}:7860/api/download?path={server_output}"
     try:
-        urllib.request.urlretrieve(download_url, output)
-        print(f"Saved to: {output}")
+        urllib.request.urlretrieve(download_url, video_only)
+        print(f"Downloaded: {video_only}")
     except Exception as e:
         print(f"Auto-download failed: {e}")
-        print(f"Download manually: scp plantoidz@{server_ip}:{server_output} {output}")
+        print(f"Download manually: scp plantoidz@{server_ip}:{server_output} {video_only}")
+        return
+
+    # Merge audio into video if audio was provided
+    audio_source = local_audio_path or audio_file
+    if audio_source and os.path.exists(audio_source):
+        print(f"Merging audio from {audio_source}...")
+        import subprocess
+        try:
+            subprocess.run([
+                "ffmpeg", "-y",
+                "-i", video_only,
+                "-i", audio_source,
+                "-c:v", "copy",
+                "-c:a", "aac",
+                "-shortest",
+                output,
+            ], check=True, capture_output=True)
+            os.remove(video_only)
+            print(f"Final video with audio: {output}")
+        except Exception as e:
+            print(f"Audio merge failed: {e}")
+            print(f"Video without audio: {video_only}")
+    else:
+        if video_only != output:
+            os.rename(video_only, output)
+        print(f"Saved to: {output}")
 
 
 def main():

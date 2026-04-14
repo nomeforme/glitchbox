@@ -912,6 +912,20 @@ class Pipeline:
         # Swap UNet if pipe index changed
         if pipe_index != self.current_pipe_idx:
             print(f"[img2imgStreamDiffusionXL.py] Swapping UNet from pipe {self.current_pipe_idx} to pipe {pipe_index}")
+            try:
+                # Move current UNet to CPU
+                current_unet = self.shared_wrapper.stream.unet
+                current_unet.to('cpu')
+                self.unet_engines[self.current_pipe_idx] = current_unet
+                # Load target UNet to GPU
+                target_unet = self.unet_engines[pipe_index]
+                target_unet.to('cuda')
+                self.shared_wrapper.stream.unet = target_unet
+                import torch
+                torch.cuda.empty_cache()
+                print(f"[img2imgStreamDiffusionXL.py] UNet swap complete: pipe {self.current_pipe_idx} → {pipe_index}")
+            except Exception as e:
+                print(f"[img2imgStreamDiffusionXL.py] UNet swap failed: {e}")
             self.current_pipe_idx = pipe_index
 
         # Use the shared wrapper (all pipes reference it)

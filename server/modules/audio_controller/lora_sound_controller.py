@@ -80,7 +80,12 @@ class LoraSoundController:
         # Current pipe index value
         self.current_pipe_index = 0
         self.current_prompt_index = 0
-        
+
+        # Per-mel-bin running average for normalization (compensates for spectral rolloff)
+        # Each bin is compared to its own history, not across bins.
+        self._mel_running_avg = None  # initialized on first call
+        self._mel_avg_alpha = 0.05   # EMA smoothing factor (lower = slower adaptation)
+
         # Store previous averaged bins for rolling window percentage change calculation (used for linear frequency backup)
         self.rolling_window = deque(maxlen=self.rolling_window_size)
 
@@ -177,57 +182,51 @@ class LoraSoundController:
             
             # Store original mel bins for debug output
             original_mel_bins = mel_bins.copy()
-            
-            # Convert to decibel scale if enabled (standard practice for perceptual audio analysis)
-            if self.use_decibel_scale:
-                mel_bins_db = convert_to_decibels(
-                    mel_bins,
-                    reference_energy=1e-10,
-                    min_db=-80.0,
-                    debug=self.debug or debug
+
+            # --- Per-bin running-average normalization ---
+            # Each mel bin is divided by its own exponential moving average.
+            # This compensates for natural spectral rolloff (bass >> treble in
+            # absolute energy) by making selection about *relative spike* not
+            # *absolute magnitude*. This matches what the standard frontend's
+            # Stream_Analyzer does with bin_mean_values normalization.
+            if self._mel_running_avg is None:
+                # Seed the running average with the first observation
+                self._mel_running_avg = mel_bins.copy()
+                # For the very first frame, all normalized bins = 1.0 (no preference)
+                normalized_mel = np.ones_like(mel_bins)
+            else:
+                # Update running average (EMA)
+                self._mel_running_avg = (
+                    self._mel_avg_alpha * mel_bins
+                    + (1 - self._mel_avg_alpha) * self._mel_running_avg
                 )
-                # Use decibel values for further processing
-                processing_bins = mel_bins_db
-            else:
-                # Use linear energy values
-                processing_bins = mel_bins
-            
-            # Apply treble boost to higher frequency bins
-            if self.use_decibel_scale:
-                # In dB space: add boost in dB (10*log10(boost_factor))
-                boost_factors_db = 10 * np.log10(np.array(self.frequency_bin_boost_factors[:len(processing_bins)]))
-                boosted_bins = processing_bins + boost_factors_db
-            else:
-                # In linear energy space: multiply by boost factor
-                boosted_bins = processing_bins * self.frequency_bin_boost_factors[:len(processing_bins)]
-            
-            # Select bin with highest value (correctly boosted in appropriate space)
+                # Normalize: current energy / running average
+                # Bins above their baseline score > 1, below score < 1
+                safe_avg = np.maximum(self._mel_running_avg, 1e-10)
+                normalized_mel = mel_bins / safe_avg
+
+            # Apply boost factors in linear space to the normalized values
+            boost_arr = np.array(self.frequency_bin_boost_factors[:len(normalized_mel)])
+            boosted_bins = normalized_mel * boost_arr
+
+            # Select bin with highest relative energy (after boost)
             raw_audio_index = np.argmax(boosted_bins)
-            
+
             if self.debug or debug:
-                print(f"[LoraSoundController] Mel-frequency analysis mode (default)")
-                print(f"[LoraSoundController] Using {'decibel' if self.use_decibel_scale else 'linear'} scale for bin selection")
+                print(f"[LoraSoundController] Mel-frequency analysis mode (per-bin normalized)")
                 print(f"[LoraSoundController] Pipe index mode: {'smoothed' if self.smoothed_mode else 'instant'}")
                 print(f"[LoraSoundController] Mel bin centers (Hz): {[f'{freq:.0f}' for freq in mel_centers]}")
                 print(f"[LoraSoundController] Raw mel energies: {original_mel_bins}")
-                
-                if self.use_decibel_scale:
-                    print(f"[LoraSoundController] Mel energies (dB): {mel_bins_db}")
-                    print(f"[LoraSoundController] Frequency bin boost factors (dB): {boost_factors_db}")
-                    print(f"[LoraSoundController] Boosted mel bins (dB): {boosted_bins}")
-                else:
-                    print(f"[LoraSoundController] Frequency bin boost factors: {self.frequency_bin_boost_factors[:len(processing_bins)]}")
-                    print(f"[LoraSoundController] Boosted mel energies: {boosted_bins}")
-                
+                print(f"[LoraSoundController] Running avg:      {self._mel_running_avg}")
+                print(f"[LoraSoundController] Normalized (cur/avg): {normalized_mel}")
+                print(f"[LoraSoundController] Boost factors: {boost_arr}")
+                print(f"[LoraSoundController] Boosted normalized: {boosted_bins}")
                 print(f"[LoraSoundController] Raw selected audio index: {raw_audio_index}")
-                
-                # Show perceptual frequency ranges
-                freq_ranges = get_perceptual_frequency_ranges()
+
                 range_names = ['bass', 'low_mids', 'mids', 'high_mids', 'treble']
                 for i, (name, value) in enumerate(zip(range_names[:len(boosted_bins)], boosted_bins)):
                     status = "🔥" if i == raw_audio_index else "  "
-                    unit = "dB" if self.use_decibel_scale else ""
-                    print(f"  {status} Bin {i} ({name}): {value:.2f} {unit}")
+                    print(f"  {status} Bin {i} ({name}): {value:.3f} (raw={original_mel_bins[i]:.4f}, avg={self._mel_running_avg[i]:.4f}, norm={normalized_mel[i]:.3f})")
                 
         else:
             # Use linear frequency analysis method as backup

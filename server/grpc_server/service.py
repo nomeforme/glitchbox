@@ -690,6 +690,9 @@ class GenerationControlServicer:
     def StartPromptJourney(self, request, context):
         """Start an autonomous prompt journey."""
         self._log("StartPromptJourney called")
+        # Reset headless state for fresh run
+        self._headless_done = False
+        self._headless_frame_count = 0
 
         prompts = list(request.prompts)
         if len(prompts) < 2:
@@ -752,12 +755,13 @@ class GenerationControlServicer:
         with self._lock:
             j = self._journey
             total = j['total_frames'] if j['total_frames'] > 0 else 1
-            # Use headless frame count if scheduler is active (not journey)
-            cur_frame = self._headless_frame_count if self._headless_frame_count > 0 else j['current_frame']
-            done = self._headless_done if self._headless_frame_count > 0 else j['completed']
-            total = self._headless_target_frames if self._headless_target_frames > 0 else j['total_frames']
+            # Use headless state if scheduler was activated
+            using_headless = self._headless_generate or self._headless_done or self._headless_frame_count > 0
+            cur_frame = self._headless_frame_count if using_headless else j['current_frame']
+            done = self._headless_done if using_headless else j['completed']
+            total = self._headless_target_frames if using_headless else j['total_frames']
             return pb2.PromptJourneyStatus(
-                active=j['active'] or self._headless_generate,
+                active=self._headless_generate or j['active'],
                 current_frame=cur_frame,
                 total_frames=total,
                 progress=j['current_frame'] / total,

@@ -1021,6 +1021,20 @@ class App:
                 return FileResponse(path, media_type="video/mp4", filename=os.path.basename(path))
             return JSONResponse({"error": "File not found"}, status_code=404)
 
+        @self.app.post("/api/upload")
+        async def upload_file(request: Request):
+            """Upload a file (audio/video) to the server."""
+            import hashlib
+            body = await request.body()
+            filename = request.query_params.get("filename", "upload.wav")
+            ext = os.path.splitext(filename)[1]
+            hash_suffix = hashlib.md5(body[:1024]).hexdigest()[:8]
+            save_path = f"/tmp/glitchbox_upload_{hash_suffix}{ext}"
+            with open(save_path, "wb") as f:
+                f.write(body)
+            print(f"[Server] Uploaded file: {save_path} ({len(body)} bytes)")
+            return JSONResponse({"path": save_path})
+
         @self.app.get("/api/stream/{user_id}")
         async def stream(user_id: uuid.UUID, request: Request):
             """Stream processed frames"""
@@ -1430,6 +1444,8 @@ class App:
         audio_analyzer = None  # File-based audio FFT
         audio_duration = None  # Duration of audio file in seconds
         video_writer = None  # cv2.VideoWriter for output video
+        warmup_frames = 10  # Skip first N frames (pipeline warmup)
+        warmup_done = False
 
         while True:
             try:
@@ -1452,6 +1468,8 @@ class App:
                         print(f"[Headless] Output video saved: {self._headless_output_path} ({frame_count} frames)")
                         video_writer = None
                         frame_count = 0
+                        warmup_frames = 10
+                        warmup_done = False
                     await asyncio.sleep(0.05)
                     continue
 
@@ -1499,7 +1517,10 @@ class App:
                     if os.path.exists(audio_path):
                         try:
                             from modules.audio_file_analyzer import AudioFileAnalyzer
-                            audio_analyzer = AudioFileAnalyzer(audio_path, n_bins=51)
+                            # Use 30fps chunk size to match frontend_py VideoAudioThread
+                            # (1470 samples/chunk at 44100Hz). The headless pipeline runs
+                            # slower (~8fps), so we process multiple chunks per frame below.
+                            audio_analyzer = AudioFileAnalyzer(audio_path, n_bins=50, fps=30.0)
                             audio_duration = audio_analyzer.duration
                             print(f"[Headless] Loaded audio: {audio_path} "
                                   f"({audio_duration:.1f}s, {audio_analyzer.sample_rate}Hz)")
@@ -1573,11 +1594,24 @@ class App:
                         if getattr(base_params, sticky_key) != val:
                             setattr(base_params, sticky_key, val)
 
-                # Process audio FFT if audio file is loaded
-                if audio_analyzer is not None:
-                    normalized_energies = audio_analyzer.get_next_frame_energies()
-                    if normalized_energies is not None:
-                        # Apply zoom from audio
+                # Process audio FFT if audio file is loaded (skip during warmup)
+                # The analyzer runs at 30fps (matching frontend chunk size), but the
+                # pipeline only generates at ~8fps. Process multiple audio chunks per
+                # pipeline frame so the ±1 smoothing gets the same ramp rate as the
+                # standard client (~30 steps/sec instead of ~8).
+                if audio_analyzer is not None and warmup_done:
+                    # The frontend processes audio at ~30fps (one FFT chunk per video
+                    # frame), but our pipeline only produces ~8-10 frames/sec. Process
+                    # multiple 30fps-sized audio chunks per pipeline frame so the
+                    # smoothing accumulates the same number of ±1 steps per second.
+                    audio_chunks_per_frame = 3  # ~30fps / ~10fps pipeline
+
+                    for _audio_step in range(audio_chunks_per_frame):
+                        normalized_energies = audio_analyzer.get_next_frame_energies()
+                        if normalized_energies is None:
+                            break
+
+                        # Apply zoom from audio (only use last chunk's zoom)
                         if self.use_acid_processor and hasattr(self, 'frequency_zoom_controller'):
                             if not getattr(self, 'zoom_oscillator', None) or not self.zoom_oscillator.enabled:
                                 new_zoom = self.frequency_zoom_controller.process_frequency_bins(normalized_energies)
@@ -1585,6 +1619,8 @@ class App:
                                     self.acid_processor.set_zoom_factor(new_zoom)
 
                         # Apply LoRA/pipe switching from audio
+                        # Each call advances smoothing by ±1, so multiple calls per
+                        # pipeline frame let the pipe index ramp up/down properly.
                         if self.use_lora_sound_control and hasattr(self, 'lora_sound_controller'):
                             self.lora_sound_controller.update_frequency_bin_boost_factors(
                                 bass_boost=getattr(params, 'boost_factor_bass', 1.0),
@@ -1676,7 +1712,17 @@ class App:
                     img_diffusion = np.array(acid_image)
                     self.acid_processor.update(img_diffusion)
 
-                # Write to output video file (lossless, no ZMQ)
+                # Handle warmup — generate frames but don't write or count them
+                if not warmup_done:
+                    warmup_frames -= 1
+                    if warmup_frames <= 0:
+                        warmup_done = True
+                        print(f"[Headless] Warmup complete, starting recording")
+                    else:
+                        await asyncio.sleep(0)
+                        continue
+
+                # Write to output video file
                 image_np = np.array(image)
                 image_bgr = cv2.cvtColor(image_np, cv2.COLOR_RGB2BGR)
 
