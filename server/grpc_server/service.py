@@ -755,8 +755,8 @@ class GenerationControlServicer:
         with self._lock:
             j = self._journey
             total = j['total_frames'] if j['total_frames'] > 0 else 1
-            # Use headless state if scheduler was activated
-            using_headless = self._headless_generate or self._headless_done or self._headless_frame_count > 0
+            # Use headless state only if scheduler was explicitly activated
+            using_headless = self._headless_generate or self._headless_done
             cur_frame = self._headless_frame_count if using_headless else j['current_frame']
             done = self._headless_done if using_headless else j['completed']
             total = self._headless_target_frames if using_headless else j['total_frames']
@@ -764,7 +764,7 @@ class GenerationControlServicer:
                 active=self._headless_generate or j['active'],
                 current_frame=cur_frame,
                 total_frames=total,
-                progress=j['current_frame'] / total,
+                progress=j['current_frame'] / total if total > 0 else 0.0,
                 current_segment=j['current_segment'],
                 total_segments=j['total_segments'],
                 current_prompt=j['current_prompt'],

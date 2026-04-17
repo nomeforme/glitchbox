@@ -106,7 +106,7 @@ class Args(NamedTuple):
     upscaler_resample_method: str = "lanczos"
     # Add pixelate processor argument
     use_pixelate_processor: bool = False
-    default_curation_index: int = 0
+    default_curation_index: int = 28
     prompts_file_name: str = "glitch"
     # Image saver settings
     use_image_saver: bool = False
@@ -718,7 +718,7 @@ parser.add_argument(
     "--default-curation-index",
     dest="default_curation_index",
     type=int,
-    default=11,
+    default=28,
     help="Default index for curation selection",
 )
 

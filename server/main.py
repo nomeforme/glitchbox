@@ -545,7 +545,10 @@ class App:
                 await self.image_saver.stop()
                 print("[main.py] Image saver stopped")
 
-            # No explicit cleanup needed for the async embeddings service
+            # Clean up PyCUDA context to avoid abort on exit
+            if hasattr(self, 'depth_estimator') and self.depth_estimator and hasattr(self.depth_estimator, 'cleanup'):
+                self.depth_estimator.cleanup()
+                print("[main.py] Depth estimator CUDA context cleaned up")
         
         @self.app.websocket("/api/ws/{user_id}")
         async def websocket_endpoint(user_id: uuid.UUID, websocket: WebSocket):
@@ -1169,7 +1172,7 @@ class App:
             """Update the curation index and reinitialize the pipeline with proper cleanup"""
             try:
                 data = await request.json()
-                new_curation_index = data.get("curation_index", 0)
+                new_curation_index = int(data.get("curation_index", 0))
                 self._switch_curation(new_curation_index)
                 return JSONResponse({
                     "status": "success",
@@ -1184,6 +1187,89 @@ class App:
                     "status": "error",
                     "message": f"Failed to update curation index: {str(e)}"
                 }, status_code=500)
+
+        @self.app.post("/api/journey/start")
+        async def start_journey(request: Request):
+            """Start a prompt journey via HTTP (mirrors gRPC StartPromptJourney)."""
+            try:
+                data = await request.json()
+                prompts = data.get("prompts", [])
+                if len(prompts) < 2:
+                    return JSONResponse({"status": "error", "message": "Need at least 2 prompts"}, status_code=400)
+
+                # Build a fake gRPC-like request for the servicer
+                class FakeRequest:
+                    pass
+                req = FakeRequest()
+                req.prompts = prompts
+                req.transition_frames = data.get("transition_frames", 120)
+                req.hold_frames = data.get("hold_frames", 30)
+                req.loop = data.get("loop", False)
+                req.input_video = data.get("input_video", "")
+                req.audio_file = data.get("audio_file", "")
+                req.duration = data.get("duration", 0)
+                req.output_path = data.get("output_path", "")
+                req.fps = data.get("fps", 20)
+
+                result = self.grpc_server._servicer.StartPromptJourney(req, None)
+                return JSONResponse({
+                    "status": "success" if result.success else "error",
+                    "message": result.message,
+                    "total_frames": result.total_frames,
+                })
+            except Exception as e:
+                return JSONResponse({"status": "error", "message": str(e)}, status_code=500)
+
+        @self.app.get("/api/journey/status")
+        async def journey_status():
+            """Get journey/scheduler status (mirrors gRPC GetJourneyStatus)."""
+            result = self.grpc_server._servicer.GetJourneyStatus(None, None)
+            # Only report completed=True if the output file actually exists on disk
+            # (prevents download races where completed is set before file is flushed/encoded)
+            output_file = result.output_file
+            actually_done = bool(result.completed)
+            if actually_done and output_file:
+                actually_done = os.path.exists(output_file)
+            return JSONResponse({
+                "active": result.active,
+                "completed": actually_done,
+                "current_frame": result.current_frame,
+                "total_frames": result.total_frames,
+                "progress": result.progress,
+                "current_segment": result.current_segment,
+                "total_segments": result.total_segments,
+                "output_file": output_file,
+            })
+
+        @self.app.post("/api/journey/stop")
+        async def stop_journey():
+            """Stop the current journey (mirrors gRPC StopPromptJourney)."""
+            result = self.grpc_server._servicer.StopPromptJourney(None, None)
+            return JSONResponse({"status": "success", "message": result.message})
+
+        @self.app.post("/api/params/generation")
+        async def set_generation_params(request: Request):
+            """Set generation params (strength, seed, etc.)."""
+            data = await request.json()
+            self.grpc_server._servicer._queue_params(data)
+            return JSONResponse({"status": "success", "params": list(data.keys())})
+
+        @self.app.post("/api/params/prompt_travel")
+        async def set_prompt_travel_params(request: Request):
+            """Enable/configure prompt travel scheduler."""
+            data = await request.json()
+
+            class FakeRequest:
+                def HasField(self, name):
+                    return name in self._data
+                def __init__(self, d):
+                    self._data = d
+                    for k, v in d.items():
+                        setattr(self, k, v)
+
+            req = FakeRequest(data)
+            self.grpc_server._servicer.SetPromptTravelParams(req, None)
+            return JSONResponse({"status": "success"})
 
         if not os.path.exists("public"):
             os.makedirs("public")
@@ -1356,9 +1442,24 @@ class App:
             print(f"[main.py] Updating PromptTravelScheduler with new prompts_file_names: {new_prompts_file_names}")
             self.prompt_travel_scheduler.update_prompts_file_names(new_prompts_file_names)
 
-        # Cleanup old pipeline
+        # Cleanup old pipeline — must fully unload from GPU before creating new one
         if hasattr(self, 'pipeline') and self.pipeline is not None:
             print("[main.py] Cleaning up old pipeline...")
+
+            # Handle PEFT pipeline's shared_wrapper
+            if hasattr(self.pipeline, 'shared_wrapper') and self.pipeline.shared_wrapper is not None:
+                try:
+                    wrapper = self.pipeline.shared_wrapper
+                    if hasattr(wrapper, 'stream') and hasattr(wrapper.stream, 'pipe'):
+                        wrapper.stream.pipe.to('cpu')
+                    if hasattr(wrapper, 'stream') and hasattr(wrapper.stream, 'unet'):
+                        wrapper.stream.unet.to('cpu')
+                    if hasattr(wrapper, 'stream') and hasattr(wrapper.stream, 'vae'):
+                        wrapper.stream.vae.to('cpu')
+                    del self.pipeline.shared_wrapper
+                    print("[main.py] Moved shared_wrapper to CPU and deleted")
+                except Exception as e:
+                    print(f"[main.py] Warning: shared_wrapper cleanup error: {e}")
 
             if hasattr(self.pipeline, 'pipes'):
                 for idx, pipe in enumerate(self.pipeline.pipes):
@@ -1392,24 +1493,54 @@ class App:
                 torch.cuda.synchronize()
                 print("[main.py] GPU memory cleared")
 
-        # Reinitialize pipeline
-        print(f"[main.py] Reinitializing pipeline with curation index {new_curation_index}")
-        global pipeline
-        pipeline_class = get_pipeline_class(self.args.pipeline)
-        pipeline = pipeline_class(self.args, device, torch_dtype, lora_config=self.lora_config)
-        self.pipeline = pipeline
-
-        # Apply curation config defaults
+        # Apply curation config defaults to InputParams BEFORE constructing the pipeline
+        # so that width/height/strength etc. are correct at init time
         default_input_params = self.lora_config.get_default_curation_input_params()
+        pipeline_class = get_pipeline_class(self.args.pipeline)
         if default_input_params:
             try:
                 for param_name, param_value in default_input_params.items():
-                    if hasattr(self.pipeline.InputParams, '__fields__') and param_name in self.pipeline.InputParams.__fields__:
-                        field = self.pipeline.InputParams.__fields__[param_name]
+                    if hasattr(pipeline_class.InputParams, '__fields__') and param_name in pipeline_class.InputParams.__fields__:
+                        field = pipeline_class.InputParams.__fields__[param_name]
                         field.default = param_value
-                print(f"[main.py] Applied {len(default_input_params)} curation config defaults to pipeline")
+                print(f"[main.py] Applied {len(default_input_params)} curation config defaults to InputParams before init")
             except Exception as e:
                 print(f"[main.py] Error applying curation config defaults: {e}")
+
+        # Reinitialize pipeline
+        print(f"[main.py] Reinitializing pipeline with curation index {new_curation_index}")
+        global pipeline
+        pipeline = pipeline_class(self.args, device, torch_dtype, lora_config=self.lora_config)
+        self.pipeline = pipeline
+
+        # Rebuild LoraSoundController with new LoRA count
+        if self.use_lora_sound_control and hasattr(self, 'lora_sound_controller'):
+            num_lora_pipes = len(self.pipeline.pipes)
+            if self.lora_config is not None:
+                weights_sets = self.lora_config.get_default_adapter_weights()
+                if len(weights_sets) > num_lora_pipes:
+                    num_lora_pipes = len(weights_sets)
+            num_prompts = 1
+            if hasattr(self, 'prompt_travel_scheduler') and self.prompt_travel_scheduler is not None:
+                num_prompts = len(self.prompt_travel_scheduler.prompt_scheduler.prompts)
+            treble_boost_factors = [
+                getattr(self.args, 'boost_factor_bass', 1.0),
+                getattr(self.args, 'boost_factor_low_mids', 1.0),
+                getattr(self.args, 'boost_factor_mids', 1.0),
+                getattr(self.args, 'boost_factor_high_mids', 1.0),
+                getattr(self.args, 'boost_factor_treble', 1.0),
+            ]
+            self.lora_sound_controller = LoraSoundController(
+                num_pipes=num_lora_pipes,
+                num_prompts=num_prompts,
+                enabled=self.use_lora_sound_control,
+                debug=getattr(self.args, 'debug', False),
+                frequency_bin_boost_factors=treble_boost_factors
+            )
+            print(f"[main.py] LoraSoundController rebuilt with {num_lora_pipes} pipes")
+
+        # Bump version so headless loop re-reads base_params
+        self._curation_version = getattr(self, '_curation_version', 0) + 1
 
         print(f"[main.py] Curation switch complete: {old_index} -> {new_curation_index}")
 
@@ -1428,16 +1559,20 @@ class App:
         """
         print("[main.py] [Headless] Ready — waiting for gRPC commands")
 
-        # Get default params from curation config
-        default_input_params = self.lora_config.get_default_curation_input_params()
-        if default_input_params:
-            base_params = self.pipeline.InputParams(**default_input_params)
-        else:
-            base_params = self.pipeline.InputParams()
+        def _refresh_base_params(self):
+            """Re-read base params from current pipeline/curation config."""
+            default_input_params = self.lora_config.get_default_curation_input_params()
+            if default_input_params:
+                bp = self.pipeline.InputParams(**default_input_params)
+            else:
+                bp = self.pipeline.InputParams()
+            return bp
 
+        base_params = _refresh_base_params(self)
         width = base_params.width
         height = base_params.height
         dummy_image = Image.new('RGB', (width, height), color='black')
+        last_curation_version = getattr(self, '_curation_version', 0)
 
         print(f"[main.py] [Headless] Using {width}x{height} black input image")
         print(f"[main.py] [Headless] Curation: {getattr(self.args, 'default_curation_index', '?')}, "
@@ -1466,23 +1601,59 @@ class App:
                                  self.grpc_server.should_headless_generate())
 
                 if not has_journey and not has_pending and not has_scheduler:
-                    # Clean up when idle
+                    # Clean up when idle — reset ALL per-run state
                     if video_cap is not None:
                         video_cap.release()
                         video_cap = None
                         print("[Headless] Input video released")
+                    if getattr(self, '_headless_init_image', None) is not None:
+                        self._headless_init_image = None
+                        print("[Headless] Init image cleared")
+                    if getattr(self, '_headless_use_noise', False):
+                        self._headless_use_noise = False
+                    if audio_analyzer is not None:
+                        audio_analyzer = None
+                        audio_duration = None
+                        print("[Headless] Audio analyzer cleared")
                     if video_writer is not None:
                         video_writer.release()
-                        print(f"[Headless] Output video saved: {self._headless_output_path} ({frame_count} frames)")
                         video_writer = None
-                        frame_count = 0
-                        warmup_frames = 10
-                        warmup_done = False
+                        print(f"[Headless] Output video saved: {self._headless_output_path} ({frame_count} frames)")
+                        # Re-encode to H.264 for smaller file size
+                        raw_path = self._headless_output_path
+                        h264_path = raw_path.replace(".mp4", "_h264.mp4")
+                        try:
+                            import subprocess
+                            subprocess.run([
+                                "ffmpeg", "-y", "-i", raw_path,
+                                "-c:v", "libx264", "-crf", "23",
+                                "-preset", "fast", "-pix_fmt", "yuv420p",
+                                h264_path,
+                            ], check=True, capture_output=True)
+                            os.replace(h264_path, raw_path)
+                            print(f"[Headless] Re-encoded to H.264: {raw_path}")
+                        except Exception as e:
+                            print(f"[Headless] H.264 re-encode failed (keeping raw): {e}")
+                    # Always reset frame state between runs
+                    frame_count = 0
+                    warmup_frames = 10
+                    warmup_done = False
+                    prev_output_image = None
                     await asyncio.sleep(0.05)
                     continue
 
+                # Detect curation switch — re-read base params and dimensions
+                cur_curation_version = getattr(self, '_curation_version', 0)
+                if cur_curation_version != last_curation_version:
+                    base_params = _refresh_base_params(self)
+                    width = base_params.width
+                    height = base_params.height
+                    dummy_image = Image.new('RGB', (width, height), color='black')
+                    last_curation_version = cur_curation_version
+                    print(f"[Headless] Curation changed — refreshed base_params ({width}x{height})")
+
                 # Open input video if needed (from journey or scheduler)
-                if video_cap is None:
+                if video_cap is None and getattr(self, '_headless_init_image', None) is None:
                     input_video_path = ''
                     # Check journey state for video path
                     if self.grpc_server:
@@ -1612,7 +1783,8 @@ class App:
                 params, _ = self._apply_grpc_pending_params(params)
                 # Persist certain params into base_params so they stick across frames
                 for sticky_key in ('temporal_coherence', 'temporal_coherence_latent',
-                                   'controlnet_scale', 'pipe_index', 'seed'):
+                                   'controlnet_scale', 'pipe_index', 'seed',
+                                   'strength'):
                     val = getattr(params, sticky_key, None)
                     if val is not None and hasattr(base_params, sticky_key):
                         if getattr(base_params, sticky_key) != val:
@@ -1942,6 +2114,19 @@ lora_config = LoRACurationConfig(
 print(f"[main.py] LoRACurationConfig created at module level with curation index {getattr(config, 'default_curation_index', 0)}")
 
 pipeline_class = get_pipeline_class(config.pipeline)
+
+# Apply curation config defaults to InputParams before creating the pipeline
+# so that width/height/strength etc. from the curation JSON are used at init
+default_input_params = lora_config.get_default_curation_input_params()
+if default_input_params:
+    try:
+        for param_name, param_value in default_input_params.items():
+            if hasattr(pipeline_class.InputParams, '__fields__') and param_name in pipeline_class.InputParams.__fields__:
+                field = pipeline_class.InputParams.__fields__[param_name]
+                field.default = param_value
+        print(f"[main.py] Applied {len(default_input_params)} curation config defaults to InputParams")
+    except Exception as e:
+        print(f"[main.py] Error applying curation config defaults: {e}")
 
 # Create pipeline with lora_config
 pipeline = pipeline_class(config, device, torch_dtype, lora_config=lora_config)

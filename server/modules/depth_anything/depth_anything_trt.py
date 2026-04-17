@@ -7,6 +7,7 @@ import numpy as np
 import pycuda.driver as cuda
 import tensorrt as trt
 import time
+import atexit
 from PIL import Image
 from .util.transform import load_image
 from typing import Optional
@@ -48,6 +49,7 @@ class DepthAnythingTRT:
         torch_device = torch.cuda.current_device()
         self.cuda_context = cuda.Device(torch_device).retain_primary_context()
         self.cuda_context.push()
+        atexit.register(self.cleanup)
 
         logger = trt.Logger(trt.Logger.WARNING)
         with open(engine_path, 'rb') as f, trt.Runtime(logger) as runtime:
@@ -216,3 +218,12 @@ class DepthAnythingTRT:
         """
         depth_map = self.get_depth(image, normalized_distance_threshold, absolute_min, absolute_max)
         return {"depth": depth_map}
+
+    def cleanup(self):
+        """Pop the PyCUDA context so module cleanup doesn't abort."""
+        if self.cuda_context:
+            try:
+                self.cuda_context.pop()
+            except Exception:
+                pass
+            self.cuda_context = None

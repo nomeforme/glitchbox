@@ -162,11 +162,21 @@ class Pipeline:
         target_seed: int | None = Field(
             None, min=0, title="Target Seed", field="seed", hide=True, id="target_seed"
         )
+        strength: float = Field(
+            0.12,
+            min=0.0,
+            max=1.0,
+            step=0.01,
+            title="Strength",
+            field="range",
+            id="strength",
+            description="Denoising strength (0=no change, 1=full denoise). Maps to t_index_list.",
+        )
         width: int = Field(
             1024, min=2, max=15, title="Width", disabled=True, hide=True, id="width"
         )
         height: int = Field(
-            768, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
+            1024, min=2, max=15, title="Height", disabled=True, hide=True, id="height"
         )
         controlnet_scale: float = Field(
             0.55,
@@ -472,6 +482,8 @@ class Pipeline:
         self.last_seed = None
         self.last_target_seed = None
         self.last_latent_travel_settings = None
+        self.last_strength = None
+        self._num_inference_steps = 50
 
         # Cache for prompt travel embeddings
         self.prompt_embeds_cache = {0: {}}
@@ -815,6 +827,18 @@ class Pipeline:
             if hasattr(params, 'controlnet_scale') and params.controlnet_scale != self.last_controlnet_scale:
                 stream_wrapper.stream._controlnet_module.update_controlnet_scale(index=0, scale=params.controlnet_scale)
                 self.last_controlnet_scale = params.controlnet_scale
+
+        # Update strength (maps to t_index_list)
+        # In StreamDiffusion, timesteps are ordered high→low noise.
+        # Lower t_index = higher noise timestep = MORE transformation.
+        # So: strength 1.0 → t_index 0 (max change), strength 0.0 → t_index ~49 (no change)
+        strength = getattr(params, 'strength', 0.12)
+        if strength != self.last_strength:
+            n = self._num_inference_steps  # 50
+            t_index = max(0, min(n - 1, int((1.0 - strength) * n)))
+            stream_wrapper.update_stream_params(t_index_list=[t_index])
+            self.last_strength = strength
+            print(f"[img2imgSDXL_peft.py] Strength {strength:.2f} -> t_index_list=[{t_index}]")
 
         # Update temporal coherence
         temporal_coherence = getattr(params, 'temporal_coherence', None)
