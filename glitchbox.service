@@ -1,0 +1,32 @@
+[Unit]
+Description=GLITCHBOX Real-Time Latent Consistency Model server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=plantoidz
+Group=plantoidz
+WorkingDirectory=/home/plantoidz/Desktop/AI/backend/Real-Time-Latent-Consistency-Model
+ExecStart=/home/plantoidz/Desktop/AI/backend/Real-Time-Latent-Consistency-Model/glitchbox_server.sh
+
+# Restart on crash, but back off if it keeps failing
+Restart=on-failure
+RestartSec=10
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+# Append stdout/stderr to a log file (use `truncate:` instead of `append:` to overwrite on each start)
+StandardOutput=append:/home/plantoidz/GLITCHBOX/log.txt
+StandardError=append:/home/plantoidz/GLITCHBOX/log.txt
+
+# Reasonable shutdown grace before SIGKILL
+TimeoutStopSec=30
+KillSignal=SIGINT
+
+# Make sure CUDA / display env vars are available for the GPU
+Environment="HOME=/home/plantoidz"
+Environment="PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+[Install]
+WantedBy=multi-user.target

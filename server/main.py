@@ -1032,6 +1032,23 @@ class App:
                 return FileResponse(path, media_type="video/mp4", filename=os.path.basename(path))
             return JSONResponse({"error": "File not found"}, status_code=404)
 
+        @self.app.get("/api/file_info")
+        async def file_info(path: str):
+            """Return file metadata (size, mtime) for polling write completion."""
+            if not path.startswith("/tmp/glitchbox_"):
+                return JSONResponse({"error": "Path not allowed", "exists": False, "size": 0}, status_code=403)
+            if not os.path.exists(path):
+                return JSONResponse({"exists": False, "size": 0})
+            try:
+                st = os.stat(path)
+                return JSONResponse({
+                    "exists": True,
+                    "size": st.st_size,
+                    "mtime": st.st_mtime,
+                })
+            except OSError as e:
+                return JSONResponse({"error": str(e), "exists": False, "size": 0}, status_code=500)
+
         @self.app.post("/api/upload")
         async def upload_file(request: Request):
             """Upload a file (audio/video) to the server."""
@@ -1202,14 +1219,14 @@ class App:
                     pass
                 req = FakeRequest()
                 req.prompts = prompts
-                req.transition_frames = data.get("transition_frames", 120)
-                req.hold_frames = data.get("hold_frames", 30)
-                req.loop = data.get("loop", False)
+                req.transition_frames = int(data.get("transition_frames", 120))
+                req.hold_frames = int(data.get("hold_frames", 30))
+                req.loop = bool(data.get("loop", False))
                 req.input_video = data.get("input_video", "")
                 req.audio_file = data.get("audio_file", "")
-                req.duration = data.get("duration", 0)
+                req.duration = float(data.get("duration", 0))
                 req.output_path = data.get("output_path", "")
-                req.fps = data.get("fps", 20)
+                req.fps = int(data.get("fps", 20))
 
                 result = self.grpc_server._servicer.StartPromptJourney(req, None)
                 return JSONResponse({
@@ -1626,8 +1643,10 @@ class App:
                             import subprocess
                             subprocess.run([
                                 "ffmpeg", "-y", "-i", raw_path,
-                                "-c:v", "libx264", "-crf", "23",
-                                "-preset", "fast", "-pix_fmt", "yuv420p",
+                                "-c:v", "libx264", "-crf", "30",
+                                "-preset", "slow", "-pix_fmt", "yuv420p",
+                                "-maxrate", "2M", "-bufsize", "4M",
+                                "-movflags", "+faststart",
                                 h264_path,
                             ], check=True, capture_output=True)
                             os.replace(h264_path, raw_path)
@@ -1967,7 +1986,7 @@ class App:
                     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
                     video_writer = cv2.VideoWriter(
                         self._headless_output_path, fourcc,
-                        self._headless_output_fps, (w_out, h_out)
+                        float(self._headless_output_fps), (int(w_out), int(h_out))
                     )
                     print(f"[Headless] Video writer opened: {self._headless_output_path} "
                           f"({w_out}x{h_out} @ {self._headless_output_fps}fps)")
