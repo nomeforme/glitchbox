@@ -1,4 +1,4 @@
-from typing import NamedTuple
+from typing import NamedTuple, Optional
 import argparse
 import os
 
@@ -28,6 +28,12 @@ class Args(NamedTuple):
     zmq_jpeg_quality: int = 85
     # Headless mode: generate frames without requiring a WebSocket client
     headless: bool = False
+    # Override curation's temporal_coherence (RGB-level smoothing). None = use curation value.
+    temporal_coherence: Optional[float] = None
+    # Override curation's temporal_coherence_latent (latent-level smoothing). None = use curation value.
+    temporal_coherence_latent: Optional[float] = None
+    # Number of warmup frames discarded before recording starts (primes latent smoothing).
+    headless_warmup_frames: int = 10
     use_acid_processor: bool = False
     # Enable depth estimation
     use_depth_estimator: bool = False
@@ -786,6 +792,27 @@ parser.add_argument(
     action="store_true",
     default=False,
     help="Run in headless mode: generate frames via gRPC control without requiring a WebSocket frontend",
+)
+parser.add_argument(
+    "--temporal-coherence",
+    dest="temporal_coherence",
+    type=float,
+    default=None,
+    help="Override curation's temporal_coherence (RGB-level smoothing, 0.0-1.0). Higher = smoother. Leave unset to use curation value.",
+)
+parser.add_argument(
+    "--temporal-coherence-latent",
+    dest="temporal_coherence_latent",
+    type=float,
+    default=None,
+    help="Override curation's temporal_coherence_latent (latent-level smoothing, 0.0-1.0). Higher = smoother, most effective anti-jitter. Leave unset to use curation value.",
+)
+parser.add_argument(
+    "--headless-warmup-frames",
+    dest="headless_warmup_frames",
+    type=int,
+    default=10,
+    help="Number of frames to generate-and-discard before recording begins. Primes latent smoothing history so first recorded frame is already at steady-state refinement. Higher temporal_coherence_latent needs more warmup (try 30-40).",
 )
 
 parser.set_defaults(taesd=USE_TAESD)

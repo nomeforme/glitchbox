@@ -1604,7 +1604,8 @@ class App:
         audio_analyzer = None  # File-based audio FFT
         audio_duration = None  # Duration of audio file in seconds
         video_writer = None  # cv2.VideoWriter for output video
-        warmup_frames = 10  # Skip first N frames (pipeline warmup)
+        warmup_frames_initial = int(getattr(self.args, 'headless_warmup_frames', 10))
+        warmup_frames = warmup_frames_initial  # Skip first N frames (pipeline + latent smoothing priming)
         warmup_done = False
 
         while True:
@@ -1655,7 +1656,7 @@ class App:
                             print(f"[Headless] H.264 re-encode failed (keeping raw): {e}")
                     # Always reset frame state between runs
                     frame_count = 0
-                    warmup_frames = 10
+                    warmup_frames = warmup_frames_initial
                     warmup_done = False
                     prev_output_image = None
                     await asyncio.sleep(0.05)
@@ -1742,6 +1743,24 @@ class App:
 
                 # Build params from defaults
                 params = SimpleNamespace(**vars(base_params))
+
+                # CLI overrides for temporal coherence (override curation JSON values).
+                # During warmup: force tc to 0 (produces sophisticated single-step output).
+                # Early recording: gradually ramp tc from 0 → target over TC_RAMP_FRAMES
+                # recorded frames. The smooth ramp avoids the "bad-frame" artifact we see
+                # when tc_latent jumps from 0 straight to the target value.
+                TC_RAMP_FRAMES = 30
+                target_tc = getattr(self.args, 'temporal_coherence', None)
+                target_tc_latent = getattr(self.args, 'temporal_coherence_latent', None)
+                if not warmup_done:
+                    setattr(params, 'temporal_coherence', 0.0)
+                    setattr(params, 'temporal_coherence_latent', 0.0)
+                else:
+                    ramp = min(1.0, frame_count / float(TC_RAMP_FRAMES)) if TC_RAMP_FRAMES > 0 else 1.0
+                    if target_tc is not None:
+                        setattr(params, 'temporal_coherence', ramp * float(target_tc))
+                    if target_tc_latent is not None:
+                        setattr(params, 'temporal_coherence_latent', ramp * float(target_tc_latent))
 
                 # Read input frame from init image, video, noise, or black dummy
                 if getattr(self, '_headless_init_image', None) is not None:
@@ -1864,24 +1883,38 @@ class App:
 
                 # Apply journey state if active
                 if has_journey:
-                    result = self.grpc_server.advance_journey_frame()
-                    if result is not None:
-                        src, dst, factor, active = result
-                        setattr(params, 'prompt', src)
-                        setattr(params, 'target_prompt', dst)
-                        setattr(params, 'prompt_travel_factor', factor)
-                        setattr(params, 'use_prompt_travel', True)
-
+                    if not warmup_done:
+                        # Hold the journey at frame 0 during warmup. Prime the pipeline
+                        # with the journey's opening state (first prompt, factor 0) so
+                        # the latent smoothing history matches where recording will
+                        # actually begin — without consuming frames from the journey.
                         journey_state = self.grpc_server.get_journey_state()
-                        cur_frame = journey_state['current_frame']
-                        total = journey_state['total_frames']
-                        seg = journey_state['current_segment']
+                        journey_prompts = journey_state.get('prompts') or []
+                        if journey_prompts:
+                            setattr(params, 'prompt', journey_prompts[0])
+                            setattr(params, 'target_prompt',
+                                    journey_prompts[1] if len(journey_prompts) > 1 else journey_prompts[0])
+                            setattr(params, 'prompt_travel_factor', 0.0)
+                            setattr(params, 'use_prompt_travel', True)
+                    else:
+                        result = self.grpc_server.advance_journey_frame()
+                        if result is not None:
+                            src, dst, factor, active = result
+                            setattr(params, 'prompt', src)
+                            setattr(params, 'target_prompt', dst)
+                            setattr(params, 'prompt_travel_factor', factor)
+                            setattr(params, 'use_prompt_travel', True)
 
-                        if cur_frame % 50 == 0 or cur_frame == total:
-                            pipe_idx = getattr(params, 'pipe_index', '?')
-                            print(f"[Headless] Frame {cur_frame}/{total} "
-                                  f"(seg {seg}, pipe {pipe_idx}, factor {factor:.2f}): "
-                                  f"{src[:40]}... -> {dst[:40]}...")
+                            journey_state = self.grpc_server.get_journey_state()
+                            cur_frame = journey_state['current_frame']
+                            total = journey_state['total_frames']
+                            seg = journey_state['current_segment']
+
+                            if cur_frame % 50 == 0 or cur_frame == total:
+                                pipe_idx = getattr(params, 'pipe_index', '?')
+                                print(f"[Headless] Frame {cur_frame}/{total} "
+                                      f"(seg {seg}, pipe {pipe_idx}, factor {factor:.2f}): "
+                                      f"{src[:40]}... -> {dst[:40]}...")
 
                 # Apply server's prompt travel scheduler if active (mirrors WebSocket handler)
                 elif has_scheduler and self.use_prompt_travel and getattr(params, 'use_prompt_travel', False):
