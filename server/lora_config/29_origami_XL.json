@@ -1,0 +1,31 @@
+{
+    "prompts_file_names": ["origami_XL"],
+    "loras": ["origami-xl"],
+    "adapter_weights_sets": [
+        [1.0]
+    ],
+    "input_params": {
+        "prompt": "mrnabrmv style, origami abstract polygonal figure emerging from darkness, faceted geometric shapes",
+        "target_prompt": "mrnabrmv style, origami faceted humanoid figure of geometric shards against a dark background",
+        "pipe_index": 0,
+        "use_prompt_travel": false,
+        "prompt_travel_factor": 0.5,
+        "use_latent_travel": true,
+        "latent_travel_method": "slerp",
+        "latent_travel_factor": 0.5,
+        "lora_scale": 0.8,
+        "seed": 4402026899276587,
+        "target_seed": null,
+        "steps": 1,
+        "width": 1024,
+        "height": 1024,
+        "guidance_scale": 1.0,
+        "strength": 0.8,
+        "controlnet_scale": 0.55,
+        "controlnet_start": 0.0,
+        "controlnet_end": 1.0,
+        "debug_controlnet": false,
+        "use_output_bg_removal": false,
+        "use_prompt_indexing": true
+    }
+}

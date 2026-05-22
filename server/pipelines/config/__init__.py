@@ -62,6 +62,11 @@ class LoRACurationConfig:
             "water-xl": "loras/water-xl",
             "smoke-xl": "loras/smoke-xl",
             "san-xl": "loras/san-xl",
+            # crosslucid element LoRAs (kohya SDXL, "mrnabrmv style" trigger)
+            "sand-xl": "loras/sand-xl",
+            "fire-xl": "loras/fire-xl",
+            "origami-xl": "loras/origami-xl",
+            "crystal-xl": "loras/crystal-xl",
             "mannequin-xl": "loras/mannequin-xl",
             "mannequin-anime-xl": "loras/mannequin-anime-xl",
             "angels-xl": "loras/angels-xl",
